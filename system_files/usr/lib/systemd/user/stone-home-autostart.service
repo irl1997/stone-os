@@ -1,7 +1,8 @@
 [Unit]
 Description=STONE Home: open STONE when Game Mode starts
-After=gamescope-session-plus@steam.service stone-home-register.service
-PartOf=gamescope-session-plus@steam.service
+# Pulled in and ordered after the Game Mode session by
+# gamescope-session-plus@.service.d/10-stone-home.conf (any session variant).
+After=stone-home-register.service
 
 [Service]
 Type=oneshot

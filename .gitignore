@@ -9,3 +9,6 @@ __pycache__/
 .ruff_cache/
 # signing key: never commit (see GITHUB_SETUP.md)
 cosign.key
+
+# macOS Finder
+.DS_Store

@@ -1,8 +1,7 @@
 [Unit]
-Description=STONE Home: register the STONE shortcut in Steam
-# Steam rewrites shortcuts.vdf when it exits, so this runs before Game Mode starts Steam.
-Before=gamescope-session-plus@steam.service
-PartOf=gamescope-session-plus@steam.service
+Description=STONE Home: register the STONE shortcut and startup movie in Steam
+# Pulled in and ordered before the Game Mode session by
+# gamescope-session-plus@.service.d/10-stone-home.conf (any session variant).
 
 [Service]
 Type=oneshot

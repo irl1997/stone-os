@@ -1,4 +1,4 @@
-# Dependencias de STONE OS 0.1.0-rc1
+# Dependencias de STONE OS 0.1.0-rc2
 
 Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/stone-release` y en `build-metadata.json` (artefacto del build y archivo de cada release). Esta tabla dice de dónde sale cada pieza y cómo se actualiza.
 
@@ -33,7 +33,7 @@ STONE no añade repositorios a la imagen final: el COPR se activa sólo durante 
 | `actions/upload-artifact` | v7.0.2 `cf430e03…` | Artefactos |
 | `actions/download-artifact` | v8.0.1 `3e5f45b2…` | Release |
 | `actions/setup-node` | v7.0.0 `82076278…` | CI |
-| Runner | `ubuntu-26.04` (imagen e ISO, como la plantilla de Universal Blue); `ubuntu-24.04` (CI) | GitHub |
+| Runner | `ubuntu-26.04` (imagen, como la plantilla de Universal Blue); `ubuntu-24.04` (ISO: en 26.04 osbuild falla al montar por AppArmor; y CI) | GitHub |
 | podman, skopeo, rpm-ostree (rechunk) | Los del runner / de la propia imagen | Imagen |
 
 Actualización: Dependabot propone nuevas versiones de las acciones (por SHA) como pull requests que deben pasar CI.

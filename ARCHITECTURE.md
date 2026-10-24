@@ -1,4 +1,4 @@
-# Arquitectura de STONE OS 0.1.0-rc1
+# Arquitectura de STONE OS 0.1.0-rc2
 
 ```
 STONE OS UI (STONE Home)          GTK 4 + WebKitGTK 6, usuario de la consola, dentro de Steam Game Mode
@@ -26,7 +26,7 @@ Principio: **ACTUAL STATE > REQUESTED STATE.** La interfaz muestra lo que `stone
 | 4 | Regulador de GPU | `cyan-skillfish-governor-smu` (COPR), arranca desde su archivo de fábrica con su D-Bus activado | `build.sh`, `build_files/governor-config.py` | Implementado; NOT TESTED |
 | 5 | Recuperación | `stoned-recover.service`: decide (nunca aplica): contador de fallos, última buena, Safe Mode, `stone.safe=1` | `stoned/recover.py`, `state.py` | CODE TESTED |
 | 6 | Servicio | `stoned.service` (Type=notify, watchdog, reinicio, aislamiento): API D-Bus, backend BC-250, telemetría, vigilancia térmica, partidas de Steam | `stoned/*.py`, unidades, D-Bus, polkit | CODE TESTED |
-| 7 | Sesión | SDDM inicia sesión automática en Steam Game Mode (`gamescope-session-plus@steam`, de Bazzite) | Bazzite | Sin cambios |
+| 7 | Sesión | SDDM inicia sesión automática en Steam Game Mode (`gamescope-session-plus@ogui-steam` en Bazzite 44; STONE se engancha a cualquier variante de `gamescope-session-plus@`) | Bazzite | Sin cambios |
 | 8 | STONE Home: registro | `stone-home-register.service` (usuario, antes de Steam): añade el acceso directo «STONE» a Steam e instala el vídeo de arranque de STONE como vídeo de Steam (continúa la línea de Plymouth) | `stone_home/shortcuts.py`, `session.py` | CODE TESTED; NOT TESTED en Game Mode |
 | 9 | STONE Home: apertura | `stone-home-autostart.service`: 2 s después de que aparece la interfaz de Steam pide `steam://rungameid/<STONE>` y repite cada 3 s hasta que STONE Home corre | `shortcuts.py`, `session.py` | CODE TESTED; NOT TESTED en Game Mode |
 | 10 | STONE Home | Ventana GTK/WebKit; `HomeReady` → sólo entonces `stoned` aplica el perfil guardado (fábrica o validado) | `stone_home/app.py`, `index.html` | CODE TESTED (shell real + navegador) |

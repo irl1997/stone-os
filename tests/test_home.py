@@ -235,8 +235,19 @@ def K07_startup_movie_installed_updated_never_replaces_the_users():
         os.remove(dest)
         with open(dest, "wb") as f:                     # a movie that was there before STONE
             f.write(b"older-movie")
-        assert SC.install_boot_video(root, src).startswith("kept") and open(dest, "rb").read() == b"older-movie"
+        assert SC.install_boot_video(root, src, system_dirs=()).startswith("kept") and open(dest, "rb").read() == b"older-movie"
         assert not os.path.exists(dest + ".stone-tmp")
+        # A copy of a movie the system image ships (Bazzite's, first boot on the board) is
+        # replaced, and kept aside; the user's own still is not.
+        sysdir = os.path.join(d, "usr-share", "bazzite")
+        os.makedirs(sysdir)
+        with open(os.path.join(sysdir, "deck_startup.webm"), "wb") as f:
+            f.write(b"older-movie")
+        assert SC.install_boot_video(root, src, system_dirs=(os.path.join(d, "usr-share"),)) == "installed"
+        assert open(dest, "rb").read() == b"stone-v2" and open(dest + ".stone-replaced", "rb").read() == b"older-movie"
+        with open(dest, "wb") as f:
+            f.write(b"my-own-movie")
+        assert SC.install_boot_video(root, src, system_dirs=(os.path.join(d, "usr-share"),)).startswith("kept")
 
 
 @test

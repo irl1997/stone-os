@@ -1,8 +1,18 @@
-# STONE OS 0.1.0-rc1
+# STONE OS 0.1.0-rc2
 
-Primera Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Segunda Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
-**El software está listo para probar en la placa. Nada está verificado en hardware todavía.**
+**El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc1
+
+Encontrados al instalar RC1 en la BC-250 (24-10-2026):
+
+- **STONE Home no se abría:** Bazzite 44 arranca el modo juego como `gamescope-session-plus@ogui-steam.service`, y STONE sólo se enganchaba a `@steam`. Ahora el drop-in está en la plantilla `gamescope-session-plus@.service.d/` y vale para cualquier variante; el orden (registro antes de la sesión, apertura después) se declara desde la sesión.
+- **Vídeo de arranque de STONE no instalado:** Bazzite deja su propio `deck_startup.webm`, y STONE lo trataba como un vídeo del usuario. Ahora reconoce una copia de un vídeo que trae la imagen (mismo tamaño y SHA-256 que un `.webm` de `/usr/share` o `/etc/skel`), lo reemplaza y lo guarda como `deck_startup.webm.stone-replaced`. Un vídeo propio del usuario sigue sin tocarse.
+- **Instalador (GitHub):** la ISO se construye en `ubuntu-24.04` (en 26.04 osbuild no puede montar por AppArmor) y se entrega al usuario del runner antes de partirla.
+
+Observado en la placa con RC1 (no son pruebas completas): instalación con la ISO, arranque con la pantalla STONE (Plymouth), sesión de Steam Game Mode, red, `/usr/lib/stone-release` correcto (kernel 7.2.9, Mesa 26.2.4, regulador con rango de fábrica 1000–1850 MHz).
 
 ## IMPLEMENTED
 
@@ -61,4 +71,4 @@ Flujos creados y validados con actionlint (con shellcheck). **WORKFLOW CREATED �
 - **Firma:** la imagen sólo se firma si se configura `SIGNING_SECRET`; la consola no exige firma al actualizar.
 - **Reproducibilidad:** la base está fijada por digest; los paquetes de Fedora y del COPR se resuelven en cada build (versiones registradas, no fijadas).
 - **Canales:** RC1 publica `rc` y `dev`; `beta` y `stable` están preparados en el flujo, sin versiones todavía.
-- El voltaje no se puede ajustar (por diseño) y el rango de frecuencia es el de fábrica del regulador (1000–2000 MHz).
+- El voltaje no se puede ajustar (por diseño) y el rango de frecuencia es el de fábrica del regulador (en la placa: 1000–1850 MHz).

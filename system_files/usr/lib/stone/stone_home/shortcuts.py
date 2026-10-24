@@ -263,9 +263,12 @@ def launch_until_running(request, timeout_s=120, retry_s=3.0, proc="/proc", slee
 # Game Mode plays ~/.steam/root/config/uioverrides/movies/deck_startup.webm, when present,
 # instead of its own startup movie. STONE's continues the line of the boot screen, so the
 # change from Plymouth to Steam is not seen. A video the user put there is never replaced:
-# STONE only overwrites a file it installed itself (recorded in the .stone marker).
+# STONE only overwrites a file it installed itself (recorded in the .stone marker) or a copy
+# of a movie shipped by the system image (Bazzite puts its own there; first boot on the
+# board), and keeps that one as .stone-replaced.
 BOOT_VIDEO = "/usr/share/stone-home/boot/stone-startup.webm"
 BOOT_VIDEO_NAME = "deck_startup.webm"
+SYSTEM_MOVIE_DIRS = ("/usr/share", "/etc/skel")
 
 
 def _sha256(path):
@@ -276,7 +279,32 @@ def _sha256(path):
     return h.hexdigest()
 
 
-def install_boot_video(root, src=None):
+def _from_system_image(path, dirs):
+    """True if `path` is a copy of a .webm shipped read-only by the image (same size and
+    SHA-256), i.e. not something the user made."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return False
+    want = None
+    for top in dirs:
+        for d, _sub, files in os.walk(top):
+            for n in files:
+                if not n.endswith(".webm"):
+                    continue
+                f = os.path.join(d, n)
+                try:
+                    if os.path.getsize(f) != size:
+                        continue
+                    want = want or _sha256(path)
+                    if _sha256(f) == want:
+                        return True
+                except OSError:
+                    continue
+    return False
+
+
+def install_boot_video(root, src=None, system_dirs=SYSTEM_MOVIE_DIRS):
     src = src or os.environ.get("STONE_BOOT_VIDEO", BOOT_VIDEO)
     if not os.path.isfile(src):
         return "skipped: no STONE startup movie in the image"
@@ -292,10 +320,14 @@ def install_boot_video(root, src=None):
         except OSError:
             mine = None
         have = _sha256(dest)
-        if mine != have:
-            return "kept: the user's own startup movie"
-        if have == want:
+        if have == want and mine == have:
             return "unchanged"
+        if mine != have:
+            if have == want or not _from_system_image(dest, system_dirs):
+                return "kept: the user's own startup movie"
+            replaced = dest + ".stone-replaced"
+            if not os.path.exists(replaced):
+                shutil.copyfile(dest, replaced)
     os.makedirs(movies, exist_ok=True)
     tmp = dest + ".stone-tmp"
     shutil.copyfile(src, tmp)
