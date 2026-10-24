@@ -78,6 +78,7 @@ jobs:
             echo "update_ref=${image}:${channel}"
             echo "iso=stone-os-${tag}-x86_64.iso"
             echo "artifact=stone-os-${tag}-installer"
+            echo "owner=$(id -u):$(id -g)"
           } >> "$GITHUB_OUTPUT"
           echo "Installs ${image}:${tag}; the console then follows ${image}:${channel}"
 
@@ -107,6 +108,8 @@ jobs:
           image: ${{ steps.names.outputs.image_ref }}
           types: anaconda-iso
           rootfs: btrfs
+          # The builder runs as root; hand the ISO to the runner user (as ublue-os/image-template).
+          chown: ${{ steps.names.outputs.owner }}
           additional-args: --use-librepo=True
 
       - name: Name, checksum and split for GitHub Releases
@@ -117,6 +120,9 @@ jobs:
           set -euo pipefail
           source config/build.env
           mkdir -p dist
+          # Also if the builder left its output owned by root (first RC1 run: "Permission denied").
+          out_dir="$(dirname "${ISO_PATH}")"
+          sudo chown -R "$(id -u):$(id -g)" "${out_dir}"
           mv "${ISO_PATH}" "dist/${ISO}"
           cd dist
           # Each GitHub Release file must be under 2 GiB: the ISO is also published in parts.
