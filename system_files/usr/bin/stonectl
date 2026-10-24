@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# STONE performance from a terminal: status, Safe Mode, factory settings.
+import sys
+sys.path.insert(0, "/usr/lib/stone")
+from stoned.ctl import main
+sys.exit(main(sys.argv[1:]))

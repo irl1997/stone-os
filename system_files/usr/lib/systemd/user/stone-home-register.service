@@ -1,0 +1,12 @@
+[Unit]
+Description=STONE Home: register the STONE shortcut in Steam
+# Steam rewrites shortcuts.vdf when it exits, so this runs before Game Mode starts Steam.
+Before=gamescope-session-plus@steam.service
+PartOf=gamescope-session-plus@steam.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/stone-home-session register
+TimeoutStartSec=30
+# Never block the console session: a failure here only means Steam's Home is shown.
+SuccessExitStatus=0 1 2

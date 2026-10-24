@@ -1,0 +1,4 @@
+{
+  "_comment": "Workload of the STONE stability test. Root-owned; never set over IPC. [VERIFICAR en placa]",
+  "command": ["vkmark", "--winsys", "headless", "--run-forever"]
+}

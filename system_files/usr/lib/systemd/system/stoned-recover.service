@@ -1,0 +1,28 @@
+[Unit]
+Description=STONE boot recovery (decides, never applies)
+# The governor has started from its factory file before this runs.
+After=cyan-skillfish-governor-smu.service systemd-tmpfiles-setup.service
+Before=stoned.service display-manager.service
+DefaultDependencies=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=stoned
+Group=stoned
+ExecStart=/usr/bin/stoned --recover
+# Runs only on an orderly shutdown: a crash or power cut never writes this marker.
+ExecStop=/usr/bin/stoned --mark-clean
+StateDirectory=stone
+StateDirectoryMode=0700
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=yes
+
+[Install]
+WantedBy=multi-user.target

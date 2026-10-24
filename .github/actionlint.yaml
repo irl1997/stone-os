@@ -1,0 +1,5 @@
+# ubuntu-26.04 is the runner ublue-os/image-template and Bazzite build their images on
+# (October 2026); this actionlint release predates the label.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

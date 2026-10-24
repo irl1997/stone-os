@@ -1,0 +1,24 @@
+# STONE OS installer (Anaconda ISO built by bootc-image-builder).
+# @IMAGE_REF@ is replaced by the build-installer workflow (or scripts/build-iso-local.sh) with
+# the image the ISO installs, e.g. ghcr.io/<owner>/stone-os:0.1.0-rc1. After installing, the
+# console follows that image's channel tag (@UPDATE_REF@) for atomic updates.
+[customizations.installer.kickstart]
+contents = """
+%post
+bootc switch --mutate-in-place --transport registry @UPDATE_REF@
+%end
+"""
+
+[customizations.installer.modules]
+enable = [
+  "org.fedoraproject.Anaconda.Modules.Storage",
+  "org.fedoraproject.Anaconda.Modules.Runtime",
+  "org.fedoraproject.Anaconda.Modules.Network",
+  "org.fedoraproject.Anaconda.Modules.Security",
+  "org.fedoraproject.Anaconda.Modules.Services",
+  "org.fedoraproject.Anaconda.Modules.Users",
+  "org.fedoraproject.Anaconda.Modules.Timezone"
+]
+disable = [
+  "org.fedoraproject.Anaconda.Modules.Subscription"
+]

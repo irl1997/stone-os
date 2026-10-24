@@ -1,0 +1,63 @@
+name: CI
+
+# Every pull request and every push: structure checks and every software test.
+# Also called by the image and release workflows, so nothing is built from a failing tree.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No concurrency group here: this workflow is also called from build-image.yml and release.yml,
+# and a group shared with the caller's run left a re-run queued forever (first GitHub run).
+
+jobs:
+  validate-and-test:
+    name: Validate and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      STONE_REQUIRE_ALL: "1"          # a suite that cannot run fails the job
+      PYTHON: /usr/bin/python3        # the distribution Python, which has PyGObject
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: System packages (PyGObject, D-Bus, WebKitGTK 6, GTK 4, Xvfb, linters)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            python3-gi gir1.2-glib-2.0 gir1.2-gtk-4.0 gir1.2-webkit-6.0 dbus dbus-x11 xvfb xauth \
+            shellcheck libxml2-utils systemd python3-pip
+          python3 -m pip install --user --break-system-packages ruff==0.16.9 actionlint-py==1.7.11.24
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Test dependencies (Playwright, ESLint; pinned in tests/e2e/package-lock.json)
+        working-directory: tests/e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Validate (structure, shell, Python, XML, units, workflows, STONE Home page)
+        run: scripts/validate.sh
+
+      - name: Test all (stoned, STONE Home, WebKit shell, end to end, page lint)
+        run: scripts/test-all.sh
+
+      - name: Screenshot of a failed end-to-end run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-failure
+          path: e2e-failure.png
+          if-no-files-found: ignore
+          retention-days: 7

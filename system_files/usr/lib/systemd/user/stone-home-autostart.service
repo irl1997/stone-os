@@ -1,0 +1,14 @@
+[Unit]
+Description=STONE Home: open STONE when Game Mode starts
+After=gamescope-session-plus@steam.service stone-home-register.service
+PartOf=gamescope-session-plus@steam.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/stone-home-session launch
+# Seconds steamwebhelper must be alive before the first request, and between repeated
+# requests until STONE Home is running. Measure on the board before lowering further
+# (HARDWARE_VALIDATION.md, test 16; timings are logged by every boot).
+Environment=STONE_HOME_SETTLE_S=2 STONE_HOME_RETRY_S=3
+TimeoutStartSec=330
+SuccessExitStatus=0 1 2

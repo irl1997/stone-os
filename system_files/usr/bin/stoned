@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# STONE System Service launcher. -I: ignore the environment and user site-packages.
+import sys
+sys.path.insert(0, "/usr/lib/stone")
+from stoned.__main__ import main
+sys.exit(main(sys.argv[1:]))

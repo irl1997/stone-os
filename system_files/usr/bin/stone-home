@@ -1,0 +1,7 @@
+#!/bin/sh
+# STONE Home, the console interface. Steam starts it as the "STONE" shortcut.
+# Steam launches shortcuts with its runtime's libraries and its overlay preloaded; STONE Home
+# is a system application (GTK 4, WebKitGTK 6 from the image) and must not load either.
+# Gamescope still identifies the window through Steam's reaper process, not through the overlay.
+unset LD_LIBRARY_PATH LD_PRELOAD
+exec /usr/libexec/stone-home "$@"

@@ -1,0 +1,1763 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: stone:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'">
+<title>STONE</title>
+<style>
+@font-face{font-family:Jost;font-style:normal;font-weight:200;font-display:block;src:url(fonts/jost-latin-200-normal.woff2) format("woff2")}
+@font-face{font-family:Jost;font-style:normal;font-weight:300;font-display:block;src:url(fonts/jost-latin-300-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:block;src:url(fonts/inter-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:block;src:url(fonts/inter-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:block;src:url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2")}
+html,body{margin:0;padding:0}
+[hidden]{display:none!important}
+</style>
+</head><body>
+<style>
+/* Layout: a fixed 1920×1080 console stage, scaled to fit the screen. Single dark look by design. */
+:root{
+  --void:#0a0a0b; --basalt:#141517; --graphite:#1c1d1f; --shale:#2b2c2f; --slate:#5e6064;
+  --ash:#8e9095; --warm:#ede9e3; --light:#ffffff; --ember:#c88a3a; --error:#d0675c;
+  --text-2:var(--ash); --horizon:var(--shale); --line-w:2px; --scrim:.55;
+  --f-display:Jost,Futura,"Century Gothic",sans-serif;
+  --f-text:Inter,"Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono","JetBrains Mono",monospace;
+  --d-step:220ms; --d-settle:360ms; --d-exit:450ms; --d-enter:600ms; --d-light:900ms; --d-cer:1200ms;
+  --e-step:cubic-bezier(.25,.1,0,1); --e-settle:cubic-bezier(.2,0,0,1); --e-light:cubic-bezier(.4,0,.2,1);
+  --e-exit:cubic-bezier(.4,0,1,1); --e-cer:cubic-bezier(.45,0,.15,1);
+  --fscale:1.06; --ts:1;
+  color-scheme:dark;
+}
+html,body{height:100%;background:var(--void);color:var(--warm)}
+body{font-family:var(--f-text);overflow:hidden}
+#app{height:100%;box-sizing:border-box;display:flex;flex-direction:column}
+#viewport{flex:1;min-height:0;position:relative;overflow:hidden}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:var(--void);
+  font-family:var(--f-text);user-select:none;-webkit-user-select:none;outline:none}
+
+/* Theme modifiers inside the stage */
+#stage.hc{--text-2:var(--warm);--horizon:var(--ash);--line-w:4px;--scrim:.78}
+
+/* Backgrounds */
+.bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity var(--d-light) var(--e-light)}
+.bg.on{opacity:1}
+#veil{position:absolute;inset:0;pointer-events:none;transition:opacity var(--d-light) var(--e-light);
+  background:linear-gradient(to bottom,rgba(10,10,11,calc(var(--scrim) - .2)) 0%,rgba(10,10,11,var(--scrim)) 48%,rgba(10,10,11,.97) 64%,var(--void) 72%)}
+#veil.side{background:linear-gradient(to right,rgba(10,10,11,.92) 0%,rgba(10,10,11,.78) 42%,rgba(10,10,11,.15) 72%,rgba(10,10,11,0) 100%),linear-gradient(to top,rgba(10,10,11,.9) 0%,rgba(10,10,11,0) 30%)}
+#veil.none{opacity:0}
+
+/* Shared chrome */
+.brand{font-family:var(--f-display);font-weight:200;letter-spacing:.45em;color:var(--warm)}
+#hdr{position:absolute;left:96px;right:96px;top:54px;height:48px;display:flex;justify-content:space-between;align-items:center;transition:opacity var(--d-enter) var(--e-light)}
+#hdr .brand{font-size:32px}
+#status{display:flex;gap:28px;align-items:center;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+#status svg{stroke:var(--text-2)}
+#status .pad.on svg{stroke:var(--warm)}
+#safeBadge{font-size:15px;letter-spacing:.18em;color:var(--warm);border:1px solid var(--warm);border-radius:3px;padding:2px 8px}
+#tabs{position:absolute;left:96px;top:140px;display:flex;gap:56px;font-family:var(--f-display);font-weight:300;font-size:22px;letter-spacing:.22em;transition:opacity var(--d-enter) var(--e-light)}
+#tabs span{color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+#tabs span.cur{color:var(--warm)}
+.hide{opacity:0!important;pointer-events:none}
+
+.screen{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity var(--d-enter) var(--e-light),visibility 0s linear var(--d-enter),transform var(--d-enter) var(--e-settle)}
+.screen.on{opacity:1;visibility:visible;transition:opacity var(--d-enter) var(--e-light),visibility 0s,transform var(--d-enter) var(--e-settle)}
+.screen.zoom{transform:scale(.985)}
+.screen.on.zoom{transform:none}
+
+/* Focus line: one per stage */
+#line{position:absolute;left:0;top:0;width:1920px;height:var(--line-w);background:var(--light);border-radius:2px;z-index:61;pointer-events:none;
+  transform-origin:0 50%;transform:translate(960px,886px) scaleX(0);
+  transition:transform var(--d-step) var(--e-step),opacity var(--d-step) linear,translate 160ms var(--e-settle)}
+#line.slow{transition:transform var(--d-cer) var(--e-cer),opacity var(--d-enter) linear,translate 160ms var(--e-settle)}
+#line.off{opacity:0}
+#line.load::after{content:"";position:absolute;top:0;left:0;height:100%;width:30%;background:var(--void);opacity:.55;animation:load 1.6s var(--e-light) infinite}
+@keyframes load{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
+
+/* Focusables */
+[data-f]{cursor:pointer}
+.txt-f{color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+.txt-f.f{color:var(--warm)}
+
+/* HOME */
+#home .clip{position:absolute;left:0;top:0;width:1920px;height:680px;overflow:hidden}
+#home .track{position:absolute;left:96px;top:0;height:680px;display:flex;gap:24px;align-items:flex-end;padding-bottom:26px;box-sizing:border-box;transition:transform var(--d-step) var(--e-step)}
+.card{flex:none;border-radius:4px;background-color:var(--shale);background-size:cover;background-position:center;transform-origin:0 100%;transition:transform var(--d-settle) var(--e-settle),translate var(--d-settle) var(--e-settle);position:relative}
+.card.f{transform:scale(var(--fscale))}
+.card.hero{width:678px;height:382px}
+.card.cap{width:200px;height:300px}
+.card.tile{width:200px;height:300px;background:var(--graphite);display:flex;align-items:flex-end;padding:20px;box-sizing:border-box;font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:16px;color:var(--text-2)}
+.card.wide{width:400px;height:225px;background:var(--graphite);display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:24px;box-sizing:border-box}
+.card.wide b{font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:20px;color:var(--warm)}
+.card.wide span{font-size:18px;color:var(--text-2)}
+.card.dim{opacity:.4}
+.card .run{position:absolute;left:24px;top:24px;font-family:var(--f-display);font-weight:300;letter-spacing:.3em;font-size:16px;color:var(--ember)}
+#home .horizon{position:absolute;left:96px;top:669px;width:1728px;height:1px;background:var(--horizon)}
+#home .ctx{position:absolute;left:96px;top:706px;display:flex;flex-direction:column;gap:8px;max-width:1300px}
+.kicker{font-family:var(--f-display);font-weight:300;font-size:20px;letter-spacing:.3em;color:var(--text-2)}
+.kicker .now{color:var(--ember)}
+.ctx-title{font-family:var(--f-display);font-weight:300;font-size:calc(40px * var(--ts));line-height:1.2;letter-spacing:.3em;color:var(--warm);text-transform:uppercase}
+.meta{font-size:calc(20px * var(--ts));color:var(--text-2);opacity:0;transition:opacity var(--d-light) var(--e-light);font-variant-numeric:tabular-nums}
+.meta.on{opacity:1}
+#home .sys{position:absolute;left:96px;top:930px;display:flex;gap:64px;font-size:22px}
+#home .sys span{display:flex;gap:12px;align-items:center}
+#home .sys svg{stroke:currentColor}
+
+/* LIBRARY */
+#library .filters{position:absolute;left:96px;top:206px;display:flex;gap:40px;font-size:22px}
+#library .filters span.cur{color:var(--warm)}
+#library .filters span.cur::after{content:"";display:block;height:2px;background:var(--slate);margin-top:8px}
+#library .count{position:absolute;right:96px;top:210px;font-size:20px;color:var(--text-2)}
+#library .gclip{position:absolute;left:0;top:276px;width:1920px;height:680px;overflow:hidden}
+#library .grid{position:absolute;left:96px;top:4px;width:1728px;transition:transform var(--d-step) var(--e-step)}
+#library .grid .card{position:absolute;width:254.67px;height:381px}
+#library .empty{position:absolute;left:96px;top:300px;font-size:24px;color:var(--text-2)}
+#library .sel{position:absolute;left:96px;top:994px;font-size:20px;color:var(--text-2);max-width:1100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* DETAIL */
+#detail .col{position:absolute;left:96px;top:280px;width:1000px;display:flex;flex-direction:column;gap:16px}
+#detail .origin{font-size:20px;color:var(--text-2);letter-spacing:.1em}
+#detail h1{margin:0;font-family:var(--f-display);font-weight:300;font-size:64px;line-height:72px;letter-spacing:.3em;color:var(--warm);text-wrap:balance}
+#detail .stats{font-size:calc(24px * var(--ts));line-height:1.4;color:var(--text-2);font-variant-numeric:tabular-nums}
+#detail .primary{position:absolute;left:96px;top:560px;font-family:var(--f-display);font-weight:300;font-size:40px;line-height:48px;letter-spacing:.3em;color:var(--warm)}
+#detail .second{position:absolute;left:96px;top:690px;display:flex;gap:64px;font-size:22px}
+#detail .info{position:absolute;left:96px;right:96px;top:860px;border-top:1px solid var(--horizon);padding-top:24px;display:flex;gap:72px;font-size:20px;color:var(--text-2)}
+#detail .info div{display:flex;flex-direction:column;gap:4px}
+#detail .info b{font-weight:400;color:var(--warm)}
+
+/* GAME */
+#game .art{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.35}
+#game .tag{position:absolute;left:96px;bottom:64px;font-size:20px;color:var(--warm);opacity:.85;transition:opacity 1.2s var(--e-light);text-shadow:0 1px 8px rgba(0,0,0,.6)}
+#game .tag.gone{opacity:0}
+#metrics{position:absolute;left:40px;top:32px;font-family:var(--f-mono);font-size:20px;line-height:30px;color:var(--warm);background:rgba(10,10,11,.72);padding:12px 18px;border-radius:4px;z-index:30;font-variant-numeric:tabular-nums;white-space:pre}
+
+/* QUICK MENU */
+#quick{position:absolute;inset:0;z-index:20;visibility:hidden;transition:visibility 0s linear var(--d-enter)}
+#quick.on{visibility:visible;transition:visibility 0s}
+#quick .dim{position:absolute;inset:0;background:var(--void);opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#quick.on .dim{opacity:.45}
+#quick .panel{position:absolute;right:0;top:0;width:560px;height:1080px;background:var(--basalt);box-sizing:border-box;padding:54px 56px;display:flex;flex-direction:column;gap:30px;transform:translateX(100%);transition:transform var(--d-enter) var(--e-settle)}
+#quick.on .panel{transform:none}
+#quick .top{display:flex;justify-content:space-between;align-items:center}
+#quick .top .brand{font-size:24px}
+#quick .top span:last-child{font-size:20px;color:var(--text-2)}
+#quick .main{font-family:var(--f-display);font-weight:300;font-size:28px;letter-spacing:.18em}
+#quick .it{font-size:24px}
+#quick .seg{display:flex;flex-direction:column;gap:14px}
+#quick .seg .lbl{font-size:20px}
+#quick .opts{display:flex;gap:8px}
+#quick .opts span{flex:1;text-align:center;padding:12px 0;border:1px solid var(--shale);border-radius:4px;font-size:20px;color:var(--text-2)}
+#quick .opts span.cur{border-color:var(--ash);color:var(--warm)}
+#quick .rule{height:1px;background:var(--shale)}
+#quick .steam{display:flex;flex-direction:column;gap:18px}
+#quick .steam .cap{font-size:16px;letter-spacing:.12em;color:var(--slate)}
+#quick .steam .it{font-size:22px}
+#quick .tog{color:var(--slate)}
+
+/* SETTINGS */
+#settings{background:var(--basalt)}
+#settings .ttl{position:absolute;left:96px;top:140px;font-family:var(--f-display);font-weight:300;font-size:40px;letter-spacing:.3em}
+#settings .cats{position:absolute;left:96px;top:236px;width:480px;display:flex;flex-direction:column;gap:20px;font-size:24px}
+#settings .cats span.cur{color:var(--warm)}
+#settings .vr{position:absolute;left:640px;top:236px;width:1px;height:700px;background:var(--shale)}
+#settings .pane{position:absolute;left:704px;top:236px;width:1120px;display:flex;flex-direction:column;gap:28px}
+#settings .desc{font-size:24px;line-height:34px;color:var(--text-2)}
+#settings .rows{display:flex;flex-direction:column}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:32px;padding:22px 0;border-bottom:1px solid var(--shale)}
+.srow:last-child{border-bottom:none}
+.srow .l{display:flex;flex-direction:column;gap:6px}
+.srow .l b{font-weight:400;font-size:calc(24px * var(--ts));color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+.srow.f .l b{color:var(--warm)}
+.srow .l small{font-size:calc(20px * var(--ts));color:var(--text-2)}
+.srow .v{font-size:20px;color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.srow.f .v{color:var(--warm)}
+.srow .v .ar{color:var(--slate);padding:0 10px}
+#safe{position:absolute;inset:0;pointer-events:none;z-index:35;opacity:0;transition:opacity var(--d-step) linear}
+#safe.on{opacity:1}
+#safe i{position:absolute;width:48px;height:48px;border-color:var(--ember);border-style:solid;border-width:0}
+
+/* POWER */
+#power{position:absolute;inset:0;z-index:25;visibility:hidden;transition:visibility 0s linear var(--d-enter)}
+#power.on{visibility:visible;transition:visibility 0s}
+#power .dim{position:absolute;inset:0;background:var(--void);opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#power.on .dim{opacity:.72}
+#power .box{position:absolute;left:660px;top:290px;width:600px;background:var(--basalt);border-radius:4px;box-sizing:border-box;padding:56px 64px;display:flex;flex-direction:column;gap:30px;opacity:0;transform:translateY(16px);transition:opacity var(--d-enter) var(--e-light),transform var(--d-enter) var(--e-settle)}
+#power.on .box{opacity:1;transform:none}
+#power .h{font-family:var(--f-display);font-weight:300;font-size:24px;letter-spacing:.3em;color:var(--text-2)}
+#power .main{font-family:var(--f-display);font-weight:300;font-size:36px;letter-spacing:.3em}
+#power .warn{font-size:20px;line-height:28px;color:var(--ember)}
+
+/* PERFORMANCE CENTER */
+#perf,#tuning{background:var(--basalt)}
+.pttl{position:absolute;left:96px;top:140px;font-family:var(--f-display);font-weight:300;font-size:40px;letter-spacing:.3em}
+.pstatus{position:absolute;left:96px;top:208px;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.pstatus b{font-weight:400;color:var(--warm)}
+.pread{position:absolute;left:96px;top:242px;font-size:17px;color:var(--text-3, var(--text-2));font-variant-numeric:tabular-nums;opacity:.8}
+#perf .prow{position:absolute;left:96px;top:290px;display:flex;gap:24px}
+.card.ptile{width:414px;height:270px;box-sizing:border-box;padding:28px;background:var(--graphite);display:flex;flex-direction:column;gap:10px}
+.ptile .pn{font-family:var(--f-display);font-weight:300;font-size:28px;letter-spacing:.22em;color:var(--warm)}
+.ptile .pd{font-size:20px;line-height:28px;color:var(--text-2)}
+.ptile .ps{margin-top:auto;font-size:18px;line-height:26px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.ptile .pa{font-family:var(--f-display);font-weight:300;font-size:16px;letter-spacing:.3em;color:var(--ember);min-height:20px}
+#perf .acts{position:absolute;left:96px;top:676px;display:flex;gap:64px;font-size:24px}
+#perf .note{position:absolute;left:96px;top:770px;max-width:1150px;font-size:20px;line-height:30px;color:var(--text-2)}
+#tuning .tclip{position:absolute;left:96px;top:250px;width:1000px;height:710px;overflow:hidden}
+#tuning .trows{position:absolute;left:0;top:0;width:1000px;display:flex;flex-direction:column;transition:transform var(--d-step) var(--e-step)}
+#tuning .side{position:absolute;left:1180px;top:262px;width:644px;display:flex;flex-direction:column;gap:20px}
+.pbox{background:var(--graphite);border-radius:4px;padding:26px 32px;display:flex;flex-direction:column;gap:12px}
+.pbox h3{margin:0 0 4px;font-family:var(--f-display);font-weight:300;font-size:18px;letter-spacing:.3em;color:var(--text-2)}
+.kv{display:flex;justify-content:space-between;gap:24px;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.kv b{font-weight:400;color:var(--warm)}
+.kv b.chg{color:var(--ember)}
+.srow .v.ro{color:var(--slate)}
+#dlg{position:absolute;inset:0;z-index:27;visibility:hidden}
+#dlg.on{visibility:visible}
+#dlg .dim{position:absolute;inset:0;background:var(--void);opacity:.85}
+#dlg.solid .dim{opacity:1}
+#dlg .box{position:absolute;left:520px;top:200px;width:880px;box-sizing:border-box;background:var(--basalt);border-radius:4px;padding:56px 64px;display:flex;flex-direction:column;gap:26px}
+#dlg.solid .box{background:transparent;top:300px}
+#dlg h2{margin:0;font-family:var(--f-display);font-weight:300;font-size:32px;letter-spacing:.3em;color:var(--warm)}
+#dlg p{margin:0;font-size:22px;line-height:32px;color:var(--text-2)}
+#dlg .btns{display:flex;gap:64px;font-family:var(--f-display);font-weight:300;font-size:26px;letter-spacing:.22em;margin-top:8px}
+#dlg .live{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+#dlg .live div{display:flex;flex-direction:column;gap:6px;font-size:18px;color:var(--text-2)}
+#dlg .live b{font-family:var(--f-mono);font-weight:400;font-size:28px;color:var(--warm);font-variant-numeric:tabular-nums}
+#dlg .ptrack{height:2px;background:var(--shale);margin-top:8px}
+#dlg .res{font-family:var(--f-display);font-weight:300;font-size:36px;letter-spacing:.3em;color:var(--warm)}
+#dlg .kvs{display:flex;flex-direction:column;gap:10px}
+
+/* BOOT / OFF */
+#black{position:absolute;inset:0;background:#000;z-index:50;opacity:0;pointer-events:none;transition:opacity var(--d-enter) var(--e-light)}
+#black.on{opacity:1}
+#black.fast{transition-duration:var(--d-exit)}
+#bootword{position:absolute;left:0;right:0;top:430px;text-align:center;font-size:64px;padding-left:.45em;z-index:60;opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#bootword.on{opacity:1}
+#offmsg{position:absolute;left:0;right:0;top:960px;text-align:center;font-size:20px;color:var(--slate);z-index:60;opacity:0;transition:opacity var(--d-light) var(--e-light)}
+#offmsg.on{opacity:1}
+#bootword,#offmsg,#toast,#hints{pointer-events:none}
+
+/* HINTS / TOAST */
+#hints{position:absolute;right:96px;top:994px;display:flex;gap:40px;font-size:20px;color:var(--text-2);transition:opacity var(--d-light) var(--e-light);z-index:22}
+#hints div{display:flex;gap:8px;align-items:center}
+.g{display:inline-flex;min-width:30px;height:30px;padding:0 6px;border:2px solid var(--text-2);border-radius:15px;align-items:center;justify-content:center;font-size:14px;font-weight:500;box-sizing:border-box;color:var(--text-2)}
+#toast{position:absolute;left:96px;top:996px;font-size:20px;color:var(--warm);z-index:45;opacity:0;transform:translateY(8px);transition:opacity var(--d-enter) var(--e-light),transform var(--d-enter) var(--e-settle);max-width:1000px}
+#toast.on{opacity:1;transform:none}
+#pulse{position:absolute;left:0;bottom:0;width:1920px;height:2px;background:var(--light);opacity:0;z-index:46;pointer-events:none}
+#pulse.go{animation:pulse 1.4s var(--e-light)}
+@keyframes pulse{0%{opacity:0;transform:scaleX(.2)}25%{opacity:.9;transform:scaleX(1)}100%{opacity:0;transform:scaleX(1)}}
+
+</style>
+
+<div id="app">
+  <div id="viewport">
+    <div id="stage" tabindex="0" aria-label="Pantalla de STONE MACHINE. Usa las flechas, Enter y Escape, o un mando.">
+      <div id="bgA" class="bg"></div><div id="bgB" class="bg"></div><div id="veil" class="none"></div>
+
+      <section id="home" class="screen"></section>
+      <section id="library" class="screen"></section>
+      <section id="detail" class="screen zoom"></section>
+      <section id="game" class="screen"><div class="art"></div><div class="tag"></div></section>
+      <section id="settings" class="screen zoom"></section>
+      <section id="perf" class="screen zoom"></section>
+      <section id="tuning" class="screen zoom"></section>
+
+      <div id="hdr" class="hide">
+        <div class="brand">STONE</div>
+        <div id="status">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke-width="2" aria-hidden="true"><path d="M4 11 Q14 3 24 11"/><path d="M8 15 Q14 10 20 15"/><path d="M12 19 Q14 17.5 16 19"/></svg>
+          <span class="pad"><svg width="34" height="28" viewBox="0 0 34 28" fill="none" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="28" height="14" rx="4"/><path d="M10 11v6M7 14h6"/><path d="M23 12h2M25 16h2"/></svg></span>
+          <span id="safeBadge" hidden>SAFE MODE</span>
+          <span id="clock">--:--</span>
+        </div>
+      </div>
+      <div id="tabs" class="hide"><span>INICIO</span><span>BIBLIOTECA</span><span>EXPLORAR</span><span>MEDIA</span></div>
+
+      <div id="quick"><div class="dim"></div><div class="panel"></div></div>
+      <div id="power"><div class="dim"></div><div class="box"></div></div>
+      <div id="dlg"><div class="dim"></div><div class="box"></div></div>
+      <div id="metrics" hidden></div>
+      <div id="safe"><i style="left:var(--sx);top:var(--sy);border-left-width:3px;border-top-width:3px"></i><i style="right:var(--sx);top:var(--sy);border-right-width:3px;border-top-width:3px"></i><i style="left:var(--sx);bottom:var(--sy);border-left-width:3px;border-bottom-width:3px"></i><i style="right:var(--sx);bottom:var(--sy);border-right-width:3px;border-bottom-width:3px"></i></div>
+
+      <div id="hints" class="hide"></div>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div id="pulse"></div>
+      <div id="black" class="on"></div>
+      <div id="bootword" class="brand">STONE</div>
+      <div id="offmsg"></div>
+      <div id="line" class="off boot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), line = $('#line');
+
+/* ---------- Stage scaling ---------- */
+let SCALE = 1;
+function fit() {
+  const vp = $('#viewport'), w = vp.clientWidth, h = vp.clientHeight;
+  SCALE = Math.min(w / 1920, h / 1080);
+  stage.style.transform = `translate(${(w - 1920 * SCALE) / 2}px, ${(h - 1080 * SCALE) / 2}px) scale(${SCALE})`;
+}
+new ResizeObserver(fit).observe($('#viewport'));
+fit();
+
+/* ---------- State ---------- */
+const reduceOS = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const S = {
+  screen: 'transition', running: null, profile: 1, tech: false, sound: true, vol: 0.7,
+  hc: false, rm: reduceOS, ts: 0, safe: 5, section: 0, filter: 0, from: 'home',
+  prof: 'balanced', lkg: 'balanced', adv: false, advAck: false, idle: 2,
+  caps: null, actual: null, safeMode: false, game: null, provisional: false, pending: null,
+  info: null, libReady: false, libFound: true, launching: null, st: null
+};
+/* Performance profiles: all values stay inside the range documented as stable on every BC-250 (≤ 2000 MHz at 1000 mV, ≤ 85 °C).
+   stoned holds the same table (profiles.py) and is the one that applies it; these are for display. */
+const FACT = {
+  silent: { n: 'SILENT', max: 1500, min: 1000, temp: 75, resp: 0, d: 'Mínimo ruido, temperatura y consumo. Multimedia, emulación y juegos ligeros.', fps: '30 o 40 FPS' },
+  balanced: { n: 'BALANCED', max: 1850, min: 1000, temp: 85, resp: 1, d: 'El mejor equilibrio entre rendimiento, frametime, temperatura y ruido. Recomendado.', fps: '60 FPS' },
+  performance: { n: 'PERFORMANCE', max: 2000, min: 1000, temp: 85, resp: 1, d: 'Máximo rendimiento dentro del rango estable de STONE MACHINE.', fps: 'Sin límite con VRR' }
+};
+const RESP = ['Suave', 'Normal', 'Rápida'];
+const IDLE = ['Nunca', '15 min', '30 min', '60 min'];
+const IDLE_MIN = [0, 15, 30, 60];
+const slots = [null, null, null];
+const slotId = k => 'c' + (k + 1);
+function profOf(id) {
+  if (FACT[id]) return FACT[id];
+  const k = +String(id).slice(1) - 1, sl = slots[k];
+  return sl ? { n: 'CUSTOM 0' + (k + 1), ...sl } : FACT.balanced;
+}
+const usable = () => ['silent', 'balanced', 'performance', ...slots.map((sl, k) => sl && sl.state !== 'failed' ? slotId(k) : null).filter(Boolean)];
+/* what is applied right now, as reported by stoned */
+function effective() { return (S.game && S.game.profile) || S.prof; }
+/* Text from Steam's files goes into the page as text, never as markup. */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* ---------- STONE PERFORMANCE API ----------
+   The UI's only door to performance: stoned (D-Bus org.stonemachine.Performance1, docs/STONED.md),
+   reached through STONE Home's host process (stone_home/bridge.py). The host accepts a fixed list
+   of methods with typed arguments; stoned validates every value again and answers with the state
+   read back from the GPU governor. The UI renders the state that comes back, never what it asked for. */
+class PerfError extends Error { constructor(code, msg) { super(msg || code); this.code = code; } }
+const ERR_TEXT = {
+  Unsupported: 'Esta función no está disponible en esta consola',
+  PermissionDenied: 'No se pudo cambiar el rendimiento: permiso denegado',
+  InvalidValue: 'Valor no válido',
+  HardwareError: 'El regulador de GPU devolvió un error. No se cambió nada',
+  ServiceUnavailable: 'El servicio de rendimiento no responde. No se cambió nada',
+  ThermalLimit: 'STONE MACHINE está muy caliente. Espera a que se enfríe para subir el rendimiento',
+  ApplyFailed: 'El regulador no aplicó el cambio. STONE volvió a la configuración anterior',
+  RollbackFailed: 'No se pudo restaurar la configuración. Reinicia: STONE arranca con valores de fábrica',
+  SafeMode: 'Safe Mode: nada por encima de BALANCED',
+  Busy: 'Hay una prueba de estabilidad en curso',
+  NotValidated: 'Esta ranura falló. Pruébala de nuevo antes de usarla'
+};
+const REASON_TEXT = {
+  thermal: 'la GPU superó el límite de temperatura', workload_failed: 'la carga de prueba se detuvo',
+  gpu_errors: 'el sistema registró errores de GPU', clock_not_sustained: 'la GPU no sostuvo la frecuencia pedida',
+  kernel_log_unavailable: 'no se pudo leer el registro del sistema', cancelled: 'se canceló', interrupted: 'se interrumpió'
+};
+
+/* ---------- Transport to STONE Home's host process ----------
+   STONE OS: WebKit message handler of stone-home (stone_home/app.py), answered asynchronously.
+   Development and CI: the same requests over HTTP, events over Server-Sent Events
+   (development/stone_home_devserver.py). Requests and answers are identical in both. */
+const Bridge = (() => {
+  const wk = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.stone;
+  const http = !wk && location.protocol.startsWith('http');
+  const listeners = {};
+  const emit = (ev, d) => (listeners[ev] || []).forEach(f => { try { f(d); } catch (e) { console.error(e); } });
+  window.__stoneEvent = (ev, d) => emit(ev, d);
+  if (http) {
+    const es = new EventSource('/events');
+    es.onmessage = m => { try { const { name, data } = JSON.parse(m.data); emit(name, data); } catch (e) { /* ignore a bad frame */ } };
+  }
+  async function call(method, ...args) {
+    let r;
+    try {
+      if (wk) r = await wk.postMessage({ method, args });
+      else if (http) r = await (await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method, args }) })).json();
+      else throw new Error('STONE Home host not found');
+    } catch (e) { throw new PerfError('ServiceUnavailable', String(e)); }
+    if (!r || !r.ok) throw new PerfError((r && r.code) || 'ServiceUnavailable', r && r.message);
+    return r.result;
+  }
+  const artUrl = (appid, kind) => http ? `/art/${appid}/${kind}` : `stone://art/${appid}/${kind}`;
+  return { call, on: (ev, f) => { (listeners[ev] = listeners[ev] || []).push(f); }, artUrl };
+})();
+const PerfAPI = { on: Bridge.on };
+['getCapabilities', 'getState', 'getMetrics', 'homeReady', 'setProfile', 'setSessionProfile', 'startTest', 'cancelTest',
+  'measureBaseline', 'saveTestResult', 'discardTestResult', 'restoreDefaults', 'enterSafeMode', 'exitSafeMode',
+  'setGameProfile', 'subscribe', 'unsubscribe'].forEach(m => { PerfAPI[m] = (...a) => Bridge.call('perf.' + m, ...a); });
+/* Everything else the console needs from the system: Steam library and launching, power, versions, settings file. */
+const Sys = {
+  library: () => Bridge.call('library'), launch: appid => Bridge.call('launch', appid), openSteam: k => Bridge.call('openSteam', k),
+  power: a => Bridge.call('power', a), info: () => Bridge.call('systemInfo'),
+  prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p)
+};
+async function sys(method, ...a) {
+  try { return await Sys[method](...a); }
+  catch (e) { play('error'); toast(ERR_TEXT[e.code] || e.message, false); return null; }
+}
+
+const noLimitText = () => S.actual && S.actual.error === 'Unsupported' ? 'Regulador de GPU no detectado' : 'Servicio de rendimiento no disponible';
+function slotLabel(s) { return !s ? 'vacía' : s.state === 'validated' ? 'validado' : s.state === 'failed' ? 'falló' : 'provisional'; }
+/* The UI cache is rebuilt from what stoned returns; nothing here is set from a request. */
+function adopt(st) {
+  if (!st || st.profile === undefined) return;
+  const before = slots.map(s => s && s.state);
+  S.st = st;
+  S.prof = st.profile; S.lkg = st.last_known_good; S.safeMode = st.safe_mode; S.actual = st.actual; S.game = st.game || null;
+  S.provisional = st.provisional; S.pending = st.pending_result || null; S.thermal = st.thermal || null;
+  S.safeReason = st.safe_reason || null;
+  if (st.tests) lastTests = st.tests;
+  const sb = document.getElementById('safeBadge'); if (sb) sb.hidden = !st.safe_mode;
+  st.slots.forEach((s, k) => { slots[k] = s.state === 'empty' ? null : { max: s.max, min: s.min, temp: s.temp, resp: s.resp, state: s.state, test_level: s.test_level }; });
+  G.forEach(g => { g.perf = st.per_game[g.appid] || null; });
+  gameSync(st, before);
+}
+async function api(method, ...args) {
+  try { const st = await PerfAPI[method](...args); adopt(st); return st; }
+  catch (e) {
+    if (!(e instanceof PerfError)) throw e;
+    if (e.code === 'ServiceUnavailable') S.actual = { error: 'ServiceUnavailable' };
+    play('error'); toast(ERR_TEXT[e.code] || e.message, false);
+    return null;
+  }
+}
+/* stoned restarted (or came up late): it has forgotten that Home is on screen and who was reading metrics. */
+Bridge.on('service', d => {
+  if (!d.up) { S.actual = { error: 'ServiceUnavailable' }; if (['perf', 'tuning'].includes(S.screen)) $(`#${S.screen} .pstatus`).innerHTML = statusLine(S.prof); return; }
+  telCtx = null;
+  refreshCaps().then(() => api('homeReady')).then(() => { telemetrySync(); if (['perf', 'tuning'].includes(S.screen)) $(`#${S.screen} .pstatus`).innerHTML = statusLine(S.prof); });
+});
+/* ---------- Readings: stoned samples only while something on screen shows them ---------- */
+const nv = (v, u) => v === null || v === undefined ? '—' : `${v}${u}`;
+function readingsText(m) {
+  if (!m) return 'Lecturas: esperando al servicio de rendimiento';
+  return `GPU ${nv(m.gpu_temp_c, ' °C')} · CPU ${nv(m.cpu_temp_c, ' °C')} · ${nv(m.gpu_clock_mhz, ' MHz')} · uso GPU ${nv(m.gpu_busy_pct, ' %')} · consumo GPU ${nv(m.gpu_power_w, ' W')} · ventilador ${nv(m.fan_rpm, ' RPM')}`;
+}
+let telCtx = null;
+function telemetrySync() {
+  const want = ['perf', 'tuning'].includes(S.screen) ? 'performance_center' : (S.tech && !$('#metrics').hidden ? 'overlay' : null);
+  if (want === telCtx) return;
+  telCtx = want;
+  (want ? PerfAPI.subscribe(want) : PerfAPI.unsubscribe()).catch(() => { telCtx = null; });
+}
+PerfAPI.on('state', st => adopt(st));
+PerfAPI.on('metrics', m => {
+  S.metrics = m;
+  const r = $('#pread'); if (r) r.textContent = readingsText(m);
+  const tr = $('#tread'); if (tr) tr.innerHTML = tuningReadings(m);
+  if (S.tech && !$('#metrics').hidden) metricsTick();
+});
+PerfAPI.on('thermal', ev => {
+  api('getState').then(() => {
+    const back = ev.back ? ` Vuelve ${profOf(ev.back).n}.` : '';
+    const msg = { warning: `STONE MACHINE se está calentando (GPU ${ev.gpu_temp_c} °C). Revisa que la ventilación no esté tapada`,
+      reduced: ev.reason === 'fan' ? 'El ventilador no gira: STONE bajó a SILENT. Revisa el ventilador antes de seguir jugando'
+        : `Temperatura alta (GPU ${ev.gpu_temp_c} °C): STONE bajó a SILENT hasta que se enfríe`,
+      critical: `GPU a ${ev.gpu_temp_c} °C. Si sigue subiendo, la placa se apagará sola para protegerse. Apaga la consola y revisa la ventilación`,
+      normal: `La temperatura volvió a la normalidad.${back}` }[ev.level];
+    if (msg) { if (ev.level !== 'normal') play('error'); toast(msg, ev.level === 'normal'); }
+    if (S.screen === 'perf') $('#perf .pstatus').innerHTML = statusLine(S.prof);
+  });
+});
+function tuningReadings(m) {
+  if (!m) return '<div class="kv"><span>Lecturas</span><span>esperando…</span></div>';
+  return [['GPU', nv(m.gpu_temp_c, ' °C')], ['CPU', nv(m.cpu_temp_c, ' °C')], ['Frecuencia GPU', nv(m.gpu_clock_mhz, ' MHz')], ['Consumo GPU', nv(m.gpu_power_w, ' W')], ['Ventilador', nv(m.fan_rpm, ' RPM')]]
+    .map(([l, v]) => `<div class="kv"><span>${l}</span><b>${v}</b></div>`).join('');
+}
+const refreshCaps = () => PerfAPI.getCapabilities().then(c => { S.caps = c; }).catch(() => { S.caps = null; });
+
+const SIZES = ['Normal', '1.25×', '1.5×'];
+
+/* ---------- Library: Steam's installed games and shortcuts, read by the host ----------
+   The host sorts by last played. Artwork comes from Steam's own cache through stone://art. */
+let G = [], recent = [];
+const favs = new Set();
+const SRC = { steam: 'Steam', shortcut: 'Acceso directo' };
+function ago(t) {
+  if (!t) return 'Nunca';
+  const s = Date.now() / 1000 - t, d = Math.round(s / 86400), pl = (n, a, b) => `Hace ${n} ${n === 1 ? a : b}`;
+  if (s < 3600) return pl(Math.max(1, Math.round(s / 60)), 'min', 'min');
+  if (s < 86400) return pl(Math.round(s / 3600), 'hora', 'horas');
+  if (d <= 1) return 'Ayer';
+  if (d < 7) return pl(d, 'día', 'días');
+  if (d < 30) return pl(Math.round(d / 7), 'semana', 'semanas');
+  if (d < 365) return pl(Math.round(d / 30), 'mes', 'meses');
+  return pl(Math.round(d / 365), 'año', 'años');
+}
+const sizeText = b => !b ? '—' : b >= 1e9 ? (b / 1e9).toFixed(b >= 1e10 ? 0 : 1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB';
+const playText = g => !g.min ? 'Sin jugar' : g.min < 60 ? `${g.min} min jugados` : `${g.h} h jugadas`;
+async function loadLibrary() {
+  let r = null;
+  try { r = await Sys.library(); } catch (e) { r = null; }
+  const list = r ? r.games : [];
+  G = list.map((x, i) => ({ i, appid: x.appid, n: x.name, o: SRC[x.source] || 'Steam', src: x.source, min: x.playtime_min,
+    h: Math.round(x.playtime_min / 60), lastT: x.last_played, last: ago(x.last_played), sz: sizeText(x.size_bytes),
+    inst: x.installed, upd: x.updating, art: x.art || {}, fav: favs.has(x.appid), perf: null }));
+  recent = G.slice(0, 6).map(g => g.i);
+  S.libReady = true; S.libFound = r ? r.root_found : false;
+  if (S.st) adopt(S.st);
+}
+const capUrl = g => g.art.capsule ? `url("${Bridge.artUrl(g.appid, 'capsule')}")` : 'none';
+const heroUrl = g => g.art.hero || g.art.capsule ? Bridge.artUrl(g.appid, g.art.hero ? 'hero' : 'capsule') : null;
+const nameTag = g => `<span style="position:absolute;left:20px;right:20px;bottom:24px;font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:18px;line-height:1.3;color:var(--warm)">${esc(g.n.toUpperCase())}</span>`;
+/* Background blur from a 64×36 copy of the hero: one tiny image scaled up, no live blur filter.
+   A small LRU keeps the last ones; game mode empties it. */
+const BLUR = new Map(), BLUR_MAX = 24;
+function blurOf(g, cb) {
+  if (BLUR.has(g.appid)) { const v = BLUR.get(g.appid); BLUR.delete(g.appid); BLUR.set(g.appid, v); return v; }
+  const u = heroUrl(g); if (!u) return null;
+  const img = new Image(); img.decoding = 'async';
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 36;
+      c.getContext('2d').drawImage(img, 0, 0, 64, 36);
+      BLUR.set(g.appid, c.toDataURL('image/png'));
+      while (BLUR.size > BLUR_MAX) BLUR.delete(BLUR.keys().next().value);
+      if (cb) cb();
+    } catch (e) { /* artwork that cannot be read stays sharp-only */ }
+  };
+  img.src = u; return null;
+}
+function trimArt() { BLUR.clear(); }
+
+/* ---------- Sound ----------
+   Only event sounds: soft sine tones for buttons, plus startup and shutdown. No background sound.
+   Everything is synthesized; nothing is loaded. */
+let AC = null, master = null, uiBus = null, verb = null;
+function impulse(sec, decay) {
+  const n = Math.floor(AC.sampleRate * sec), b = AC.createBuffer(2, n, AC.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); let lp = 0; for (let k = 0; k < n; k++) { lp = lp * .6 + (Math.random() * 2 - 1) * .4; d[k] = lp * Math.pow(1 - k / n, decay); } }
+  return b;
+}
+function audio() {
+  if (AC || !S.sound) return AC;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = S.vol; master.connect(AC.destination);
+    verb = AC.createConvolver(); verb.buffer = impulse(2.4, 2.6);
+    const wet = AC.createGain(); wet.gain.value = .55; verb.connect(wet); wet.connect(master);
+    uiBus = AC.createGain(); uiBus.gain.value = 1; uiBus.connect(master);
+  } catch (e) { AC = null; }
+  return AC;
+}
+/* A soft tone: sine by default, gentle attack, exponential release, low-passed, with a reverb send. */
+/* Audio sleeps only where no interface sound is expected: during a game and in deep idle. Menus keep it running. */
+function audioSleep() { if (AC && AC.state === 'running') AC.suspend(); }
+function tone(freq, dur, gain, o = {}) {
+  if (!S.sound || !audio()) return;
+  /* a suspended context is resumed first and the tone scheduled once it runs, so no sound is cut */
+  if (AC.state !== 'running') { AC.resume().then(() => tone(freq, dur, gain, o)); return; }
+  const t = AC.currentTime + (o.delay || 0), osc = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter(), send = AC.createGain();
+  osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(freq, t);
+  if (o.glide) osc.frequency.exponentialRampToValueAtTime(o.glide, t + dur * .8);
+  f.type = 'lowpass'; f.frequency.value = o.lp || 1600; f.Q.value = .3;
+  const a = o.attack || .012;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  send.gain.value = o.wet === undefined ? .35 : o.wet;
+  osc.connect(f); f.connect(g); g.connect(uiBus); g.connect(send); send.connect(verb);
+  osc.start(t); osc.stop(t + dur + .1);
+}
+const SND = {
+  nav: () => tone(740, .11, .032, { glide: 720, attack: .006, lp: 2200, wet: .25 }),
+  edge: () => tone(196, .18, .03, { glide: 174, attack: .01, lp: 700, wet: .15 }),
+  select: () => { tone(440, .42, .05, { attack: .01, wet: .4 }); tone(659, .5, .022, { attack: .014, delay: .015, wet: .5 }); },
+  back: () => { tone(392, .3, .035, { glide: 330, attack: .01, wet: .3 }); },
+  notify: () => { tone(880, 1.1, .03, { attack: .02, lp: 3000, wet: .7 }); tone(1318, 1.3, .012, { attack: .03, delay: .04, lp: 3600, wet: .8 }); },
+  error: () => { tone(233, .22, .04, { attack: .01, lp: 900 }); tone(220, .3, .04, { attack: .01, lp: 900, delay: .18 }); },
+  start: () => {
+    tone(55, 3.4, .12, { glide: 110, attack: 1.2, lp: 500, wet: .6 });
+    tone(82.5, 3.2, .05, { type: 'triangle', glide: 110, attack: 1.4, lp: 600, wet: .6, delay: .3 });
+    tone(880, 2.2, .022, { attack: .04, lp: 3200, wet: .9, delay: 1.7 });
+    tone(1320, 2.4, .009, { attack: .06, lp: 3600, wet: .9, delay: 1.75 });
+  },
+  stop: () => { tone(330, 2, .025, { glide: 165, attack: .2, wet: .7 }); tone(110, 2.6, .07, { glide: 55, attack: .3, lp: 400, wet: .6 }); }
+};
+const play = k => { try { SND[k](); } catch (e) {} };
+
+/* ---------- Helpers ---------- */
+const wait = ms => new Promise(r => setTimeout(r, ms * (S.rm ? .35 : 1)));
+function stageBox(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== stage) {
+    x += n.offsetLeft; y += n.offsetTop;
+    if (n.dataset && n.dataset.sx) x += +n.dataset.sx;
+    if (n.dataset && n.dataset.sy) y += +n.dataset.sy;
+    n = n.offsetParent;
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function setLine(x, y, w, opts = {}) {
+  line.classList.toggle('slow', !!opts.slow);
+  line.style.transform = `translate(${x}px,${y}px) scaleX(${Math.max(0, w) / 1920})`;
+  line.classList.toggle('off', !!opts.hidden);
+}
+function bump(dir) {
+  play('edge');
+  line.style.translate = `${dir * 6}px 0`;
+  setTimeout(() => { line.style.translate = ''; }, 160);
+}
+let toastT = 0;
+function toast(msg, sound) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  const p = $('#pulse'); p.classList.remove('go'); void p.offsetWidth; p.classList.add('go');
+  if (sound !== false) play('notify');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2800);
+}
+const glyph = k => `<span class="g">${k}</span>`;
+let hintIdle = 0;
+function hints(list) {
+  const h = $('#hints');
+  h.innerHTML = list.map(([k, l]) => `<div>${glyph(k)}${l}</div>`).join('');
+  h.classList.remove('hide'); clearTimeout(hintIdle);
+  hintIdle = setTimeout(() => h.classList.add('hide'), 5000);
+}
+function showHints() { $('#hints').classList.remove('hide'); clearTimeout(hintIdle); hintIdle = setTimeout(() => $('#hints').classList.add('hide'), 5000); }
+let bgFlip = false, bgCur = '', bgTok = 0;
+function setBg(css, veil, keepFor) {
+  if (!keepFor) S.bgFor = null;
+  $('#veil').className = veil === undefined ? 'none' : veil;
+  if (css === bgCur) return; bgCur = css;
+  const a = bgFlip ? $('#bgA') : $('#bgB'), b = bgFlip ? $('#bgB') : $('#bgA');
+  a.style.backgroundImage = css || 'none'; a.style.backgroundColor = css ? '' : 'transparent';
+  a.classList.add('on'); b.classList.remove('on'); bgFlip = !bgFlip;
+  /* after the crossfade, the hidden layer lets go of its image so only one full-screen picture stays decoded */
+  const tok = ++bgTok; setTimeout(() => { if (tok === bgTok) b.style.backgroundImage = 'none'; }, S.rm ? 400 : 1000);
+}
+function bgGame(g, sharp, veil) {
+  S.bgFor = { i: g.i, sharp, veil };
+  const u = heroUrl(g);
+  if (!u) return setBg(neutralBg, veil, true);
+  if (sharp) return setBg(`url("${u}")`, veil, true);
+  const b = blurOf(g, () => { if (S.bgFor && S.bgFor.i === g.i && !S.bgFor.sharp) setBg(`url(${BLUR.get(g.appid)})`, S.bgFor.veil, true); });
+  if (b) return setBg(`url(${b})`, veil, true);
+  $('#veil').className = veil;
+}
+const neutralBg = 'linear-gradient(to bottom, #1c1d1f 0%, #141517 60%, #0a0a0b 100%)';
+function chrome(on, tabsOn) {
+  $('#hdr').classList.toggle('hide', !on);
+  $('#tabs').classList.toggle('hide', !tabsOn);
+  [...$('#tabs').children].forEach((s, k) => s.classList.toggle('cur', k === S.section));
+}
+function clock() { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }); }
+/* one wake-up per minute, aligned to the minute change */
+(function tickClock() { clock(); setTimeout(tickClock, 60050 - Date.now() % 60000); })();
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  telemetrySync();
+}
+
+/* ---------- Focus grids ---------- */
+/* A screen's nav: rows of elements, the focused {r,c}, per-row memory, and how its line is placed. */
+let NAV = null;
+function mkNav(rows, opt = {}) { return { rows, r: opt.r || 0, c: opt.c || 0, mem: rows.map(() => 0), place: opt.place, scroll: opt.scroll, onFocus: opt.onFocus, onA: opt.onA, wrapV: false }; }
+function focusEl() { return NAV && NAV.rows[NAV.r] && NAV.rows[NAV.r][NAV.c]; }
+let spreadEls = [];
+function applyFocus(opts = {}) {
+  if (!NAV) return;
+  if (NAV.ensure) NAV.ensure(NAV.r);
+  const el = focusEl(); if (!el) return;
+  if (NAV.scroll) NAV.scroll(el);
+  /* reads first (one layout), writes after: no forced layouts in between */
+  const b = stageBox(el);
+  const p = NAV.place ? NAV.place(el, b, NAV.r) : { x: b.x, y: b.y + b.h + 16, w: b.w };
+  const isCard = el.classList.contains('card'), grow = isCard ? el.offsetWidth * (S.rm ? 0 : 0.06) : 0;
+  document.querySelectorAll('.f').forEach(e => e.classList.remove('f'));
+  setLine(p.x, p.y, p.w, { slow: opts.slow });
+  el.classList.add('f');
+  spread(el, isCard, grow);
+  NAV.mem[NAV.r] = NAV.c;
+  if (NAV.onFocus) NAV.onFocus(el, NAV.r, NAV.c);
+}
+/* Keep the gap constant: cards after the focused one slide right by exactly what it grew. */
+function spread(el, isCard, grow) {
+  spreadEls.forEach(c => { c.style.translate = ''; }); spreadEls = [];
+  if (!isCard) return;
+  const row = NAV.rows[NAV.r], k = row.indexOf(el);
+  spreadEls = row.slice(k + 1); spreadEls.forEach(c => { c.style.translate = grow + 'px 0'; });
+}
+function move(dir) {
+  if (!NAV) return;
+  const rows = NAV.rows;
+  if (dir === 'left' || dir === 'right') {
+    const d = dir === 'left' ? -1 : 1, nc = NAV.c + d;
+    if (nc < 0 || nc >= rows[NAV.r].length) return bump(d);
+    NAV.c = nc; play('nav'); applyFocus(); return;
+  }
+  const d = dir === 'up' ? -1 : 1; let nr = NAV.r + d;
+  while (nr >= 0 && nr < rows.length && !rows[nr].length) nr += d;
+  if (nr < 0 || nr >= rows.length) { play('edge'); return; }
+  const cur = stageBox(focusEl()), cx = cur.x + cur.w / 2;
+  let best = 0, bd = 1e9;
+  rows[nr].forEach((el, k) => { const b = stageBox(el), dd = Math.abs(b.x + b.w / 2 - cx); if (dd < bd) { bd = dd; best = k; } });
+  NAV.r = nr; NAV.c = best; play('nav'); applyFocus();
+}
+
+/* ---------- HOME ---------- */
+let metaT = 0;
+const runTag = i => S.running === i ? '<span class="run">EN CURSO</span>' : '';
+function homeHTML() {
+  let cards = '';
+  if (S.section === 0) {
+    if (G.length) {
+      const g0 = G[recent[0]], hu = heroUrl(g0);
+      cards += `<div class="card hero" data-f data-g="${g0.i}" style="background-image:${hu ? `url(&quot;${hu}&quot;)` : 'none'};background-color:var(--shale)">${hu ? '' : nameTag(g0)}${runTag(g0.i)}</div>`;
+      recent.slice(1).forEach(i => { const g = G[i]; cards += `<div class="card cap" data-f data-g="${i}" style="background-image:${capUrl(g).replace(/"/g, '&quot;')}">${g.art.capsule ? '' : nameTag(g)}${runTag(i)}</div>`; });
+    } else {
+      cards += `<div class="card wide" data-f data-act="steam" data-k="store" data-name="STEAM STORE"><b>${S.libReady ? 'SIN JUEGOS' : 'BIBLIOTECA'}</b><span>${S.libReady ? 'Instala juegos desde la Tienda de Steam' : 'Leyendo la biblioteca de Steam…'}</span></div>`;
+    }
+    cards += `<div class="card tile" data-f data-act="library">BIBLIOTECA</div>`;
+  } else if (S.section === 2) {
+    [['STEAM STORE', 'Tienda de Steam', 'store'], ['DESCARGAS', 'Descargas y actualizaciones de juegos', 'downloads']]
+      .forEach(([t, s, k]) => { cards += `<div class="card wide" data-f data-act="steam" data-k="${k}" data-name="${t}"><b>${t}</b><span>${s}</span></div>`; });
+  } else {
+    cards += `<div class="card wide" data-f data-act="steam" data-k="screenshots" data-name="CAPTURAS"><b>CAPTURAS</b><span>Capturas guardadas por Steam</span></div>`;
+  }
+  const ico = {
+    lib: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="6" height="18"/><rect x="11" y="4" width="6" height="18"/><path d="M19 5l4 1-3 16-4-1"/></svg>',
+    exp: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><circle cx="13" cy="13" r="9"/><path d="M16.5 9.5l-2 5-5 2 2-5z"/></svg>',
+    set: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><path d="M4 7h18M4 13h18M4 19h18"/><rect x="8" y="5" width="4" height="4" fill="#141517"/><rect x="15" y="11" width="4" height="4" fill="#141517"/><rect x="6" y="17" width="4" height="4" fill="#141517"/></svg>',
+    pow: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><path d="M13 3v9"/><path d="M7.5 7a8 8 0 1 0 11 0"/></svg>'
+  };
+  return `<div class="clip"><div class="track" data-sx="0">${cards}</div></div>
+    <div class="horizon"></div>
+    <div class="ctx"><div class="kicker" id="hk"></div><div class="ctx-title" id="ht"></div><div class="meta" id="hm"></div></div>
+    <div class="sys">
+      <span class="txt-f" data-f data-act="library">${ico.lib}Biblioteca</span>
+      <span class="txt-f" data-f data-act="explore">${ico.exp}Explorar</span>
+      <span class="txt-f" data-f data-act="settings">${ico.set}Ajustes</span>
+      <span class="txt-f" data-f data-act="power">${ico.pow}Apagar</span>
+    </div>`;
+}
+function homeContext(el) {
+  const hk = $('#hk'), ht = $('#ht'), hm = $('#hm');
+  hm.classList.remove('on'); clearTimeout(metaT);
+  const gi = el.dataset.g;
+  if (gi !== undefined) {
+    const g = G[+gi], first = el.classList.contains('hero');
+    hk.innerHTML = first ? `CONTINUAR${S.running === g.i ? ' · <span class="now">EN CURSO</span>' : ''}` : 'RECIENTE';
+    ht.textContent = g.n;
+    hm.textContent = `${S.running === g.i ? 'Abierto ahora' : g.last} · ${playText(g)}${g.o !== 'Steam' ? ' · ' + g.o : ''}`;
+    metaT = setTimeout(() => hm.classList.add('on'), S.rm ? 150 : 600);
+    bgGame(g, false, '');
+    [NAV && NAV.rows[0][NAV.c + 1], NAV && NAV.rows[0][NAV.c - 1]].forEach(nx => { if (nx && nx.dataset.g !== undefined) blurOf(G[+nx.dataset.g]); });
+  } else {
+    const a = el.dataset.act;
+    const label = { library: ['BIBLIOTECA', S.libReady ? `${G.length} juego${G.length === 1 ? '' : 's'}` : 'Leyendo…'], explore: ['EXPLORAR', 'Tienda y descargas de Steam'], settings: ['AJUSTES', 'Pantalla, audio, rendimiento y más'], power: ['APAGAR', 'Apagar o reiniciar'], steam: [el.dataset.name, 'Se abre en Steam'] }[a] || ['', ''];
+    hk.textContent = S.section === 2 ? 'EXPLORAR' : S.section === 3 ? 'MEDIA' : 'SISTEMA';
+    ht.textContent = label[0]; hm.textContent = label[1];
+    metaT = setTimeout(() => hm.classList.add('on'), S.rm ? 150 : 600);
+    if (el.closest('.sys') == null || S.section !== 0) setBg(neutralBg, '');
+  }
+}
+function enterHome(opts = {}) {
+  S.screen = 'home'; S.from = 'home';
+  if (S.section === 1) S.section = 0;
+  const h = $('#home'); h.innerHTML = homeHTML();
+  showScreen('home'); chrome(true, true);
+  const track = h.querySelector('.track');
+  const rows = [[...track.children], [...h.querySelectorAll('.sys [data-f]')]];
+  const prev = NAV && NAV.id === 'home' ? NAV : null;
+  NAV = mkNav(rows, {
+    r: opts.r ?? (prev ? prev.r : 0), c: opts.c ?? (prev ? prev.c : 0),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: 668, w: b.w * (S.rm ? 1 : 1.06) } : { x: b.x, y: b.y + b.h + 14, w: b.w },
+    scroll: el => {
+      if (!el.closest('.track')) return;
+      let sx = +track.dataset.sx; const l = el.offsetLeft, r = l + el.offsetWidth * 1.06, view = 1728;
+      if (l + sx < 0) sx = -l; else if (r + sx > view) sx = view - r;
+      track.dataset.sx = sx; track.style.transform = `translateX(${sx}px)`;
+    },
+    onFocus: homeContext
+  });
+  NAV.id = 'home';
+  if (NAV.c >= rows[NAV.r].length) NAV.c = rows[NAV.r].length - 1;
+  requestAnimationFrame(() => applyFocus({ slow: opts.slow }));
+  hints([['A', S.section === 0 ? 'Abrir' : 'Elegir'], ['LB RB', 'Sección']]);
+}
+function homeA(el) {
+  const a = el.dataset.act;
+  if (el.dataset.g !== undefined) {
+    const g = G[+el.dataset.g];
+    if (S.running === g.i && el.classList.contains('hero')) { play('select'); return resumeGame(); }
+    play('select'); return enterDetail(g.i);
+  }
+  if (a === 'library') { play('select'); S.section = 1; return enterLibrary(); }
+  if (a === 'explore') { play('select'); S.section = 2; return enterHome({ r: 0, c: 0 }); }
+  if (a === 'settings') { play('select'); return enterSettings(); }
+  if (a === 'power') { play('select'); return openPower(); }
+  if (a === 'steam') { play('select'); return sys('openSteam', el.dataset.k).then(r => { if (r) toast(`${el.dataset.name}: se abre en Steam`, false); }); }
+}
+function section(d) {
+  const n = S.section + d;
+  if (n < 0 || n > 3) return bump(d);
+  play('nav'); S.section = n;
+  if (n === 1) enterLibrary(); else { if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 }); }
+}
+
+/* ---------- LIBRARY ---------- */
+const FILTERS = ['Todos', 'Steam', 'Accesos directos', 'Favoritos'];
+function libList() {
+  const f = S.filter;
+  return G.filter(g => f === 0 || (f === 1 && g.src === 'steam') || (f === 2 && g.src === 'shortcut') || (f === 3 && g.fav));
+}
+function emptyText() {
+  if (!S.libFound) return 'No se encontró la biblioteca de Steam. Inicia sesión en Steam y vuelve a STONE.';
+  if (S.filter === 3) return 'Aún no hay favoritos. Márcalos desde la ficha de cada juego.';
+  if (S.filter === 2) return 'Sin accesos directos. Los lanzadores y emuladores que añaden sus juegos a Steam aparecen aquí.';
+  return G.length ? 'No hay juegos con este filtro.' : 'Aún no hay juegos instalados. Instálalos desde la Tienda de Steam.';
+}
+function enterLibrary(opts = {}) {
+  S.screen = 'library'; S.from = 'library'; S.section = 1;
+  const list = libList(), L = $('#library');
+  L.innerHTML = `<div class="filters">${FILTERS.map((f, k) => `<span class="txt-f${k === S.filter ? ' cur' : ''}" data-f data-filter="${k}">${f}</span>`).join('')}</div>
+    <div class="count">${list.length} juegos · recientes primero</div>
+    <div class="gclip"><div class="grid" data-sy="0" style="height:${Math.ceil(list.length / 6) * LIB_ROW_H}px"></div></div>
+    ${list.length ? '' : `<div class="empty">${emptyText()}</div>`}
+    <div class="sel" id="lsel"></div>`;
+  showScreen('library'); chrome(true, true); setBg(neutralBg, '');
+  /* Only the focused row and its neighbours exist in the DOM (at most 4 rows = 24 cards), whatever the library size. */
+  const grid = L.querySelector('.grid'), R = Math.ceil(list.length / 6), rendered = new Map();
+  const rows = [[...L.querySelectorAll('.filters [data-f]')]];
+  for (let k = 0; k < R; k++) rows.push([]);
+  const ensure = navR => {
+    const center = Math.max(0, navR - 1), lo = Math.max(0, center - 1), hi = Math.min(R - 1, center + 2);
+    for (const [k, els] of rendered) if (k < lo || k > hi) { els.forEach(e => e.remove()); rendered.delete(k); rows[k + 1] = []; }
+    let html = ''; const added = [];
+    for (let k = lo; k <= hi; k++) if (!rendered.has(k)) { html += list.slice(k * 6, k * 6 + 6).map((g, c) => libCard(g, k, c)).join(''); added.push(k); }
+    if (!html) return;
+    grid.insertAdjacentHTML('beforeend', html);
+    for (const k of added) { const els = [...grid.querySelectorAll(`.card[data-row="${k}"]`)]; rendered.set(k, els); rows[k + 1] = els; }
+  };
+  NAV = mkNav(rows, {
+    r: opts.r ?? (list.length ? 1 : 0), c: opts.c ?? (list.length ? 0 : S.filter),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: b.y + b.h + 6, w: b.w } : { x: b.x, y: b.y + b.h + 16, w: b.w * (S.rm ? 1 : 1.06) },
+    scroll: el => {
+      if (!el.closest('.grid')) return;
+      let sy = +grid.dataset.sy; const t = el.offsetTop, bot = t + el.offsetHeight + 24, view = 676;
+      if (t - 30 + sy < 0) sy = -(t - 4); else if (bot + sy > view) sy = view - bot;
+      grid.dataset.sy = sy; grid.style.transform = `translateY(${sy}px)`;
+    },
+    onFocus: (el) => {
+      const s = $('#lsel');
+      if (el.dataset.g !== undefined) { const g = G[+el.dataset.g]; s.textContent = `${g.n} · ${g.upd ? 'Actualizando en Steam' : g.min ? g.last + ' · ' + playText(g) : 'Sin jugar'} · ${g.o}`; }
+      else s.textContent = 'Filtrar la biblioteca';
+    }
+  });
+  NAV.ensure = ensure;
+  NAV.id = 'library';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', 'Abrir'], ['LB RB', 'Sección'], ['B', 'Volver']]);
+}
+const LIB_ROW_H = 437, LIB_COL_W = (1728 - 5 * 40) / 6;
+function libCard(g, row, col) {
+  const name = g.art.capsule ? '' : nameTag(g);
+  return `<div class="card${g.inst ? '' : ' dim'}" data-f data-g="${g.i}" data-row="${row}" style="left:${(col * (LIB_COL_W + 40)).toFixed(2)}px;top:${row * LIB_ROW_H}px;background-image:${capUrl(g).replace(/"/g, '&quot;')}">${name}${runTag(g.i)}</div>`;
+}
+function libraryA(el) {
+  if (el.dataset.filter !== undefined) { play('select'); S.filter = +el.dataset.filter; return enterLibrary({ r: 0, c: S.filter }); }
+  play('select'); enterDetail(+el.dataset.g);
+}
+
+/* ---------- DETAIL ---------- */
+let curG = 0;
+function enterDetail(i, opts = {}) {
+  curG = i; const g = G[i], running = S.running === i;
+  S.screen = 'detail';
+  const prim = running ? 'REANUDAR' : 'JUGAR';
+  const sec = [[g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf'], ['Propiedades', 'opt']];
+  $('#detail').innerHTML = `
+    <div class="col"><div class="origin">${esc(g.o)}</div><h1>${esc(g.n.toUpperCase())}</h1>
+      <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div></div>
+    <div class="primary txt-f" data-f data-act="primary" id="dprim">${prim}</div>
+    <div class="second">${sec.map(([s, a]) => `<span class="txt-f" data-f data-act="${a}">${s}</span>`).join('')}</div>
+    <div class="info"><div><span>Tamaño</span><b>${g.sz}</b></div><div><span>Origen</span><b>${esc(g.o)}</b></div><div><span>Estado</span><b>${g.upd ? 'Actualizando en Steam' : g.inst ? 'Instalado' : 'Pendiente en Steam'}</b></div><div><span>Al iniciarse</span><b>${g.perf ? profOf(g.perf).n : 'Perfil global'}${S.safeMode && g.perf ? ' (en pausa: Safe Mode)' : ''}</b></div></div>`;
+  showScreen('detail'); chrome(true, false);
+  bgGame(g, true, 'side');
+  const d = $('#detail');
+  NAV = mkNav([[d.querySelector('#dprim')], [...d.querySelectorAll('.second [data-f]')]], {
+    r: opts.r || 0, c: opts.c || 0,
+    place: (el, b, r) => ({ x: b.x, y: b.y + b.h + (r === 0 ? 16 : 12), w: b.w })
+  });
+  NAV.id = 'detail';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', prim.charAt(0) + prim.slice(1).toLowerCase()], ['B', 'Volver']]);
+}
+function detailA(el) {
+  const g = G[curG], a = el.dataset.act;
+  if (a === 'primary') { play('select'); return S.running === g.i ? resumeGame() : launch(g); }
+  if (a === 'opt') { play('select'); return toast('Propiedades, logros y compatibilidad: en la ficha del juego en Steam', false); }
+  if (a === 'fav') {
+    play('select'); g.fav = !g.fav; if (g.fav) favs.add(g.appid); else favs.delete(g.appid); savePrefs();
+    enterDetail(curG, { r: 1, c: 0 }); return toast(g.fav ? 'Añadido a favoritos' : 'Quitado de favoritos', false);
+  }
+  if (a === 'perf') {
+    play('nav'); const list = [null, ...usable()], k = list.indexOf(g.perf || null), next = list[(k + 1) % list.length];
+    return api('setGameProfile', g.appid, next || 'global').then(st => {
+      if (S.screen === 'detail') enterDetail(curG, { r: 1, c: 1 });
+      if (st) toast(g.perf ? `${g.n} usará ${profOf(g.perf).n} al iniciarse` : `${g.n} usará el perfil global`, false);
+    });
+  }
+}
+
+/* ---------- GAME ----------
+   Steam starts the game; Gamescope puts it in front of STONE Home. stoned sees the session through
+   Steam's reaper process and reports it in its state, which is what this screen follows: when the
+   game ends, Home comes back. */
+let tagT = 0, launchT = 0;
+async function launch(g) {
+  if (S.launching !== null) return;
+  const ok = await sys('launch', g.appid);
+  if (!ok) return;
+  S.launching = g.i; S.running = g.i; S.screen = 'transition';
+  recent = [g.i, ...recent.filter(i => i !== g.i)].slice(0, 6);
+  const b = stageBox(focusEl());
+  chrome(false, false); $('#hints').classList.add('hide');
+  $('#black').classList.remove('fast'); $('#black').classList.add('on');
+  setLine(b.x + b.w / 2, b.y + b.h + 16, 0, { slow: true });
+  await wait(1200);
+  line.classList.add('off');
+  showGame(g, true);
+  /* If stoned does not see the game within 90 s (Steam updating it first, or stoned not running),
+     STONE stops waiting; B on this screen always goes back to Home. */
+  clearTimeout(launchT); launchT = setTimeout(() => { S.launching = null; }, 90000);
+}
+/* Called from adopt(): stoned's view of the running game is the truth. */
+function gameSync(st, before) {
+  const appid = st.game ? st.game.appid : null;
+  const i = appid ? G.findIndex(g => g.appid === appid) : -1;
+  if (appid) {
+    if (i >= 0) { S.running = i; if (S.launching === i) { S.launching = null; clearTimeout(launchT); } }
+    return;
+  }
+  if (S.running !== null && S.launching === null) gameEnded(before);
+}
+function gameEnded(before) {
+  const g = G[S.running]; S.running = null; setMetrics(false);
+  const k = before ? slots.findIndex((sl, i) => sl && sl.state === 'validated' && before[i] !== 'validated') : -1;
+  const back = ['game', 'quick'].includes(S.screen) || (S.screen === 'power' && powerFrom === 'game');
+  if (back) {
+    $('#quick').classList.remove('on'); $('#power').classList.remove('on');
+    returnHome();
+  }
+  if (k >= 0) setTimeout(() => toast(`${g ? g.n + ' terminó. ' : ''}CUSTOM 0${k + 1} validado: la partida terminó sin errores de GPU`), back ? 1200 : 0);
+  loadLibrary().then(() => { if (S.screen === 'home') enterHome(); });     /* play time and order changed */
+}
+function returnHome() {
+  closeQuick(true);
+  $('#black').classList.add('fast', 'on');
+  setTimeout(() => {
+    S.section = 0; if (NAV) NAV.id = ''; NAV = null;
+    if (AC && AC.state !== 'running' && S.sound) AC.resume();
+    enterHome({ r: 0, c: 0 }); $('#black').classList.remove('on');
+  }, S.rm ? 120 : 450);
+}
+/* GAME MODE RESOURCE STATE: menu screens are unmounted, full-screen backgrounds released,
+   the blur cache emptied, input polling slowed and metrics only if the overlay is on. */
+function gameMode() {
+  ['home', 'library', 'detail', 'settings', 'perf', 'tuning'].forEach(id => { $('#' + id).innerHTML = ''; });
+  spreadEls = [];
+  setBg('', 'none'); $('#bgA').style.backgroundImage = 'none'; $('#bgB').style.backgroundImage = 'none'; bgCur = '';
+  trimArt();
+  setTimeout(() => { if (S.screen === 'game') audioSleep(); }, 2500);
+}
+function showGame(g, fresh) {
+  S.screen = 'game'; NAV = null;
+  const gm = $('#game'), hu = heroUrl(g);
+  gm.querySelector('.art').style.backgroundImage = hu ? `url("${hu}")` : neutralBg;
+  const tag = gm.querySelector('.tag'); tag.textContent = `${g.n} · en curso. A: volver al juego · ☰: menú de STONE · B: inicio`;
+  tag.classList.remove('gone'); clearTimeout(tagT); tagT = setTimeout(() => tag.classList.add('gone'), 6000);
+  showScreen('game'); setBg('', 'none'); chrome(false, false);
+  $('#hints').classList.add('hide');
+  line.classList.add('off');
+  setTimeout(() => $('#black').classList.remove('on'), fresh ? 200 : 0);
+  setMetrics(S.tech);
+  gameMode();
+}
+/* Steam brings a running game back to the front when it is asked to start it again. [VERIFICAR EN PLACA] */
+function resumeGame() {
+  closeQuick(true);
+  const g = G[S.running]; if (!g) return returnHome();
+  sys('launch', g.appid);
+  $('#black').classList.add('fast', 'on');
+  setTimeout(() => showGame(g, true), S.rm ? 120 : 450);
+}
+function metricsTick() {
+  if (!S.tech || $('#metrics').hidden) return;
+  const id = effective(), m = S.metrics;
+  const lim = S.actual && !S.actual.error ? `Límite ${S.actual.max} MHz · ${S.actual.temp} °C (regulador)` : noLimitText();
+  $('#metrics').textContent = `STONE ${profOf(id).n}\n${lim}\n` + (m ? `GPU ${nv(m.gpu_temp_c, ' °C')}   ${nv(m.gpu_clock_mhz, ' MHz')}   uso ${nv(m.gpu_busy_pct, ' %')}\nCPU ${nv(m.cpu_temp_c, ' °C')}   uso ${nv(m.cpu_pct, ' %')}   GPU ${nv(m.gpu_power_w, ' W')}\nVentilador ${nv(m.fan_rpm, ' RPM')} · curva de la BIOS\n` : 'Leyendo…\n')
+    + 'FPS y frametime: botón ··· → Rendimiento (Steam)';
+}
+function setMetrics(on) {
+  $('#metrics').hidden = !on;
+  if (on) metricsTick();
+  telemetrySync();        /* the overlay subscribes at 0.5 s; closed, nothing is read */
+}
+
+/* ---------- QUICK MENU ---------- */
+function openQuick() {
+  if (S.screen !== 'game') return;
+  S.screen = 'quick'; play('select');
+  const q = $('#quick .panel'), g = G[S.running];
+  q.innerHTML = `<div class="top"><span class="brand">STONE</span><span>${$('#clock').textContent}</span></div>
+    <div class="main txt-f" data-f data-act="resume">REANUDAR</div>
+    <div class="it txt-f" data-f data-act="home">Volver a STONE</div>
+    <div class="seg"><span class="lbl txt-f" data-f data-act="profile">Rendimiento · ${profOf(effective()).n}${String(effective()).startsWith('c') && profOf(effective()).state !== 'validated' ? ' (provisional)' : ''}${S.safeMode ? ' · SAFE MODE' : ''}</span>
+      <span id="qread" style="font-size:18px;color:var(--text-2);font-variant-numeric:tabular-nums">${S.actual && !S.actual.error ? `GPU hasta ${S.actual.max} MHz · ${S.actual.temp} °C` : noLimitText()} · ${quickReadings(S.metrics)}</span>
+      <div class="opts">${['silent', 'balanced', 'performance', 'custom'].map(p => { const cur = p === 'custom' ? String(effective()).startsWith('c') : effective() === p; const label = p === 'custom' ? (String(effective()).startsWith('c') ? profOf(effective()).n : 'CUSTOM') : FACT[p].n; return `<span class="${cur ? 'cur' : ''}" style="font-size:15px;letter-spacing:.06em">${label}</span>`; }).join('')}</div></div>
+    <div class="rule"></div>
+    <div class="steam"><span class="cap">MANDO, AUDIO, BLUETOOTH Y RED: BOTÓN ··· DE STEAM</span>
+      <span class="it txt-f" data-f data-act="tech">Modo técnico <span class="tog">${S.tech ? 'activado' : 'desactivado'}</span></span>
+      <span class="it txt-f" data-f data-act="power">Apagar</span></div>
+    ${g ? `<div style="font-size:18px;color:var(--text-2)">${esc(g.n)} sigue abierto</div>` : ''}`;
+  $('#quick').classList.add('on');
+  PerfAPI.getMetrics().then(m => { S.metrics = m; const q = $('#qread'); if (q && S.actual && !S.actual.error) q.textContent = `GPU hasta ${S.actual.max} MHz · ${S.actual.temp} °C · ${quickReadings(m)}`; }).catch(() => {});
+  const items = [...q.querySelectorAll('[data-f]')];
+  NAV = mkNav(items.map(e => [e]), { r: 0, place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'quick';
+  setTimeout(() => { line.classList.remove('off'); applyFocus(); }, S.rm ? 60 : 260);
+  hints([['A', 'Elegir'], ['B', 'Cerrar']]);
+}
+function quickReadings(m) { return m ? `GPU ${nv(m.gpu_temp_c, ' °C')} · uso ${nv(m.gpu_busy_pct, ' %')}` : 'leyendo…'; }
+function closeQuick(silent) {
+  $('#quick').classList.remove('on'); line.classList.add('off');
+  setTimeout(() => { if (!$('#quick').classList.contains('on')) $('#quick .panel').innerHTML = ''; }, 700);
+  if (!silent) { play('back'); S.screen = 'game'; NAV = null; $('#hints').classList.add('hide'); }
+}
+function quickA(el) {
+  const a = el.dataset.act;
+  if (a === 'resume') { play('select'); return resumeGame(); }
+  if (a === 'home') { play('select'); return returnHome(); }
+  if (a === 'profile') { play('select'); return api('setSessionProfile', nextSession(1)).then(() => { if (S.screen === 'quick') refreshQuick(); }); }
+  if (a === 'tech') { play('select'); S.tech = !S.tech; savePrefs(); setMetrics(S.tech); return refreshQuick(); }
+  if (a === 'power') { play('select'); closeQuick(true); S.screen = 'game'; return openPower(); }
+}
+/* Quick Menu: this game session only; stoned returns to the global profile when the game ends */
+function nextSession(d, noWrap) {
+  const list = usable(), k = list.indexOf(effective());
+  const n = k + d;
+  if (noWrap && (n < 0 || n >= list.length)) return null;
+  return list[(n + list.length) % list.length];
+}
+function refreshQuick() { const r = NAV.r; $('#quick').classList.remove('on'); S.screen = 'game'; openQuick(); NAV.r = r; applyFocus(); }
+function quickLR(dir) {
+  const el = focusEl();
+  if (el && el.dataset.act === 'profile') {
+    const n = nextSession(dir === 'left' ? -1 : 1, true);
+    if (!n) return bump(dir === 'left' ? -1 : 1);
+    play('nav'); api('setSessionProfile', n).then(() => { if (S.screen === 'quick') refreshQuick(); metricsTick(); }); return;
+  }
+  bump(dir === 'left' ? -1 : 1);
+}
+
+/* ---------- SETTINGS ---------- */
+const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Rendimiento', 'Energía', 'Actualizaciones', 'Accesibilidad', 'Acerca de'];
+let cat = 1;
+function catRows() {
+  /* Settings Steam already handles stay in Steam; STONE says exactly where. */
+  const steam = (t, d, where) => ({ l: t, s: d, v: 'En Steam', act: 'steam', where });
+  const rel = (S.info && S.info.release) || {}, dep = (S.info && S.info.deployments) || null;
+  switch (CATS[cat]) {
+    case 'Pantalla': return { d: 'Ajusta cómo se ve STONE en tu televisor.', rows: [
+      { l: 'Área segura', s: 'Usa ← → hasta que las cuatro esquinas se vean completas', v: `${S.safe} %`, key: 'safe' },
+      steam('Resolución y frecuencia', 'Las fija Steam para todo el sistema', 'Botón STEAM → Ajustes → Pantalla'),
+      steam('HDR', 'Según el televisor y el juego', 'Botón STEAM → Ajustes → Pantalla'),
+      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
+    case 'Audio': return { d: 'Sonidos del sistema y volumen de la interfaz.', rows: [
+      { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
+      { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },
+      steam('Salida de audio', 'Altavoces, auriculares, HDMI o DisplayPort', 'Botón ··· → Audio, o botón STEAM → Ajustes → Audio')] };
+    case 'Rendimiento': return { d: `Perfil activo: ${profOf(S.prof).n}. Elige entre silencio y rendimiento, o ajusta tu propio perfil.`, rows: [
+      { l: 'Performance Center', s: 'SILENT, BALANCED, PERFORMANCE y CUSTOM', v: 'Abrir', act: 'perf' },
+      { l: 'Modo técnico', s: 'Temperaturas, frecuencia y consumo en el menú de STONE durante el juego', v: S.tech ? 'Activado' : 'Desactivado', key: 'tech' },
+      { l: 'Safe Mode', s: S.safeMode ? `Activo: ${SAFE_REASON[S.safeReason] || 'valores de fábrica'}` : 'Sólo valores de fábrica: sin CUSTOM, sin perfiles por juego ni pruebas', v: S.safeMode ? 'Salir' : 'Activar', act: 'safe' }] };
+    case 'Energía': return { d: 'STONE MACHINE no tiene modo de reposo. Apagarla cuando no se usa ahorra entre 55 y 105 W.', rows: [
+      { l: 'Apagar tras inactividad', s: 'Sólo en STONE Home, nunca con un juego abierto', v: IDLE[S.idle], key: 'idle' }] };
+    case 'Accesibilidad': return { d: 'Haz que STONE sea más fácil de leer y más tranquilo.', rows: [
+      { l: 'Alto contraste', s: 'Línea de 4 px y texto secundario más claro', v: S.hc ? 'Activado' : 'Desactivado', key: 'hc' },
+      { l: 'Reducir movimiento', s: 'Sin escalas ni desplazamientos de fondo', v: S.rm ? 'Activado' : 'Desactivado', key: 'rm' },
+      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
+    case 'Acerca de': return { d: 'STONE MACHINE · STONE OS', rows: [
+      { l: 'Versión', s: rel.STONE_VERSION ? `STONE OS ${rel.STONE_VERSION}${rel.STONE_COMMIT ? ' · ' + rel.STONE_COMMIT.slice(0, 7) : ''}` : 'Leyendo…', v: '' },
+      { l: 'Hardware', s: S.caps ? (S.caps.board ? 'AMD BC-250 detectada · Zen 2 6 núcleos · GPU 24 CU · 16 GB GDDR6' : 'No se detectó una AMD BC-250: el ajuste de rendimiento está desactivado') : 'Leyendo…', v: '' },
+      { l: 'Sistema base', s: rel.STONE_BASE_IMAGE ? `Bazzite · ${rel.STONE_BASE_IMAGE}${rel.STONE_BASE_DIGEST ? ' @ ' + rel.STONE_BASE_DIGEST.slice(7, 19) : ''}` : 'Bazzite (imagen derivada de bazzite-deck)', v: '' },
+      { l: 'Componentes', s: [rel.STONE_KERNEL && `kernel ${rel.STONE_KERNEL}`, rel.STONE_MESA && `Mesa ${rel.STONE_MESA}`, rel.STONE_GOVERNOR_VERSION && `regulador ${rel.STONE_GOVERNOR_VERSION}`].filter(Boolean).join(' · ') || '—', v: '' },
+      { l: 'Modo escritorio', s: 'Para usuarios avanzados', v: 'En Steam', act: 'info', where: 'Botón STEAM → Energía → Cambiar a escritorio' }] };
+    case 'Actualizaciones': return { d: 'Las actualizaciones llegan como una imagen completa y se aplican al reiniciar. Si una falla, la anterior sigue disponible.', rows: [
+      { l: 'Estado', s: !dep ? 'No se pudo leer el estado del sistema' : dep.staged ? `Actualización lista: ${dep.staged.version || 'nueva versión'}. Se aplica al reiniciar` : `Instalada: ${(dep.booted && dep.booted.version) || rel.STONE_VERSION || '—'}`, v: '' },
+      steam('Buscar actualizaciones', 'Sistema y Steam se actualizan desde Steam', 'Botón STEAM → Ajustes → Sistema → Buscar actualizaciones'),
+      { l: 'Volver a la versión anterior', s: dep && dep.rollback ? `Guardada: ${dep.rollback.version || 'versión anterior'}` : 'No hay una versión anterior guardada todavía', v: 'Cómo', act: 'info', where: 'Reinicia y, en el menú de arranque, elige la segunda entrada. STONE OS arranca con la versión anterior' }] };
+    default: return { d: `${CATS[cat]}: lo gestiona Steam.`, rows: [steam(`Abrir ${CATS[cat].toLowerCase()}`, 'Panel nativo de Steam', `Botón STEAM → Ajustes → ${CATS[cat]}`)] };
+  }
+}
+function enterSettings(opts = {}) {
+  S.screen = 'settings';
+  const c = catRows();
+  $('#settings').innerHTML = `<div class="ttl">AJUSTES</div>
+    <div class="cats">${CATS.map((n, k) => `<span class="txt-f${k === cat ? ' cur' : ''}" data-f data-cat="${k}">${n}</span>`).join('')}</div>
+    <div class="vr"></div>
+    <div class="pane"><div class="desc">${c.d}</div><div class="rows">${c.rows.map((r, k) => `<div class="srow" data-f data-row="${k}"><div class="l"><b>${r.l}</b><small>${r.s}</small></div><div class="v">${r.key && !['sound', 'hc', 'rm', 'tech'].includes(r.key) ? `<span class="ar">‹</span>${r.v}<span class="ar">›</span>` : r.v}</div></div>`).join('')}</div></div>`;
+  showScreen('settings'); chrome(true, false); setBg('', 'none');
+  const s = $('#settings');
+  const left = [...s.querySelectorAll('.cats [data-f]')], right = [...s.querySelectorAll('.srow')];
+  /* two columns: the nav grid is column-major (rows = list items, col 0 = categories, col 1 = options) */
+  NAV = mkNav([left], { r: 0, c: cat, place: (el, b) => el.classList.contains('srow') ? { x: b.x, y: b.y + b.h - 1, w: b.w } : { x: b.x, y: b.y + b.h + 6, w: b.w } });
+  NAV.id = 'settings'; NAV.pane = opts.pane ? 1 : 0; NAV.right = right; NAV.ri = opts.ri || 0;
+  if (NAV.pane && right.length) NAV.rows = [right], NAV.c = Math.min(NAV.ri, right.length - 1);
+  requestAnimationFrame(() => applyFocus());
+  $('#safe').classList.toggle('on', CATS[cat] === 'Pantalla' && !!NAV.pane && NAV.c === 0);
+  hints([['A', 'Elegir'], ['B', 'Volver']]);
+}
+function settingsMove(dir) {
+  const inPane = NAV.pane === 1;
+  if (!inPane) {
+    if (dir === 'up' || dir === 'down') {
+      const n = cat + (dir === 'up' ? -1 : 1);
+      if (n < 0 || n >= CATS.length) return play('edge');
+      cat = n; play('nav'); return enterSettings();
+    }
+    if (dir === 'right') { play('nav'); return enterSettings({ pane: true, ri: 0 }); }
+    return bump(-1);
+  }
+  const rowsDef = catRows().rows, r = rowsDef[NAV.c];
+  if (dir === 'up' || dir === 'down') {
+    const n = NAV.c + (dir === 'up' ? -1 : 1);
+    if (n < 0 || n >= NAV.rows[0].length) return play('edge');
+    play('nav'); return enterSettings({ pane: true, ri: n });
+  }
+  if (r && r.key) return adjust(r.key, dir === 'left' ? -1 : 1, NAV.c);
+  if (dir === 'left') { play('back'); return enterSettings(); }
+  bump(1);
+}
+function applyPrefs() {
+  stage.classList.toggle('hc', S.hc);
+  stage.classList.toggle('rm', S.rm);
+  const k = S.rm ? .3 : 1, r = document.documentElement.style;
+  [['--d-step', 220], ['--d-settle', 360], ['--d-exit', 450], ['--d-enter', 600], ['--d-light', 900], ['--d-cer', 1200]].forEach(([n, v]) => r.setProperty(n, Math.round(v * k) + 'ms'));
+  r.setProperty('--fscale', S.rm ? 1 : 1.06);
+  r.setProperty('--ts', [1, 1.25, 1.5][S.ts]);
+  stage.style.setProperty('--sx', (1920 * S.safe / 100) + 'px'); stage.style.setProperty('--sy', (1080 * S.safe / 100) + 'px');
+  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);
+}
+function adjust(key, d, ri) {
+  if (key === 'safe') { const n = S.safe + d; if (n < 0 || n > 8) return bump(d); S.safe = n; }
+  else if (key === 'ts') { const n = S.ts + d; if (n < 0 || n > 2) return bump(d); S.ts = n; }
+  else if (key === 'vol') { const n = Math.round(S.vol * 10) + d; if (n < 0 || n > 10) return bump(d); S.vol = n / 10; }
+  else if (key === 'idle') { const n = S.idle + d; if (n < 0 || n > 3) return bump(d); S.idle = n; }
+  else if (key === 'sound') { S.sound = !S.sound; if (S.sound) audio(); }
+  else if (key === 'hc') { S.hc = !S.hc; }
+  else if (key === 'rm') { S.rm = !S.rm; }
+  else if (key === 'tech') { S.tech = !S.tech; }
+  applyPrefs(); savePrefs(); armIdleOff(); play('nav'); enterSettings({ pane: true, ri });
+}
+function settingsA(el) {
+  if (!NAV.pane) { play('select'); return enterSettings({ pane: true, ri: 0 }); }
+  const r = catRows().rows[NAV.c];
+  if (!r) return;
+  if (r.key) return adjust(r.key, 1, NAV.c);
+  if (r.act === 'steam' || r.act === 'info') { play('select'); return toast(r.where, false); }
+  if (r.act === 'perf') { play('select'); return enterPerf(); }
+  if (r.act === 'safe') { play('select'); return S.safeMode ? leaveSafeMode(NAV.c) : askSafeMode(NAV.c); }
+}
+const SAFE_REASON = { failures: 'STONE MACHINE se detuvo dos veces seguidas', manual: 'lo activaste tú', kernel: 'pedido en el arranque (stone.safe=1)' };
+function askSafeMode(ri) {
+  openDlg(`<h2>ACTIVAR SAFE MODE</h2><p>STONE vuelve ahora a valores de fábrica: nada por encima de BALANCED, sin perfiles CUSTOM, sin perfiles por juego y sin pruebas. Tus ranuras y tus perfiles por juego se conservan.</p><p>Sigue activo aunque reinicies, hasta que salgas desde aquí. Si la pantalla no funciona, también se puede activar desde una terminal con <b>sudo stonectl safe-mode on</b>.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="yes">ACTIVAR</span><span class="txt-f" data-f data-b="no">CANCELAR</span></div>`, {
+    onA: el => { closeDlg(); if (el.dataset.b !== 'yes') { play('back'); return enterSettings({ pane: true, ri }); }
+      api('enterSafeMode').then(st => { enterSettings({ pane: true, ri }); if (st) toast('Safe Mode activado: sólo valores de fábrica'); }); },
+    onB: () => { closeDlg(); play('back'); enterSettings({ pane: true, ri }); }
+  });
+}
+function leaveSafeMode(ri) {
+  api('exitSafeMode').then(st => { enterSettings({ pane: true, ri }); if (st) toast(`Safe Mode desactivado. Activo: ${profOf(S.prof).n}`); });
+}
+
+/* ---------- PERFORMANCE CENTER ---------- */
+let D = null;
+function statusLine(id) {
+  const a = S.actual;
+  const real = !a ? 'leyendo el estado…' : a.error === 'Unsupported' ? '<b>Regulador de GPU no detectado</b>: la GPU sigue con su configuración de fábrica'
+    : a.error ? '<b>Servicio de rendimiento no disponible</b>: el estado real no se puede leer'
+    : `GPU hasta ${a.max} MHz · límite ${a.temp} °C (leído del regulador)`;
+  return `${a && a.error ? 'Elegido' : 'Activo'}: <b>${profOf(id).n}</b>${String(id).startsWith('c') ? ' · ' + slotLabel(profOf(id)) : ''}${S.safeMode ? ' · <b>SAFE MODE</b>' : ''}${S.thermal && S.thermal.reduced ? ' · <b>REDUCIDO A SILENT POR TEMPERATURA</b>' : ''} · ${real}`;
+}
+function enterPerf(opts = {}) {
+  S.screen = 'perf';
+  const isC = String(S.prof).startsWith('c');
+  const saved = slots.map((sl, k) => sl ? `CUSTOM 0${k + 1} · ${slotLabel(sl)}` : null).filter(Boolean);
+  const noAdv = S.caps && !S.caps.advanced;
+  const tile = id => { const p = FACT[id]; return `<div class="card ptile" data-f data-p="${id}"><span class="pa">${S.prof === id ? 'ACTIVO' : ''}</span><span class="pn">${p.n}</span><span class="pd">${p.d}</span><span class="ps">GPU hasta ${p.max} MHz · límite ${p.temp} °C<br>Sugerencia: ${p.fps}</span></div>`; };
+  $('#perf').innerHTML = `<div class="pttl">RENDIMIENTO</div><div class="pstatus">${statusLine(S.prof)}</div><div class="pread" id="pread">${readingsText(S.metrics)}</div>
+    <div class="prow">${tile('silent')}${tile('balanced')}${tile('performance')}
+      <div class="card ptile" data-f data-p="custom"><span class="pa">${isC ? 'ACTIVO · ' + profOf(S.prof).n : ''}</span><span class="pn">CUSTOM</span><span class="pd">${noAdv ? 'No disponible en esta consola: falta ' + S.caps.missing.join(', ') : saved.length ? saved.join('<br>') : 'Ajusta frecuencia y temperatura con STONE TUNING. Cada cambio se prueba antes de guardarse.'}</span><span class="ps">${noAdv ? 'Sólo perfiles de fábrica' : 'Abrir STONE TUNING'}</span></div></div>
+    <div class="acts"><span class="txt-f" data-f data-act="tuning">STONE TUNING</span><span class="txt-f" data-f data-act="reset">Restaurar valores de fábrica</span></div>
+    <div class="note">Todos los perfiles se mantienen dentro del rango estable de la BC-250: hasta 2000 MHz con la curva de voltaje de fábrica del regulador, y nunca por encima de 85 °C. STONE no toca el voltaje y la protección térmica siempre está activa. Las sugerencias de FPS se ajustan en Steam: STONE no limita los FPS.</div>`;
+  showScreen('perf'); chrome(true, false); setBg('', 'none');
+  const P = $('#perf');
+  NAV = mkNav([[...P.querySelectorAll('.ptile')], [...P.querySelectorAll('.acts [data-f]')]], {
+    r: opts.r ?? 0, c: opts.c ?? Math.max(0, ['silent', 'balanced', 'performance'].indexOf(S.prof) === -1 ? 3 : ['silent', 'balanced', 'performance'].indexOf(S.prof)),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: b.y + b.h + 16, w: b.w * (S.rm ? 1 : 1.06) } : { x: b.x, y: b.y + b.h + 8, w: b.w }
+  });
+  NAV.id = 'perf';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', 'Elegir'], ['B', 'Volver']]);
+  if (!opts.fresh) api('getState').then(st => { if (st && S.screen === 'perf') $('#perf .pstatus').innerHTML = statusLine(S.prof); });
+}
+function perfA(el) {
+  const p = el.dataset.p, a = el.dataset.act, c = NAV.c;
+  if (p && FACT[p]) {
+    play('select');
+    return api('setProfile', p).then(st => {
+      if (S.screen === 'perf') enterPerf({ r: 0, c, fresh: true });
+      if (st) toast(`${FACT[p].n} activo · GPU hasta ${st.actual.max} MHz`);
+    });
+  }
+  if (p === 'custom' || a === 'tuning') {
+    if (S.caps && !S.caps.advanced) { play('error'); return toast(`${ERR_TEXT.Unsupported}: falta ${S.caps.missing.join(', ')}`, false); }
+    play('select'); D = null; return enterTuning();
+  }
+  if (a === 'reset') { play('select'); return restoreDefaults(() => { if (S.screen === 'perf') enterPerf({ r: 1, c: 1, fresh: true }); }); }
+}
+function restoreDefaults(then) {
+  return api('restoreDefaults').then(st => { S.adv = false; D = null; if (then) then(st); if (st) toast('Valores de fábrica restaurados: BALANCED'); });
+}
+function baseOf(k) { return slots[k] ? { ...slots[k] } : { max: FACT.balanced.max, min: 1000, temp: 85, resp: 1 }; }
+function changed() { const b = baseOf(D.slot); return ['max', 'min', 'temp', 'resp'].some(k => b[k] !== D[k]); }
+function tuningRows() {
+  const sl = slots[D.slot];
+  const st = !sl ? 'Vacía' : sl.state === 'validated' ? 'Validado' : sl.state === 'failed' ? 'Falló: la consola se detuvo con estos valores. Pruébala de nuevo'
+    : `Provisional (prueba ${sl.test_level === 'quick' ? 'rápida' : 'estándar'}): se valida con la prueba estándar y una partida sin fallos`;
+  const mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);
+  const rows = [
+    { l: 'Ranura', s: st, v: `CUSTOM 0${D.slot + 1}`, key: 'slot' },
+    { l: 'Frecuencia máxima de GPU', s: `${mr[0]}–${mr[1]} MHz · rango que acepta el regulador`, v: `${D.max} MHz`, key: 'max' },
+    { l: 'Límite de temperatura', s: `${tr[0]}–${tr[1]} °C · sólo puede bajar respecto al de fábrica`, v: `${D.temp} °C`, key: 'temp' },
+    { l: 'Ventilador', s: 'Curva de la BIOS; el control por software llegará si se valida en placa', v: S.metrics ? nv(S.metrics.fan_rpm, ' RPM') : '—', ro: true },
+    { l: 'FPS, resolución, refresco, VRR y escalado', s: 'Los gestiona Steam durante el juego', v: 'En Steam', act: 'steam', where: 'Durante el juego: botón ··· del mando → Rendimiento' },
+    { l: 'Modo avanzado', s: S.adv ? 'Frecuencia mínima y respuesta del regulador' : 'Parámetros adicionales del regulador de GPU', v: S.adv ? 'Activado' : 'Desactivado', key: 'adv' }
+  ];
+  if (S.adv) rows.push(
+    { l: 'Frecuencia mínima de GPU', s: `${nr[0]}–${nr[1]} MHz · nunca por encima de la máxima`, v: `${D.min} MHz`, key: 'min' },
+    { l: 'Respuesta del regulador', s: 'Cuánto se anticipa a la carga del juego', v: RESP[D.resp], key: 'resp' },
+    { l: 'Voltaje', s: 'Lo fija la curva de fábrica del regulador para cada frecuencia. STONE no lo cambia', v: 'Curva del regulador', ro: true });
+  rows.push(
+    { l: 'Revisar y probar', s: changed() ? 'Prueba de estabilidad antes de guardar' : 'Sin cambios pendientes', v: '', act: 'review' },
+    { l: 'Medir el perfil actual', s: lastBaseline() ? `Referencia: ${profOf(lastBaseline().profile).n} · ${lastBaseline().median_clock_mhz} MHz sostenidos` : 'Mide el perfil activo para saber si un ajuste mejora de verdad', v: '', act: 'baseline' },
+    { l: `Usar CUSTOM 0${D.slot + 1}`, s: !sl ? 'Guarda primero una configuración probada' : sl.state === 'validated' ? 'Activa este perfil en toda la consola' : sl.state === 'failed' ? 'No disponible hasta que vuelva a pasar la prueba' : 'Sólo hasta apagar la consola, hasta que se valide', v: '', act: 'use' },
+    { l: 'Restaurar valores de fábrica', s: 'Vuelve a BALANCED', v: '', act: 'reset' });
+  return rows;
+}
+function enterTuning(opts = {}) {
+  S.screen = 'tuning';
+  if (!D) { const k = String(S.prof).startsWith('c') ? +S.prof.slice(1) - 1 : Math.max(0, slots.findIndex(x => !x)); D = { slot: k, ...baseOf(k) }; }
+  const rows = tuningRows(), b = baseOf(D.slot);
+  const kv = (l, a, c) => `<div class="kv"><span>${l}</span><b class="${a !== c ? 'chg' : ''}">${a === c ? c : a + ' → ' + c}</b></div>`;
+  $('#tuning').innerHTML = `<div class="pttl">STONE TUNING</div><div class="pstatus">${statusLine(S.prof)}</div>
+    <div class="tclip"><div class="trows" data-sy="0">${rows.map((r, k) => `<div class="srow" data-f data-row="${k}"><div class="l"><b>${r.l}</b><small>${r.s}</small></div><div class="v${r.ro ? ' ro' : ''}">${r.key ? `<span class="ar">‹</span>${r.v}<span class="ar">›</span>` : r.v}</div></div>`).join('')}</div></div>
+    <div class="side">
+      <div class="pbox"><h3>BORRADOR · CUSTOM 0${D.slot + 1}</h3>
+        ${kv('Frecuencia máxima', b.max + ' MHz', D.max + ' MHz')}${kv('Límite de temperatura', b.temp + ' °C', D.temp + ' °C')}
+        ${S.adv ? kv('Frecuencia mínima', b.min + ' MHz', D.min + ' MHz') + kv('Respuesta', RESP[b.resp], RESP[D.resp]) : ''}
+        <div class="kv"><span>Voltaje</span><b>curva del regulador</b></div></div>
+      <div class="pbox"><h3>LECTURAS</h3><div id="tread">${tuningReadings(S.metrics)}</div></div>
+      <div class="pbox"><h3>RANURAS</h3>${slots.map((sl, k) => `<div class="kv"><span>CUSTOM 0${k + 1}</span><b>${sl ? slotLabel(sl) + ' · ' + sl.max + ' MHz' : 'vacía'}</b></div>`).join('')}</div>
+    </div>`;
+  showScreen('tuning'); chrome(true, false); setBg('', 'none');
+  const T = $('#tuning'), trows = T.querySelector('.trows'), els = [...trows.children];
+  NAV = mkNav(els.map(e => [e]), {
+    r: Math.min(opts.ri || 0, els.length - 1),
+    place: (el, bx) => ({ x: bx.x, y: bx.y + bx.h - 1, w: bx.w }),
+    scroll: el => {
+      let sy = +trows.dataset.sy; const t = el.offsetTop, bot = t + el.offsetHeight, view = 700;
+      if (t + sy < 0) sy = -t; else if (bot + sy > view) sy = view - bot;
+      trows.dataset.sy = sy; trows.style.transform = `translateY(${sy}px)`;
+    }
+  });
+  NAV.id = 'tuning';
+  requestAnimationFrame(() => applyFocus());
+  hints([['← →', 'Ajustar'], ['A', 'Elegir'], ['B', 'Volver']]);
+}
+const capRange = (k, d) => S.caps && S.caps[k] && S.caps[k].length ? S.caps[k] : d;   /* limits come from stoned */
+function tuningLR(d) {
+  const r = tuningRows()[NAV.r]; if (!r || !r.key) return bump(d);
+  const ri = NAV.r;
+  const mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);
+  if (r.key === 'slot') { const n = D.slot + d; if (n < 0 || n > 2) return bump(d); D = { slot: n, ...baseOf(n) }; }
+  else if (r.key === 'max') { const n = D.max + d * 50; if (n < mr[0] || n > mr[1]) return bump(d); D.max = n; if (D.min > n) D.min = nr[0]; }
+  else if (r.key === 'temp') { const n = D.temp + d * 5; if (n < tr[0] || n > tr[1]) return bump(d); D.temp = n; }
+  else if (r.key === 'min') { const n = D.min + d * 100; if (n < nr[0] || n > Math.min(nr[1], D.max)) return bump(d); D.min = n; }
+  else if (r.key === 'resp') { const n = D.resp + d; if (n < 0 || n > 2) return bump(d); D.resp = n; }
+  else if (r.key === 'adv') return toggleAdv(ri);
+  play('nav'); enterTuning({ ri });
+}
+function toggleAdv(ri) {
+  if (S.adv) { S.adv = false; D.min = baseOf(D.slot).min; D.resp = baseOf(D.slot).resp; play('nav'); return enterTuning({ ri }); }
+  if (S.advAck) { S.adv = true; play('nav'); return enterTuning({ ri }); }
+  play('select');
+  openDlg(`<h2>ADVANCED PERFORMANCE SETTINGS</h2><p>Cambiar frecuencias o límites térmicos puede causar inestabilidad, cierres, pérdida de datos o daños en el hardware.</p><p>STONE sólo ofrece valores dentro del rango estable y prueba cada cambio antes de guardarlo.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="no">CANCELAR</span><span class="txt-f" data-f data-b="yes">CONTINUAR</span></div>`, {
+    onA: el => { closeDlg(); if (el.dataset.b === 'yes') { S.advAck = true; S.adv = true; savePrefs(); play('select'); } else play('back'); enterTuning({ ri }); },
+    onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+function tuningA(el) {
+  const ri = NAV.r, r = tuningRows()[ri]; if (!r) return;
+  if (r.key === 'adv') return toggleAdv(ri);
+  if (r.key) return tuningLR(1);
+  if (r.ro) return bump(1);
+  if (r.act === 'steam') { play('select'); return toast(r.where, false); }
+  if (r.act === 'reset') { play('select'); return restoreDefaults(() => { if (S.screen === 'tuning') enterTuning({ ri }); }); }
+  if (r.act === 'use') {
+    if (!slots[D.slot]) { play('error'); return toast('Esta ranura está vacía: prueba y guarda una configuración primero', false); }
+    play('select'); const k = D.slot;
+    return api('setProfile', slotId(k)).then(st => {
+      if (S.screen === 'tuning') enterTuning({ ri });
+      if (!st) return;
+      /* P0-3: an unvalidated slot is used only until the console turns off */
+      toast(st.provisional ? `CUSTOM 0${k + 1} activo hasta apagar (provisional) · GPU hasta ${st.actual.max} MHz` : `CUSTOM 0${k + 1} activo · GPU hasta ${st.actual.max} MHz`, !st.provisional);
+    });
+  }
+  if (r.act === 'baseline') { play('select'); return runBaseline(ri); }
+  if (r.act === 'review') {
+    if (!changed()) { play('error'); return toast('No hay cambios que probar', false); }
+    play('select'); return review(ri);
+  }
+}
+function review(ri) {
+  const b = baseOf(D.slot), line2 = (l, a, c) => a === c ? '' : `<div class="kv"><span>${l}</span><b class="chg">${a} → ${c}</b></div>`;
+  openDlg(`<h2>REVISAR CAMBIOS</h2><div class="kvs">${line2('Frecuencia máxima', b.max + ' MHz', D.max + ' MHz')}${line2('Límite de temperatura', b.temp + ' °C', D.temp + ' °C')}${line2('Frecuencia mínima', b.min + ' MHz', D.min + ' MHz')}${line2('Respuesta del regulador', RESP[b.resp], RESP[D.resp])}</div>
+    <p>La prueba rápida carga la GPU 5 minutos y la estándar 30. Para validar una ranura hacen falta la estándar y una partida sin fallos. Si la consola se bloquea, al reiniciar vuelve a la última configuración buena.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="test">PRUEBA RÁPIDA</span><span class="txt-f" data-f data-b="std">PRUEBA ESTÁNDAR</span><span class="txt-f" data-f data-b="no">DESCARTAR</span></div>`, {
+    onA: el => { if (el.dataset.b === 'test' || el.dataset.b === 'std') { play('select'); return runTest(ri, el.dataset.b === 'std' ? 'standard' : 'quick'); } closeDlg(); play('back'); D = { slot: D.slot, ...baseOf(D.slot) }; enterTuning({ ri }); },
+    onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+let testUI = null, lastTests = [], progT = 0;
+const lastBaseline = () => [...lastTests].reverse().find(t => t.kind === 'baseline' && t.passed);
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+/* Progress comes from stoned's own clock (state.testing); readings from its metrics, every 0.25 s during a test. */
+function startProgress(st) {
+  const t = st && st.testing; if (!t || !testUI) return;
+  const t0 = performance.now() - (t.seconds || 0) * 1000, dur = (t.duration || 300) * 1000;
+  clearInterval(progT);
+  const tick = () => {
+    if (!testUI || !$('#tLoad')) { clearInterval(progT); return; }
+    const el = performance.now() - t0, p = Math.min(1, el / dur);
+    setLine(testUI.bx.x, testUI.bx.y - 0.5, testUI.bx.w * p);
+    $('#tLeft').textContent = p < 1 ? `Quedan ${mmss((dur - el) / 1000)}` : 'Terminando…';
+    const m = S.metrics; if (!m) return;
+    $('#tLoad').textContent = nv(m.gpu_busy_pct, ' %'); $('#tClk').textContent = nv(m.gpu_clock_mhz, ' MHz');
+    $('#tTemp').textContent = nv(m.gpu_temp_c, ' °C'); $('#tPow').textContent = nv(m.gpu_power_w, ' W');
+  };
+  tick(); progT = setInterval(tick, 500);
+}
+const liveBox = () => `<div class="live"><div><span>Carga GPU</span><b id="tLoad">—</b></div><div><span>Frecuencia</span><b id="tClk">—</b></div><div><span>Temperatura</span><b id="tTemp">—</b></div><div><span>Consumo GPU</span><b id="tPow">—</b></div></div>`;
+function runBaseline(ri) {
+  api('measureBaseline', 'quick').then(st => {
+    if (!st) return enterTuning({ ri });
+    openDlg(`<h2>MEDICIÓN DE REFERENCIA</h2><p>Misma carga que la prueba rápida (5 minutos) sobre ${profOf(effective()).n}, sin cambiar nada</p>
+    ${liveBox()}<div class="ptrack" id="tTrack"></div><p id="tMsg">Sin cambios en el regulador${st.actual && !st.actual.error ? `: GPU hasta ${st.actual.max} MHz` : ''} · <span id="tLeft"></span></p>`, { onA: () => {}, onB: () => {
+      testUI = null; clearInterval(progT); api('cancelTest').then(() => { closeDlg(); play('back'); toast('Medición cancelada', false); enterTuning({ ri }); });
+    } }, true);
+    const bx = stageBox($('#tTrack')); line.classList.remove('off'); setLine(bx.x, bx.y - 0.5, 0);
+    hints([['B', 'Cancelar']]);
+    testUI = { ri, bx, baseline: true };
+    startProgress(st);
+  });
+}
+function baselineDone(ri, r) {
+  play('notify');
+  openDlg(`<h2>REFERENCIA GUARDADA</h2><p>${profOf(r.profile).n}: ${r.median_clock_mhz} MHz sostenidos, ${r.max_temp_c} °C como máximo, ${nv(r.avg_power_w, ' W')} de GPU.</p><p>Las próximas pruebas rápidas se compararán con esta medición.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">ENTENDIDO</span></div>`, { onA: () => { closeDlg(); play('back'); enterTuning({ ri }); }, onB: () => { closeDlg(); play('back'); enterTuning({ ri }); } });
+}
+function comparisonText(c) {
+  if (!c) return '';
+  if (c.verdict === 'insufficient') return 'Para saber si mejora, mide antes el perfil actual con «Medir el perfil actual».';
+  const base = profOf(c.baseline_profile).n, sg = v => (v > 0 ? '+' : '') + String(v).replace('.', ',');
+  if (c.verdict === 'better') return `Frente a ${base}: ${sg(c.clock_gain_pct)} % de frecuencia sostenida, ${sg(c.temp_delta_c)} °C, ${sg(c.power_delta_w)} W.`;
+  if (c.verdict === 'no_gain') return `Frente a ${base}: la frecuencia sostenida apenas cambia (${sg(c.clock_gain_pct)} %). Más techo no mejora el rendimiento en esta consola.`;
+  return `Frente a ${base}: la GPU pasa más tiempo limitada por temperatura (${sg(c.throttle_delta_pts)} puntos) y sostiene ${sg(c.clock_gain_pct)} % de frecuencia. Aquí más frecuencia rinde peor.`;
+}
+function runTest(ri, level) {
+  const vals = { max: D.max, min: D.min, temp: D.temp, resp: D.resp };
+  api('startTest', D.slot, vals, level).then(st => {
+    if (!st) { closeDlg(); return enterTuning({ ri }); }
+    openDlg(`<h2>STONE TESTING</h2><p>Prueba ${level === 'quick' ? 'rápida (5 minutos)' : 'estándar (30 minutos)'} de GPU · CUSTOM 0${D.slot + 1}</p>
+    ${liveBox()}<div class="ptrack" id="tTrack"></div><p id="tMsg">Aplicado en el regulador: GPU hasta ${st.actual.max} MHz · límite ${st.actual.temp} °C · <span id="tLeft"></span></p>`, { onA: () => {}, onB: () => {
+      testUI = null; clearInterval(progT);
+      api('cancelTest').then(() => { closeDlg(); play('back'); toast(`Prueba cancelada; no se guardó nada. Activo: ${profOf(S.prof).n}`, false); enterTuning({ ri }); });
+    } }, true);
+    const tr = $('#tTrack'), bx = stageBox(tr);
+    line.classList.remove('off'); setLine(bx.x, bx.y - 0.5, 0);
+    hints([['B', 'Cancelar prueba']]);
+    testUI = { ri, bx, slot: D.slot };
+    startProgress(st);
+  });
+}
+PerfAPI.on('testFinished', r => {
+  const t = testUI; testUI = null; clearInterval(progT);
+  if (!t) return;
+  api('getState').then(() => {
+    if (r.kind === 'baseline') return baselineDone(t.ri, r);
+    r.passed ? testPassed(t.ri, r) : testFailed(t.ri, r);
+  });
+});
+function testPassed(ri, r) {
+  play('notify');
+  openDlg(`<div class="res">SIN ERRORES EN LA PRUEBA</div><p>Prueba ${r.level === 'quick' ? 'rápida' : 'estándar'} sin errores de GPU. Temperatura máxima ${r.max_temp_c} °C, frecuencia sostenida ${r.median_clock_mhz} MHz. Una prueba superada reduce el riesgo, pero no garantiza estabilidad.</p>${r.comparison ? `<p class="cmp">${comparisonText(r.comparison)} Se compara la frecuencia sostenida, no los FPS.</p>` : ''}<p>Al terminar, STONE volvió a ${profOf(S.prof).n}. Si guardas, la ranura queda provisional y sin activarse; nunca se usa al encender hasta validarla${r.level === 'quick' ? ' con la prueba estándar y' : ' con'} una partida sin fallos.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="save">GUARDAR EN CUSTOM 0${r.slot + 1}</span><span class="txt-f" data-f data-b="no">DESCARTAR</span></div>`, {
+    onA: el => {
+      closeDlg();
+      if (el.dataset.b === 'save') {
+        play('select');
+        return api('saveTestResult').then(st => { D = { slot: r.slot, ...baseOf(r.slot) }; if (st) toast(`CUSTOM 0${r.slot + 1} guardado (provisional). Sigue activo ${profOf(S.prof).n}`); enterTuning({ ri }); });
+      }
+      play('back'); api('discardTestResult').then(() => { D = { slot: r.slot, ...baseOf(r.slot) }; enterTuning({ ri }); });
+    },
+    onB: () => { closeDlg(); play('back'); api('discardTestResult').then(() => { D = { slot: r.slot, ...baseOf(r.slot) }; enterTuning({ ri }); }); }
+  });
+}
+function testFailed(ri, r) {
+  play('error');
+  openDlg(`<h2>LA PRUEBA NO SE SUPERÓ</h2><p>Motivo: ${REASON_TEXT[r.reason] || r.reason}. No se guardó nada.</p><p>STONE volvió a la última configuración buena: ${profOf(S.prof).n}${S.actual && !S.actual.error ? ` (GPU hasta ${S.actual.max} MHz)` : ''}.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">ENTENDIDO</span></div>`, {
+    onA: () => { closeDlg(); play('back'); enterTuning({ ri }); }, onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+/* After boot, Home tells stoned it is on screen; stoned answers with what it decided at boot
+   (stoned --recover). Failures recorded during this boot's recovery are reported once. */
+function bootNotices(st) {
+  if (st.notice) toast(ERR_TEXT[st.notice] || st.notice, false);
+  if (st.safe_mode && st.safe_reason === 'failures') return safeModeDlg();
+  if (st.safe_mode) return toast(`STONE arrancó en Safe Mode (${SAFE_REASON[st.safe_reason]}). Para salir: Ajustes → Rendimiento`, false);
+  const f = st.last_failure, bt = S.info && S.info.boot_time;
+  if (!f || !bt || f.time < bt - 5 || f.time > bt + 900) return;
+  if (f.during === 'test') toast(`La prueba no terminó. STONE volvió a la última configuración buena: ${profOf(S.prof).n}.`);
+  else if (f.during === 'provisional') toast(`${f.profile ? 'CUSTOM 0' + f.profile.slice(1) : 'La ranura'} falló y quedó desactivada. Activo: ${profOf(S.prof).n}.`);
+  else if (f.during === 'boot') toast(`STONE MACHINE no se apagó bien. Activo: ${profOf(S.prof).n}.`, false);
+}
+function safeModeDlg() {
+  openDlg(`<div class="brand" style="font-size:40px">STONE</div><h2>SAFE MODE</h2><p>STONE MACHINE se detuvo dos veces seguidas. Arrancó con valores de fábrica, sin perfiles CUSTOM ni perfiles por juego.</p><p>Restaurar los ajustes de fábrica sale de Safe Mode. Tus ranuras CUSTOM se conservan.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">RESTAURAR</span><span class="txt-f" data-f data-b="stay">SEGUIR EN SAFE MODE</span></div>`, {
+    onA: el => {
+      closeDlg();
+      if (el.dataset.b === 'ok') { play('select'); return restoreDefaults(() => { if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 }); }); }
+      play('back'); if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 });
+    }
+  }, false, true);
+}
+let DLG = null, dlgPrev = null;
+function openDlg(html, handlers, noButtons, solid) {
+  if (!DLG) dlgPrev = { screen: S.screen };
+  DLG = handlers; S.screen = 'dlg';
+  const d = $('#dlg'); d.classList.toggle('solid', !!solid); d.querySelector('.box').innerHTML = html; d.classList.add('on');
+  const btns = [...d.querySelectorAll('.btns [data-f]')];
+  NAV = mkNav(btns.length ? [btns] : [[d.querySelector('.box')]], { place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'dlg';
+  if (btns.length) requestAnimationFrame(() => { line.classList.remove('off'); applyFocus(); });
+  if (btns.length) hints([['A', 'Elegir'], ...(handlers.onB ? [['B', 'Volver']] : [])]);
+}
+function closeDlg() { $('#dlg').classList.remove('on'); DLG = null; dlgPrev = null; }
+
+/* ---------- POWER ---------- */
+let powerFrom = 'home';
+function openPower() {
+  powerFrom = S.screen === 'game' ? 'game' : S.screen;
+  S.screen = 'power';
+  const box = $('#power .box');
+  box.innerHTML = `<div class="h">ENERGÍA</div>
+    <div class="main txt-f" data-f data-act="off">APAGAR</div>
+    <div class="txt-f" style="font-size:26px" data-f data-act="reboot">Reiniciar</div>
+    ${S.running !== null && G[S.running] ? `<div class="warn">${esc(G[S.running].n)} se cerrará al apagar o reiniciar.</div>` : ''}`;
+  $('#power').classList.add('on'); line.classList.remove('off');
+  const items = [...box.querySelectorAll('[data-f]')];
+  NAV = mkNav(items.map(e => [e]), { place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'power';
+  setTimeout(() => applyFocus(), S.rm ? 60 : 200);
+  hints([['A', 'Elegir'], ['B', 'Cerrar']]);
+}
+function closePower() {
+  play('back'); $('#power').classList.remove('on');
+  if (powerFrom === 'game') { S.screen = 'game'; NAV = null; line.classList.add('off'); $('#hints').classList.add('hide'); return; }
+  if (powerFrom === 'settings') return enterSettings();
+  if (NAV) NAV.id = '';
+  enterHome({ r: 1, c: 3 });
+}
+async function powerA(el) {
+  const a = el.dataset.act; play('select');
+  $('#power').classList.remove('on');
+  if (a === 'off') return shutdown(false);
+  if (a === 'reboot') return shutdown(true);
+}
+/* The animation plays, then logind powers off. stoned's clean-shutdown marker is written by
+   systemd when its unit stops, whatever started the shutdown. */
+async function shutdown(reboot) {
+  S.screen = 'transition'; $('#hints').classList.add('hide'); play('stop');
+  chrome(false, false);
+  $('#black').classList.remove('fast'); $('#black').classList.add('on');
+  setLine(720, 886, 480, { slow: true }); await wait(1000);
+  setLine(960, 886, 0, { slow: true }); await wait(1300);
+  line.classList.add('off');
+  try {
+    await Sys.power(reboot ? 'reboot' : 'off');
+    setMetrics(false); NAV = null;
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); setBg('', 'none');
+    $('#offmsg').textContent = reboot ? 'Reiniciando…' : 'Apagando…'; $('#offmsg').classList.add('on');
+  } catch (e) {
+    $('#black').classList.remove('on'); line.classList.remove('off');
+    S.section = 0; if (NAV) NAV.id = ''; enterHome({ r: 1, c: 3 });
+    play('error'); toast(`No se pudo ${reboot ? 'reiniciar' : 'apagar'} (${ERR_TEXT[e.code] || e.message}). Usa el botón STEAM → Energía`, false);
+  }
+}
+/* Apagar tras inactividad: only on STONE's own screens, never with a game open or a test running. */
+let idleOffT = 0;
+function armIdleOff() {
+  clearTimeout(idleOffT);
+  const min = IDLE_MIN[S.idle]; if (!min) return;
+  idleOffT = setTimeout(() => {
+    if (S.running !== null || S.game || testUI || ['game', 'quick', 'transition', 'dlg'].includes(S.screen)) return armIdleOff();
+    shutdown(false);
+  }, min * 60000);
+}
+let saveT = 0;
+function savePrefs() {
+  clearTimeout(saveT);
+  saveT = setTimeout(() => Sys.prefsSet({ sound: S.sound, vol: S.vol, hc: S.hc, rm: S.rm, ts: S.ts, safe: S.safe, idle: S.idle,
+    tech: S.tech, adv_ack: S.advAck, favorites: [...favs] }).catch(() => {}), 400);
+}
+function loadPrefs(p) {
+  if (!p) return;
+  S.sound = p.sound; S.vol = p.vol; S.hc = p.hc; S.rm = p.rm || reduceOS; S.ts = p.ts; S.safe = p.safe; S.idle = p.idle;
+  S.tech = p.tech; S.advAck = p.adv_ack; favs.clear(); (p.favorites || []).forEach(a => favs.add(a));
+  applyPrefs();
+}
+
+/* ---------- BOOT ----------
+   Plymouth and Steam already showed the line while the machine started; this is STONE Home
+   arriving. The animation runs while the library, settings and stoned answer, so it adds
+   no waiting of its own; Home appears as soon as both are done. */
+async function boot() {
+  S.screen = 'transition';
+  $('#black').classList.add('on'); line.classList.add('boot');
+  const prefs = Sys.prefsGet().then(loadPrefs).catch(() => {});
+  const prep = Promise.all([prefs, refreshCaps(), Sys.info().then(i => { S.info = i; }).catch(() => {}), prefs.then(loadLibrary)]);
+  /* Home is about to be on screen: only now may stoned apply the saved profile (factory or validated) */
+  const home = prep.then(() => PerfAPI.homeReady()).then(st => { adopt(st); return st; })
+    .catch(e => { if (e && e.code === 'ServiceUnavailable') S.actual = { error: 'ServiceUnavailable' }; return null; });
+  /* The frame before this one (Plymouth, then STONE's Steam startup movie) is black with the full
+     line at 82 % of the height and 25 % of the width: STONE Home starts on that same frame. */
+  setLine(720, 886, 480); line.classList.remove('off');
+  play('start');
+  await wait(1000);
+  $('#bootword').classList.add('on');
+  await Promise.race([prep, new Promise(r => setTimeout(r, 8000))]).then(() => wait(700));
+  $('#bootword').classList.remove('on');
+  await wait(300);
+  $('#black').classList.remove('on');
+  S.section = 0; if (NAV) NAV.id = ''; NAV = null;
+  if (S.running !== null && S.game) { showGame(G[S.running], true); }
+  else enterHome({ r: 0, c: 0, slow: true });
+  setTimeout(() => line.classList.remove('boot'), 1300);
+  armIdleOff();
+  home.then(st => { if (st) setTimeout(() => bootNotices(st), 1400); });
+}
+
+/* ---------- Input dispatch ---------- */
+function act(a) {
+  if (S.screen === 'transition') return;
+  if (S.screen === 'game') {
+    if (a === 'home' || a === 'menu') return openQuick();
+    if (a === 'a') { play('select'); return resumeGame(); }
+    if (a === 'b') { play('back'); return returnHome(); }
+    return;
+  }
+  showHints();
+  const dirs = ['up', 'down', 'left', 'right'];
+  if (S.screen === 'quick') {
+    if (a === 'b' || a === 'home') return closeQuick();
+    if (a === 'left' || a === 'right') return quickLR(a);
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return quickA(focusEl());
+    return;
+  }
+  if (S.screen === 'power') {
+    if (a === 'b') return closePower();
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return powerA(focusEl());
+    return;
+  }
+  if (S.screen === 'dlg') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return DLG.onA(focusEl());
+    if (a === 'b' && DLG.onB) return DLG.onB();
+    return;
+  }
+  if (S.screen === 'perf') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return perfA(focusEl());
+    if (a === 'b') { play('back'); cat = CATS.indexOf('Rendimiento'); return enterSettings({ pane: true, ri: 0 }); }
+    if (a === 'home') { if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+    return;
+  }
+  if (S.screen === 'tuning') {
+    if (a === 'up' || a === 'down') return move(a);
+    if (a === 'left' || a === 'right') return tuningLR(a === 'left' ? -1 : 1);
+    if (a === 'a') return tuningA(focusEl());
+    if (a === 'b') { play('back'); return enterPerf({ r: 0, c: 3 }); }
+    return;
+  }
+  if (S.screen === 'settings') {
+    if (dirs.includes(a)) return settingsMove(a);
+    if (a === 'a') return settingsA(focusEl());
+    if (a === 'b') { play('back'); $('#safe').classList.remove('on'); if (NAV.pane) return enterSettings(); if (NAV) NAV.id = ''; return enterHome({ r: 1, c: 2 }); }
+    if (a === 'home') return enterHome({ r: 0, c: 0 });
+    return;
+  }
+  if (S.screen === 'home') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return homeA(focusEl());
+    if (a === 'lb' || a === 'rb') return section(a === 'lb' ? -1 : 1);
+    if (a === 'b') { if (S.section !== 0) { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); } return; }
+    if (a === 'home') { if (NAV.r !== 0 || NAV.c !== 0) { play('nav'); NAV.r = 0; NAV.c = 0; applyFocus(); } return; }
+    return;
+  }
+  if (S.screen === 'library') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return libraryA(focusEl());
+    if (a === 'lb' || a === 'rb') return section(a === 'lb' ? -1 : 1);
+    if (a === 'b' || a === 'home') { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+    if (a === 'lt' || a === 'rt') return letterJump(a === 'lt' ? -1 : 1);
+    return;
+  }
+  if (S.screen === 'detail') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return detailA(focusEl());
+    if (a === 'b') { play('back'); return S.from === 'library' ? enterLibrary({ r: libRowOf(curG), c: libColOf(curG) }) : enterHome({ r: 0, c: Math.max(0, recent.indexOf(curG)) }); }
+    if (a === 'home') { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+  }
+}
+function libRowOf(i) { const k = libList().findIndex(g => g.i === i); return k < 0 ? 1 : 1 + Math.floor(k / 6); }
+function libColOf(i) { const k = libList().findIndex(g => g.i === i); return k < 0 ? 0 : k % 6; }
+function letterJump(d) {
+  if (NAV.r === 0) return;
+  const list = libList(), k = (NAV.r - 1) * 6 + NAV.c, cur = list[k].n[0];
+  let j = k; do { j += d; } while (j >= 0 && j < list.length && list[j].n[0] === cur);
+  if (j < 0 || j >= list.length) return bump(d);
+  NAV.r = 1 + Math.floor(j / 6); NAV.c = j % 6; play('nav'); applyFocus(); toast(list[j].n[0].toUpperCase(), false);
+}
+
+/* Directional hold: one step, 400 ms pause, then 8 steps/s, 16 steps/s after 2 s */
+const hold = { dir: null, t0: 0, next: 0 };
+function startHold(dir) { hold.dir = dir; hold.t0 = performance.now(); hold.next = hold.t0 + 400; act(dir); ensureLoop(); }
+function stopHold(dir) { if (!dir || hold.dir === dir) hold.dir = null; }
+function holdTick(now) {
+  if (hold.dir && now >= hold.next) { act(hold.dir); hold.next = now + (now - hold.t0 > 2000 ? 62 : 125); }
+}
+
+const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'a', ' ': 'a', Escape: 'b', Backspace: 'b', q: 'lb', Q: 'lb', e: 'rb', E: 'rb', h: 'home', H: 'home', Home: 'home', y: 'y', Y: 'y', z: 'lt', Z: 'lt', x: 'rt', X: 'rt', Tab: 'menu' };
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('#bar')) return;
+  const a = KEYS[e.key]; if (!a) return;
+  e.preventDefault(); touched();
+  if (e.repeat) return;
+  if (['up', 'down', 'left', 'right'].includes(a)) startHold(a); else act(a);
+});
+window.addEventListener('keyup', e => { const a = KEYS[e.key]; if (a) stopHold(a); });
+window.addEventListener('blur', () => stopHold());
+
+/* Gamepad (standard mapping) */
+const GP_BTN = { 0: 'a', 1: 'b', 3: 'y', 4: 'lb', 5: 'rb', 6: 'lt', 7: 'rt', 9: 'menu', 16: 'home', 8: 'home' };
+let gpPrev = {}, gpDir = null, padOn = false;
+function pollPads() {
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  const on = pads.length > 0;
+  if (on !== padOn) { padOn = on; document.querySelector('#status .pad').classList.toggle('on', on); if (S.screen !== 'off') toast(on ? 'Mando conectado' : 'Mando desconectado', on); }
+  const p = pads[0]; if (!p) return;
+  for (const [i, a] of Object.entries(GP_BTN)) {
+    const pr = p.buttons[i] && p.buttons[i].pressed;
+    if (pr && !gpPrev[i]) { touched(); audio(); act(a); }
+    gpPrev[i] = pr;
+  }
+  const ax = p.axes[0] || 0, ay = p.axes[1] || 0, b = i => p.buttons[i] && p.buttons[i].pressed;
+  let dir = null;
+  if (b(12) || ay < -.6) dir = 'up'; else if (b(13) || ay > .6) dir = 'down'; else if (b(14) || ax < -.6) dir = 'left'; else if (b(15) || ax > .6) dir = 'right';
+  if (dir !== gpDir) { if (dir) touched(); if (gpDir) stopHold(gpDir); if (dir) startHold(dir); gpDir = dir; }
+}
+/* The loop exists only while a gamepad is connected or a direction is held. Rate by state:
+   menus every frame; game, off and transitions 20 Hz; deep idle (60 s without input) 15 Hz. */
+let loopH = 0, idleT = 0;
+function inputRate() {
+  if (S.screen === 'quick' || S.screen === 'dlg') return 'raf';
+  if (S.screen === 'game') return 16;   /* game: no rAF, but the Home button keeps frame-level latency */
+  if (S.screen === 'off' || S.screen === 'transition') return 50;
+  return S.deep ? 66 : 'raf';
+}
+function ensureLoop() {
+  if (loopH) return;
+  const r = inputRate();
+  loopH = r === 'raf' ? requestAnimationFrame(tickInput) : setTimeout(tickInput, r);
+}
+function tickInput() { loopH = 0; pollPads(); holdTick(performance.now()); if (padOn || hold.dir) ensureLoop(); }
+function touched() {
+  armIdleOff();
+  if (S.deep) { S.deep = false; if (AC && AC.state !== 'running' && S.screen !== 'game') AC.resume(); }
+  clearTimeout(idleT);
+  idleT = setTimeout(() => { S.deep = true; if (S.screen !== 'game' && S.screen !== 'quick') audioSleep(); }, 60000);
+}
+window.addEventListener('gamepadconnected', () => { pollPads(); ensureLoop(); });
+window.addEventListener('gamepaddisconnected', () => { pollPads(); });
+
+/* Pointer: click focuses and activates, as the same focus model */
+stage.addEventListener('click', e => {
+  stage.focus({ preventScroll: true }); touched();
+  const el = e.target.closest('[data-f]');
+  if (!el || !NAV) return;
+  if (S.screen === 'settings') {
+    if (el.dataset.cat !== undefined) { cat = +el.dataset.cat; play('nav'); return enterSettings(); }
+    if (el.classList.contains('srow')) { const ri = +el.dataset.row; if (!NAV.pane || NAV.c !== ri) { play('nav'); return enterSettings({ pane: true, ri }); } return settingsA(el); }
+  }
+  for (let r = 0; r < NAV.rows.length; r++) {
+    const c = NAV.rows[r].indexOf(el);
+    if (c >= 0) {
+      if (NAV.r === r && NAV.c === c) return act('a');
+      NAV.r = r; NAV.c = c; play('nav'); return applyFocus();
+    }
+  }
+});
+
+/* ---------- Self-test (stone-home --selftest, CI and first check on the board) ---------- */
+async function selfTest() {
+  const r = { pass: false, checks: {} }, c = r.checks;
+  const t = async (k, f) => { try { c[k] = await f(); } catch (e) { c[k] = 'error: ' + (e.code || e.message); } };
+  await t('state', async () => { const st = await PerfAPI.getState(); return !!st && typeof st.profile === 'string'; });
+  await t('capabilities', async () => { const cp = await PerfAPI.getCapabilities(); return { board: cp.board, governor: cp.governor, advanced: cp.advanced }; });
+  await t('library', async () => (await Sys.library()).games.length);
+  await t('prefs', async () => typeof (await Sys.prefsGet()).sound === 'boolean');
+  await t('info', async () => !!(await Sys.info()).release);
+  c.audio = !!(window.AudioContext || window.webkitAudioContext);
+  c.gamepad_api = typeof navigator.getGamepads === 'function';
+  await (document.fonts ? document.fonts.load('300 20px Jost') : Promise.resolve());
+  c.font = document.fonts ? document.fonts.check('300 20px Jost') : false;
+  r.pass = c.state === true && c.prefs === true && typeof c.library === 'number' && c.info === true && c.font === true;
+  await Bridge.call('selftest', r);
+}
+
+/* ---------- Start ---------- */
+applyPrefs();
+const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 2500))]) : Promise.resolve();
+ready.then(() => {
+  stage.focus({ preventScroll: true });
+  touched(); pollPads(); if (padOn) ensureLoop();
+  if (location.hash === '#selftest') return selfTest();
+  audio(); boot();
+});
+})();
+</script>
+
+</body></html>

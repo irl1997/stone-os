@@ -1,0 +1,2145 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>STONE OS Prototipo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Jost:wght@200;300&family=IBM+Plex+Mono&display=swap">
+<style>
+/* Layout: a fixed 1920×1080 console stage, scaled to fit the window, with a slim legend bar beneath. Single dark look by design. */
+:root{
+  --void:#0a0a0b; --basalt:#141517; --graphite:#1c1d1f; --shale:#2b2c2f; --slate:#5e6064;
+  --ash:#8e9095; --warm:#ede9e3; --light:#ffffff; --ember:#c88a3a; --error:#d0675c;
+  --text-2:var(--ash); --horizon:var(--shale); --line-w:2px; --scrim:.55;
+  --f-display:Jost,Futura,"Century Gothic",sans-serif;
+  --f-text:Inter,"Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono","JetBrains Mono",monospace;
+  --d-step:220ms; --d-settle:360ms; --d-exit:450ms; --d-enter:600ms; --d-light:900ms; --d-cer:1200ms;
+  --e-step:cubic-bezier(.25,.1,0,1); --e-settle:cubic-bezier(.2,0,0,1); --e-light:cubic-bezier(.4,0,.2,1);
+  --e-exit:cubic-bezier(.4,0,1,1); --e-cer:cubic-bezier(.45,0,.15,1);
+  --fscale:1.06; --ts:1;
+  color-scheme:dark;
+}
+html,body{height:100%;background:var(--void);color:var(--warm)}
+body{font-family:var(--f-text);overflow:hidden}
+#app{height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+#viewport{flex:1;min-height:0;position:relative;overflow:hidden}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:var(--void);
+  font-family:var(--f-text);user-select:none;-webkit-user-select:none;outline:none}
+#bar{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;font-size:12px;color:var(--ash);min-width:0}
+#bar .keys{display:flex;flex-wrap:wrap;gap:6px 16px;min-width:0}
+#bar kbd{font-family:var(--f-mono);font-size:11px;color:var(--warm);border:1px solid var(--shale);border-radius:3px;padding:1px 5px;margin-right:4px}
+#bar .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+#bar button,#bar select{font:500 12px var(--f-text);color:var(--warm);background:var(--graphite);border:1px solid var(--shale);border-radius:4px;padding:6px 12px;cursor:pointer;max-width:100%}
+#bar button:hover,#bar select:hover{border-color:var(--ash)}
+#bar button:focus-visible,#bar select:focus-visible{outline:2px solid var(--light);outline-offset:2px}
+#bar .note{color:var(--slate)}
+
+/* Theme modifiers inside the stage */
+#stage.hc{--text-2:var(--warm);--horizon:var(--ash);--line-w:4px;--scrim:.78}
+
+/* Backgrounds */
+.bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity var(--d-light) var(--e-light)}
+.bg.on{opacity:1}
+#veil{position:absolute;inset:0;pointer-events:none;transition:opacity var(--d-light) var(--e-light);
+  background:linear-gradient(to bottom,rgba(10,10,11,calc(var(--scrim) - .2)) 0%,rgba(10,10,11,var(--scrim)) 48%,rgba(10,10,11,.97) 64%,var(--void) 72%)}
+#veil.side{background:linear-gradient(to right,rgba(10,10,11,.92) 0%,rgba(10,10,11,.78) 42%,rgba(10,10,11,.15) 72%,rgba(10,10,11,0) 100%),linear-gradient(to top,rgba(10,10,11,.9) 0%,rgba(10,10,11,0) 30%)}
+#veil.none{opacity:0}
+
+/* Shared chrome */
+.brand{font-family:var(--f-display);font-weight:200;letter-spacing:.45em;color:var(--warm)}
+#hdr{position:absolute;left:96px;right:96px;top:54px;height:48px;display:flex;justify-content:space-between;align-items:center;transition:opacity var(--d-enter) var(--e-light)}
+#hdr .brand{font-size:32px}
+#status{display:flex;gap:28px;align-items:center;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+#status svg{stroke:var(--text-2)}
+#status .pad.on svg{stroke:var(--warm)}
+#safeBadge{font-size:15px;letter-spacing:.18em;color:var(--warm);border:1px solid var(--warm);border-radius:3px;padding:2px 8px}
+#tabs{position:absolute;left:96px;top:140px;display:flex;gap:56px;font-family:var(--f-display);font-weight:300;font-size:22px;letter-spacing:.22em;transition:opacity var(--d-enter) var(--e-light)}
+#tabs span{color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+#tabs span.cur{color:var(--warm)}
+.hide{opacity:0!important;pointer-events:none}
+
+.screen{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity var(--d-enter) var(--e-light),visibility 0s linear var(--d-enter),transform var(--d-enter) var(--e-settle)}
+.screen.on{opacity:1;visibility:visible;transition:opacity var(--d-enter) var(--e-light),visibility 0s,transform var(--d-enter) var(--e-settle)}
+.screen.zoom{transform:scale(.985)}
+.screen.on.zoom{transform:none}
+
+/* Focus line: one per stage */
+#line{position:absolute;left:0;top:0;width:1920px;height:var(--line-w);background:var(--light);border-radius:2px;z-index:61;pointer-events:none;
+  transform-origin:0 50%;transform:translate(960px,886px) scaleX(0);
+  transition:transform var(--d-step) var(--e-step),opacity var(--d-step) linear,translate 160ms var(--e-settle)}
+#line.slow{transition:transform var(--d-cer) var(--e-cer),opacity var(--d-enter) linear,translate 160ms var(--e-settle)}
+#line.off{opacity:0}
+#line.load::after{content:"";position:absolute;top:0;left:0;height:100%;width:30%;background:var(--void);opacity:.55;animation:load 1.6s var(--e-light) infinite}
+@keyframes load{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
+
+/* Focusables */
+[data-f]{cursor:pointer}
+.txt-f{color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+.txt-f.f{color:var(--warm)}
+
+/* HOME */
+#home .clip{position:absolute;left:0;top:0;width:1920px;height:680px;overflow:hidden}
+#home .track{position:absolute;left:96px;top:0;height:680px;display:flex;gap:24px;align-items:flex-end;padding-bottom:26px;box-sizing:border-box;transition:transform var(--d-step) var(--e-step)}
+.card{flex:none;border-radius:4px;background-color:var(--shale);background-size:cover;background-position:center;transform-origin:0 100%;transition:transform var(--d-settle) var(--e-settle),translate var(--d-settle) var(--e-settle);position:relative}
+.card.f{transform:scale(var(--fscale))}
+.card.hero{width:678px;height:382px}
+.card.cap{width:200px;height:300px}
+.card.tile{width:200px;height:300px;background:var(--graphite);display:flex;align-items:flex-end;padding:20px;box-sizing:border-box;font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:16px;color:var(--text-2)}
+.card.wide{width:400px;height:225px;background:var(--graphite);display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:24px;box-sizing:border-box}
+.card.wide b{font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:20px;color:var(--warm)}
+.card.wide span{font-size:18px;color:var(--text-2)}
+.card.dim{opacity:.4}
+.card .run{position:absolute;left:24px;top:24px;font-family:var(--f-display);font-weight:300;letter-spacing:.3em;font-size:16px;color:var(--ember)}
+#home .horizon{position:absolute;left:96px;top:669px;width:1728px;height:1px;background:var(--horizon)}
+#home .ctx{position:absolute;left:96px;top:706px;display:flex;flex-direction:column;gap:8px;max-width:1300px}
+.kicker{font-family:var(--f-display);font-weight:300;font-size:20px;letter-spacing:.3em;color:var(--text-2)}
+.kicker .now{color:var(--ember)}
+.ctx-title{font-family:var(--f-display);font-weight:300;font-size:calc(40px * var(--ts));line-height:1.2;letter-spacing:.3em;color:var(--warm);text-transform:uppercase}
+.meta{font-size:calc(20px * var(--ts));color:var(--text-2);opacity:0;transition:opacity var(--d-light) var(--e-light);font-variant-numeric:tabular-nums}
+.meta.on{opacity:1}
+#home .sys{position:absolute;left:96px;top:930px;display:flex;gap:64px;font-size:22px}
+#home .sys span{display:flex;gap:12px;align-items:center}
+#home .sys svg{stroke:currentColor}
+
+/* LIBRARY */
+#library .filters{position:absolute;left:96px;top:206px;display:flex;gap:40px;font-size:22px}
+#library .filters span.cur{color:var(--warm)}
+#library .filters span.cur::after{content:"";display:block;height:2px;background:var(--slate);margin-top:8px}
+#library .count{position:absolute;right:96px;top:210px;font-size:20px;color:var(--text-2)}
+#library .gclip{position:absolute;left:0;top:276px;width:1920px;height:680px;overflow:hidden}
+#library .grid{position:absolute;left:96px;top:4px;width:1728px;transition:transform var(--d-step) var(--e-step)}
+#library .grid .card{position:absolute;width:254.67px;height:381px}
+#library .empty{position:absolute;left:96px;top:300px;font-size:24px;color:var(--text-2)}
+#library .sel{position:absolute;left:96px;top:994px;font-size:20px;color:var(--text-2);max-width:1100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* DETAIL */
+#detail .col{position:absolute;left:96px;top:280px;width:1000px;display:flex;flex-direction:column;gap:16px}
+#detail .origin{font-size:20px;color:var(--text-2);letter-spacing:.1em}
+#detail h1{margin:0;font-family:var(--f-display);font-weight:300;font-size:64px;line-height:72px;letter-spacing:.3em;color:var(--warm);text-wrap:balance}
+#detail .stats{font-size:calc(24px * var(--ts));line-height:1.4;color:var(--text-2);font-variant-numeric:tabular-nums}
+#detail .primary{position:absolute;left:96px;top:560px;font-family:var(--f-display);font-weight:300;font-size:40px;line-height:48px;letter-spacing:.3em;color:var(--warm)}
+#detail .second{position:absolute;left:96px;top:690px;display:flex;gap:64px;font-size:22px}
+#detail .info{position:absolute;left:96px;right:96px;top:860px;border-top:1px solid var(--horizon);padding-top:24px;display:flex;gap:72px;font-size:20px;color:var(--text-2)}
+#detail .info div{display:flex;flex-direction:column;gap:4px}
+#detail .info b{font-weight:400;color:var(--warm)}
+
+/* GAME */
+#game .art{position:absolute;inset:-2%;background-size:cover;background-position:center;animation:drift 24s ease-in-out infinite alternate}
+#game:not(.on) .art{animation:none}
+@keyframes drift{from{transform:scale(1.02) translateX(0)}to{transform:scale(1.06) translateX(-1.5%)}}
+#game .tag{position:absolute;left:96px;bottom:64px;font-size:20px;color:var(--warm);opacity:.85;transition:opacity 1.2s var(--e-light);text-shadow:0 1px 8px rgba(0,0,0,.6)}
+#game .tag.gone{opacity:0}
+#metrics{position:absolute;left:40px;top:32px;font-family:var(--f-mono);font-size:20px;line-height:30px;color:var(--warm);background:rgba(10,10,11,.72);padding:12px 18px;border-radius:4px;z-index:30;font-variant-numeric:tabular-nums;white-space:pre}
+
+/* QUICK MENU */
+#quick{position:absolute;inset:0;z-index:20;visibility:hidden;transition:visibility 0s linear var(--d-enter)}
+#quick.on{visibility:visible;transition:visibility 0s}
+#quick .dim{position:absolute;inset:0;background:var(--void);opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#quick.on .dim{opacity:.45}
+#quick .panel{position:absolute;right:0;top:0;width:560px;height:1080px;background:var(--basalt);box-sizing:border-box;padding:54px 56px;display:flex;flex-direction:column;gap:30px;transform:translateX(100%);transition:transform var(--d-enter) var(--e-settle)}
+#quick.on .panel{transform:none}
+#quick .top{display:flex;justify-content:space-between;align-items:center}
+#quick .top .brand{font-size:24px}
+#quick .top span:last-child{font-size:20px;color:var(--text-2)}
+#quick .main{font-family:var(--f-display);font-weight:300;font-size:28px;letter-spacing:.18em}
+#quick .it{font-size:24px}
+#quick .seg{display:flex;flex-direction:column;gap:14px}
+#quick .seg .lbl{font-size:20px}
+#quick .opts{display:flex;gap:8px}
+#quick .opts span{flex:1;text-align:center;padding:12px 0;border:1px solid var(--shale);border-radius:4px;font-size:20px;color:var(--text-2)}
+#quick .opts span.cur{border-color:var(--ash);color:var(--warm)}
+#quick .rule{height:1px;background:var(--shale)}
+#quick .steam{display:flex;flex-direction:column;gap:18px}
+#quick .steam .cap{font-size:16px;letter-spacing:.12em;color:var(--slate)}
+#quick .steam .it{font-size:22px}
+#quick .tog{color:var(--slate)}
+
+/* SETTINGS */
+#settings{background:var(--basalt)}
+#settings .ttl{position:absolute;left:96px;top:140px;font-family:var(--f-display);font-weight:300;font-size:40px;letter-spacing:.3em}
+#settings .cats{position:absolute;left:96px;top:236px;width:480px;display:flex;flex-direction:column;gap:20px;font-size:24px}
+#settings .cats span.cur{color:var(--warm)}
+#settings .vr{position:absolute;left:640px;top:236px;width:1px;height:700px;background:var(--shale)}
+#settings .pane{position:absolute;left:704px;top:236px;width:1120px;display:flex;flex-direction:column;gap:28px}
+#settings .desc{font-size:24px;line-height:34px;color:var(--text-2)}
+#settings .rows{display:flex;flex-direction:column}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:32px;padding:22px 0;border-bottom:1px solid var(--shale)}
+.srow:last-child{border-bottom:none}
+.srow .l{display:flex;flex-direction:column;gap:6px}
+.srow .l b{font-weight:400;font-size:calc(24px * var(--ts));color:var(--text-2);transition:color var(--d-step) var(--e-step)}
+.srow.f .l b{color:var(--warm)}
+.srow .l small{font-size:calc(20px * var(--ts));color:var(--text-2)}
+.srow .v{font-size:20px;color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.srow.f .v{color:var(--warm)}
+.srow .v .ar{color:var(--slate);padding:0 10px}
+#safe{position:absolute;inset:0;pointer-events:none;z-index:35;opacity:0;transition:opacity var(--d-step) linear}
+#safe.on{opacity:1}
+#safe i{position:absolute;width:48px;height:48px;border-color:var(--ember);border-style:solid;border-width:0}
+
+/* POWER */
+#power{position:absolute;inset:0;z-index:25;visibility:hidden;transition:visibility 0s linear var(--d-enter)}
+#power.on{visibility:visible;transition:visibility 0s}
+#power .dim{position:absolute;inset:0;background:var(--void);opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#power.on .dim{opacity:.72}
+#power .box{position:absolute;left:660px;top:290px;width:600px;background:var(--basalt);border-radius:4px;box-sizing:border-box;padding:56px 64px;display:flex;flex-direction:column;gap:30px;opacity:0;transform:translateY(16px);transition:opacity var(--d-enter) var(--e-light),transform var(--d-enter) var(--e-settle)}
+#power.on .box{opacity:1;transform:none}
+#power .h{font-family:var(--f-display);font-weight:300;font-size:24px;letter-spacing:.3em;color:var(--text-2)}
+#power .main{font-family:var(--f-display);font-weight:300;font-size:36px;letter-spacing:.3em}
+#power .warn{font-size:20px;line-height:28px;color:var(--ember)}
+
+/* PERFORMANCE CENTER */
+#perf,#tuning{background:var(--basalt)}
+.pttl{position:absolute;left:96px;top:140px;font-family:var(--f-display);font-weight:300;font-size:40px;letter-spacing:.3em}
+.pstatus{position:absolute;left:96px;top:208px;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.pstatus b{font-weight:400;color:var(--warm)}
+.pread{position:absolute;left:96px;top:242px;font-size:17px;color:var(--text-3, var(--text-2));font-variant-numeric:tabular-nums;opacity:.8}
+#perf .prow{position:absolute;left:96px;top:290px;display:flex;gap:24px}
+.card.ptile{width:414px;height:270px;box-sizing:border-box;padding:28px;background:var(--graphite);display:flex;flex-direction:column;gap:10px}
+.ptile .pn{font-family:var(--f-display);font-weight:300;font-size:28px;letter-spacing:.22em;color:var(--warm)}
+.ptile .pd{font-size:20px;line-height:28px;color:var(--text-2)}
+.ptile .ps{margin-top:auto;font-size:18px;line-height:26px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.ptile .pa{font-family:var(--f-display);font-weight:300;font-size:16px;letter-spacing:.3em;color:var(--ember);min-height:20px}
+#perf .acts{position:absolute;left:96px;top:676px;display:flex;gap:64px;font-size:24px}
+#perf .note{position:absolute;left:96px;top:770px;max-width:1150px;font-size:20px;line-height:30px;color:var(--text-2)}
+#tuning .tclip{position:absolute;left:96px;top:250px;width:1000px;height:710px;overflow:hidden}
+#tuning .trows{position:absolute;left:0;top:0;width:1000px;display:flex;flex-direction:column;transition:transform var(--d-step) var(--e-step)}
+#tuning .side{position:absolute;left:1180px;top:262px;width:644px;display:flex;flex-direction:column;gap:20px}
+.pbox{background:var(--graphite);border-radius:4px;padding:26px 32px;display:flex;flex-direction:column;gap:12px}
+.pbox h3{margin:0 0 4px;font-family:var(--f-display);font-weight:300;font-size:18px;letter-spacing:.3em;color:var(--text-2)}
+.kv{display:flex;justify-content:space-between;gap:24px;font-size:20px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.kv b{font-weight:400;color:var(--warm)}
+.kv b.chg{color:var(--ember)}
+.srow .v.ro{color:var(--slate)}
+#dlg{position:absolute;inset:0;z-index:27;visibility:hidden}
+#dlg.on{visibility:visible}
+#dlg .dim{position:absolute;inset:0;background:var(--void);opacity:.85}
+#dlg.solid .dim{opacity:1}
+#dlg .box{position:absolute;left:520px;top:200px;width:880px;box-sizing:border-box;background:var(--basalt);border-radius:4px;padding:56px 64px;display:flex;flex-direction:column;gap:26px}
+#dlg.solid .box{background:transparent;top:300px}
+#dlg h2{margin:0;font-family:var(--f-display);font-weight:300;font-size:32px;letter-spacing:.3em;color:var(--warm)}
+#dlg p{margin:0;font-size:22px;line-height:32px;color:var(--text-2)}
+#dlg .btns{display:flex;gap:64px;font-family:var(--f-display);font-weight:300;font-size:26px;letter-spacing:.22em;margin-top:8px}
+#dlg .live{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+#dlg .live div{display:flex;flex-direction:column;gap:6px;font-size:18px;color:var(--text-2)}
+#dlg .live b{font-family:var(--f-mono);font-weight:400;font-size:28px;color:var(--warm);font-variant-numeric:tabular-nums}
+#dlg .ptrack{height:2px;background:var(--shale);margin-top:8px}
+#dlg .res{font-family:var(--f-display);font-weight:300;font-size:36px;letter-spacing:.3em;color:var(--warm)}
+#dlg .kvs{display:flex;flex-direction:column;gap:10px}
+
+/* BOOT / OFF */
+#black{position:absolute;inset:0;background:#000;z-index:50;opacity:0;pointer-events:none;transition:opacity var(--d-enter) var(--e-light)}
+#black.on{opacity:1}
+#black.fast{transition-duration:var(--d-exit)}
+#bootword{position:absolute;left:0;right:0;top:430px;text-align:center;font-size:64px;padding-left:.45em;z-index:60;opacity:0;transition:opacity var(--d-enter) var(--e-light)}
+#bootword.on{opacity:1}
+#offmsg{position:absolute;left:0;right:0;top:960px;text-align:center;font-size:20px;color:var(--slate);z-index:60;opacity:0;transition:opacity var(--d-light) var(--e-light)}
+#offmsg.on{opacity:1}
+#bootword,#offmsg,#toast,#hints{pointer-events:none}
+
+/* HINTS / TOAST */
+#hints{position:absolute;right:96px;top:994px;display:flex;gap:40px;font-size:20px;color:var(--text-2);transition:opacity var(--d-light) var(--e-light);z-index:22}
+#hints div{display:flex;gap:8px;align-items:center}
+.g{display:inline-flex;min-width:30px;height:30px;padding:0 6px;border:2px solid var(--text-2);border-radius:15px;align-items:center;justify-content:center;font-size:14px;font-weight:500;box-sizing:border-box;color:var(--text-2)}
+#toast{position:absolute;left:96px;top:996px;font-size:20px;color:var(--warm);z-index:45;opacity:0;transform:translateY(8px);transition:opacity var(--d-enter) var(--e-light),transform var(--d-enter) var(--e-settle);max-width:1000px}
+#toast.on{opacity:1;transform:none}
+#pulse{position:absolute;left:0;bottom:0;width:1920px;height:2px;background:var(--light);opacity:0;z-index:46;pointer-events:none}
+#pulse.go{animation:pulse 1.4s var(--e-light)}
+@keyframes pulse{0%{opacity:0;transform:scaleX(.2)}25%{opacity:.9;transform:scaleX(1)}100%{opacity:0;transform:scaleX(1)}}
+
+@media (prefers-reduced-motion: reduce){#game .art{animation:none}}
+#stage.rm #game .art{animation:none}
+</style>
+
+<div id="app">
+  <div id="viewport">
+    <div id="stage" tabindex="0" aria-label="Pantalla de STONE MACHINE. Usa las flechas, Enter y Escape, o un mando.">
+      <div id="bgA" class="bg"></div><div id="bgB" class="bg"></div><div id="veil" class="none"></div>
+
+      <section id="home" class="screen"></section>
+      <section id="library" class="screen"></section>
+      <section id="detail" class="screen zoom"></section>
+      <section id="game" class="screen"><div class="art"></div><div class="tag"></div></section>
+      <section id="settings" class="screen zoom"></section>
+      <section id="perf" class="screen zoom"></section>
+      <section id="tuning" class="screen zoom"></section>
+
+      <div id="hdr" class="hide">
+        <div class="brand">STONE</div>
+        <div id="status">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke-width="2" aria-hidden="true"><path d="M4 11 Q14 3 24 11"/><path d="M8 15 Q14 10 20 15"/><path d="M12 19 Q14 17.5 16 19"/></svg>
+          <span class="pad"><svg width="34" height="28" viewBox="0 0 34 28" fill="none" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="28" height="14" rx="4"/><path d="M10 11v6M7 14h6"/><path d="M23 12h2M25 16h2"/></svg></span>
+          <span id="safeBadge" hidden>SAFE MODE</span>
+          <span id="clock">--:--</span>
+        </div>
+      </div>
+      <div id="tabs" class="hide"><span>INICIO</span><span>BIBLIOTECA</span><span>EXPLORAR</span><span>MEDIA</span></div>
+
+      <div id="quick"><div class="dim"></div><div class="panel"></div></div>
+      <div id="power"><div class="dim"></div><div class="box"></div></div>
+      <div id="dlg"><div class="dim"></div><div class="box"></div></div>
+      <div id="metrics" hidden></div>
+      <div id="safe"><i style="left:var(--sx);top:var(--sy);border-left-width:3px;border-top-width:3px"></i><i style="right:var(--sx);top:var(--sy);border-right-width:3px;border-top-width:3px"></i><i style="left:var(--sx);bottom:var(--sy);border-left-width:3px;border-bottom-width:3px"></i><i style="right:var(--sx);bottom:var(--sy);border-right-width:3px;border-bottom-width:3px"></i></div>
+
+      <div id="hints" class="hide"></div>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div id="pulse"></div>
+      <div id="black" class="on"></div>
+      <div id="bootword" class="brand">STONE</div>
+      <div id="offmsg">STONE MACHINE · Pulsa A o Enter para encender</div>
+      <div id="line" class="off boot"></div>
+    </div>
+  </div>
+  <div id="bar">
+    <div class="keys">
+      <span><kbd>← ↑ → ↓</kbd>Mover</span>
+      <span><kbd>Enter</kbd>A</span>
+      <span><kbd>Esc</kbd>B</span>
+      <span><kbd>Q</kbd><kbd>E</kbd>LB / RB</span>
+      <span><kbd>H</kbd>Botón Inicio</span>
+      <span class="note">Mando compatible vía USB o Bluetooth · biblioteca de ejemplo</span>
+    </div>
+    <div class="acts">
+      <button id="bSound" type="button">Sonido: activado</button>
+      <button id="bCrash" type="button" disabled>Simular cuelgue en la prueba</button>
+      <select id="bFault" aria-label="Simular un fallo del sistema"><option value="none">Fallo simulado: ninguno</option><option value="unavailable">Servicio no disponible</option><option value="ignore">El regulador ignora cambios</option><option value="hot">GPU caliente (88 °C)</option><option value="denied">Permiso denegado</option><option value="nogov">Sin regulador de GPU</option><option value="gpuerr">Errores de GPU en la prueba</option><option value="nofan">Sin sensor de ventilador</option><option value="fanfail">Ventilador detenido</option></select>
+      <button id="bReset" type="button">Reiniciar demo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), line = $('#line');
+
+/* ---------- Stage scaling ---------- */
+let SCALE = 1;
+function fit() {
+  const vp = $('#viewport'), w = vp.clientWidth, h = vp.clientHeight;
+  SCALE = Math.min(w / 1920, h / 1080);
+  stage.style.transform = `translate(${(w - 1920 * SCALE) / 2}px, ${(h - 1080 * SCALE) / 2}px) scale(${SCALE})`;
+}
+new ResizeObserver(fit).observe($('#viewport'));
+fit();
+
+/* ---------- State ---------- */
+const reduceOS = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const S = {
+  screen: 'off', running: null, profile: 1, tech: false, sound: true, vol: 0.7,
+  hc: false, rm: reduceOS, ts: 0, safe: 5, section: 0, filter: 0, from: 'home',
+  prof: 'balanced', lkg: 'balanced', adv: false, advAck: false, idle: 2,
+  caps: null, actual: null, safeMode: false, game: null, provisional: false, pending: null
+};
+/* Performance profiles: all values stay inside the range documented as stable on every BC-250 (≤ 2000 MHz at 1000 mV, ≤ 85 °C). */
+const FACT = {
+  silent: { n: 'SILENT', max: 1500, min: 1000, temp: 75, resp: 0, d: 'Mínimo ruido, temperatura y consumo. Multimedia, emulación y juegos ligeros.', fps: '30 o 40 FPS' },
+  balanced: { n: 'BALANCED', max: 1850, min: 1000, temp: 85, resp: 1, d: 'El mejor equilibrio entre rendimiento, frametime, temperatura y ruido. Recomendado.', fps: '60 FPS' },
+  performance: { n: 'PERFORMANCE', max: 2000, min: 1000, temp: 85, resp: 1, d: 'Máximo rendimiento dentro del rango estable de STONE MACHINE.', fps: 'Sin límite con VRR' }
+};
+const RESP = ['Suave', 'Normal', 'Rápida'];
+const IDLE = ['Nunca', '15 min', '30 min', '60 min'];
+const slots = [null, null, null];
+const slotId = k => 'c' + (k + 1);
+function profOf(id) {
+  if (FACT[id]) return FACT[id];
+  const k = +String(id).slice(1) - 1, sl = slots[k];
+  return sl ? { n: 'CUSTOM 0' + (k + 1), ...sl } : FACT.balanced;
+}
+const usable = () => ['silent', 'balanced', 'performance', ...slots.map((sl, k) => sl && sl.state !== 'failed' ? slotId(k) : null).filter(Boolean)];
+/* what is applied right now, as reported by stoned */
+function effective() { return (S.running !== null && S.game && S.game.profile) || S.prof; }
+/* Simulated readings for the prototype, shaped on documented BC-250 behaviour (governor throttles to respect the limit). */
+function sim(id, load) {
+  const p = typeof id === 'object' ? id : profOf(id), l = load === undefined ? 1 : load;
+  const want = 56 + (p.max - 1500) * 0.042 * l + 6 * l;
+  const temp = Math.min(p.temp - 1, want);
+  const clk = want > p.temp - 1 ? Math.max(p.min, p.max - (want - temp) * 22) : p.max;
+  return { clk: Math.round(clk / 10) * 10, temp: Math.round(temp), ppt: Math.round(60 + (clk - 1000) * 0.095 * l), gpu: Math.round(84 * l + Math.random() * 8), fps: clk >= 1800 ? 60 : clk >= 1600 ? 54 : 46 };
+}
+/* ---------- STONE PERFORMANCE API ----------
+   The UI's only door to performance. Same methods, arguments, errors and returned state as
+   stoned (D-Bus org.stonemachine.Performance1, see docs/STONED.md in the stone-os repo).
+   In the prototype it talks to SimStoned, a simulation of stoned and of the GPU governor.
+   In STONE OS only the transport changes: a bridge from STONE Home to D-Bus
+   [PENDIENTE: depende de la tecnología final de STONE Home].
+   The UI renders the state that comes back, never what it asked for. */
+class PerfError extends Error { constructor(code, msg) { super(msg || code); this.code = code; } }
+const ERR_TEXT = {
+  Unsupported: 'Esta función no está disponible en esta consola',
+  PermissionDenied: 'No se pudo cambiar el rendimiento: permiso denegado',
+  InvalidValue: 'Valor no válido',
+  HardwareError: 'El regulador de GPU devolvió un error. No se cambió nada',
+  ServiceUnavailable: 'El servicio de rendimiento no responde. No se cambió nada',
+  ThermalLimit: 'STONE MACHINE está muy caliente. Espera a que se enfríe para subir el rendimiento',
+  ApplyFailed: 'El regulador no aplicó el cambio. STONE volvió a la configuración anterior',
+  RollbackFailed: 'No se pudo restaurar la configuración. Reinicia: STONE arranca con valores de fábrica',
+  SafeMode: 'Safe Mode: nada por encima de BALANCED',
+  Busy: 'Hay una prueba de estabilidad en curso',
+  NotValidated: 'Esta ranura falló. Pruébala de nuevo antes de usarla'
+};
+const REASON_TEXT = {
+  thermal: 'la GPU superó el límite de temperatura', workload_failed: 'la carga de prueba se detuvo',
+  gpu_errors: 'el sistema registró errores de GPU', clock_not_sustained: 'la GPU no sostuvo la frecuencia pedida',
+  kernel_log_unavailable: 'no se pudo leer el registro del sistema', cancelled: 'se canceló', interrupted: 'se interrumpió'
+};
+const TEST_MS = { quick: 12000, standard: 20000 };   /* 5 and 30 min on STONE MACHINE */
+
+const SimStoned = (() => {
+  const INITIAL = { min: 1000, max: 1850, temp: 85, rec: 75 };   /* governor factory file */
+  const ALLOWED = [1000, 2000];
+  const gov = { ...INITIAL };
+  const blank = () => ({ profile: 'balanced', lkg: 'balanced', slots: [null, null, null], per_game: {}, safe: false, safeReq: false, safeReason: null, fails: 0, last_failure: null, tests: [] });
+  let st = blank(), flags = { clean: true }, game = null, run = null, pending = null, notice = null, home = false, fault = 'none';
+  /* telemetry: nothing is read unless someone subscribed (stoned: telemetry.py) */
+  const RATES = { performance_center: 1000, overlay: 500 };
+  let sub = null, telTimer = 0;
+  /* a session must last 10 min to validate a slot; x0.01 in the prototype (6 s) */
+  const MIN_SESSION_MS = 6000;
+  let session = null;
+  /* thermal watch (stoned: thermal.py). Timings x0.1 in the prototype so it can be seen. */
+  const TK = 0.1, TH = { warn: 85, reduce: 88, recover: 75, critical: 92, warnS: 30, reduceS: 30, recoverS: 60, fanMin: 70 };
+  let th = { level: 'normal', reason: null, hot: null, vhot: null, cool: null, fanSeen: false, fanFailed: false, crit: false }, reduced = false, thNotice = null;
+  const listeners = {};
+  const emit = (ev, d) => (listeners[ev] || []).forEach(f => f(d));
+  const fail = (code, msg) => { throw new PerfError(code, msg); };
+  const slotIdx = id => /^c[1-3]$/.test(id) ? +id[1] - 1 : null;
+  const isProfile = id => !!FACT[id] || (slotIdx(id) !== null && !!st.slots[slotIdx(id)]);
+  const safeToApply = id => !!FACT[id] || (slotIdx(id) !== null && !!st.slots[slotIdx(id)] && st.slots[slotIdx(id)].state === 'validated');
+  const values = id => { const p = FACT[id] || st.slots[slotIdx(id)]; return { max: p.max, min: p.min, temp: p.temp, resp: p.resp }; };
+  const hasGov = () => fault !== 'nogov';
+  const gpuTemp = () => fault === 'hot' ? 88 : fault === 'fanfail' ? 74 : 55;
+  const caps = () => ({ board: true, driver: 'amdgpu', governor: hasGov(), advanced: hasGov(), gpu_range: ALLOWED,
+    max_range: hasGov() ? [1500, 2000] : [], min_range: hasGov() ? [1000, 1500] : [], temp_range: [65, 85],
+    stability_test: hasGov(), missing: hasGov() ? [] : ['regulador de GPU'], simulated: true });
+  const actual = () => fault === 'unavailable' ? { error: 'ServiceUnavailable' } : !hasGov() ? { error: 'Unsupported' }
+    : { min: gov.min, max: gov.max, temp: gov.temp, recovery: gov.rec };
+  function apply(v) {           /* REQUEST -> EXECUTION -> VERIFY, rollback on mismatch */
+    if (!hasGov()) fail('Unsupported');
+    const before = { ...gov };
+    if (fault !== 'ignore') { gov.min = v.min; gov.max = v.max; }
+    gov.temp = v.temp; gov.rec = v.temp - 10;
+    if (gov.min !== v.min || gov.max !== v.max) { Object.assign(gov, before); fail('ApplyFailed'); }
+  }
+  function canApply(v) {
+    if (!hasGov()) fail('Unsupported');
+    if (run) fail('Busy');
+    if (st.safe && (v.max > FACT.balanced.max || v.temp > FACT.balanced.temp)) fail('SafeMode');
+    if (reduced && v.max > FACT.silent.max) fail('ThermalLimit', 'reduced');
+    if (v.max > gov.max && gpuTemp() >= 85) fail('ThermalLimit');
+  }
+  function validate(v) {        /* never trust the UI */
+    const int = k => Number.isInteger(v[k]) ? v[k] : fail('InvalidValue', k);
+    const r = { max: int('max'), min: int('min'), temp: int('temp'), resp: v.resp === undefined ? 1 : int('resp') };
+    if (r.max < 1500 || r.max > 2000 || r.max % 50) fail('InvalidValue', 'max');
+    if (r.min < 1000 || r.min > 1500 || r.min % 100 || r.min > r.max) fail('InvalidValue', 'min');
+    if (r.temp < 65 || r.temp > 85 || r.temp % 5) fail('InvalidValue', 'temp');
+    if (![0, 1, 2].includes(r.resp)) fail('InvalidValue', 'resp');
+    return r;
+  }
+  const gate = write => new Promise(res => setTimeout(res, 60)).then(() => {
+    if (fault === 'unavailable') fail('ServiceUnavailable');
+    if (write && fault === 'denied') fail('PermissionDenied');
+  });
+  const applyProfile = id => { if (reduced && values(id).max > FACT.silent.max) return; apply(values(id)); };
+  function sample() {
+    const pid = (game && game.profile) || st.profile;
+    const v = run ? run.values : reduced ? values('silent') : values(pid);
+    const m = sim(v, run ? 1 : game ? .85 : .15), temp = fault === 'hot' ? 88 : fault === 'fanfail' ? 74 : m.temp;
+    const out = { gpu_temp_c: temp, cpu_temp_c: 40 + Math.round(temp / 5), gpu_clock_mhz: m.clk, gpu_busy_pct: m.gpu, gpu_power_w: m.ppt,
+      fan_rpm: fault === 'nofan' ? null : fault === 'fanfail' ? 0 : 1100 + Math.round((temp - 45) * 32),
+      cpu_pct: Math.round((game ? 32 : 4) + Math.random() * 6), ram_used_mb: game ? 9800 : 3900, ram_total_mb: 15625,
+      t: Date.now() / 1000, simulated: true };
+    out.missing = Object.keys(out).filter(k => out[k] === null);
+    return out;
+  }
+  const effId = () => (game && game.profile) || st.profile;
+  function thermalReduce(reason) {
+    if (run) { clearInterval(run.timer); run = null; endTrial(); emit('testFinished', { passed: false, reason: 'thermal', cancelled: true }); }
+    const pid = effId(), k = slotIdx(pid);
+    if (k !== null && st.slots[k]) {
+      if (st.slots[k].state === 'validated') st.slots[k].state = 'tested';      /* it ran too hot */
+      if (st.lkg === pid) st.lkg = 'balanced';
+      if (st.profile === pid) st.profile = 'balanced';
+      if (game && game.profile === pid) game.profile = st.profile;
+      delete flags.provisional;
+    }
+    reduced = true; apply(values('silent'));
+  }
+  function thermalRecover() { reduced = false; try { applyProfile(effId()); } catch (e) { /* reported by actual */ } }
+  function thermalNotify(ev) { thNotice = ev; emit('thermal', ev); emit('state', state()); }
+  function thermalTick() {
+    const now = performance.now() / 1000, m = sample(), t = m.gpu_temp_c, rpm = m.fan_rpm;
+    th.hot = t >= TH.warn ? (th.hot ?? now) : null; th.vhot = t >= TH.reduce ? (th.vhot ?? now) : null; th.cool = t <= TH.recover ? (th.cool ?? now) : null;
+    if (rpm !== null) { if (rpm > 0) { th.fanSeen = true; th.fanFailed = false; } else if (th.fanSeen && t >= TH.fanMin) th.fanFailed = true; }
+    if (th.level === 'normal' && th.hot !== null && now - th.hot >= TH.warnS * TK) { th.level = 'warning'; th.reason = 'temperature'; thermalNotify({ level: 'warning', reason: 'temperature', gpu_temp_c: t }); }
+    if (th.level !== 'reduced') {
+      if (th.fanFailed || (th.vhot !== null && now - th.vhot >= TH.reduceS * TK)) {
+        th.level = 'reduced'; th.reason = th.fanFailed ? 'fan' : 'temperature'; th.crit = false;
+        thermalReduce(th.reason); thermalNotify({ level: 'reduced', reason: th.reason, gpu_temp_c: t });
+      } else if (th.level === 'warning' && th.hot === null) { th.level = 'normal'; th.reason = null; thermalNotify({ level: 'normal', gpu_temp_c: t }); }
+    } else {
+      if (t >= TH.critical && !th.crit) { th.crit = true; thermalNotify({ level: 'critical', reason: th.reason, gpu_temp_c: t }); }
+      if (th.cool !== null && now - th.cool >= TH.recoverS * TK && !th.fanFailed) {
+        th.level = 'normal'; th.reason = null; thermalRecover(); thermalNotify({ level: 'normal', gpu_temp_c: t, back: effId() });
+      }
+    }
+    /* one read every 5 s at rest (like stoned); a fast cadence only while something is hot */
+    const alert = th.level !== 'normal' || th.hot !== null || th.vhot !== null || th.fanFailed || (rpm === 0 && th.fanSeen);
+    thTimer = setTimeout(thermalTick, alert ? 100 : 5000);
+  }
+  let thTimer = setTimeout(thermalTick, 5000);
+  function state() {
+    return JSON.parse(JSON.stringify({
+      profile: st.profile, provisional: !!flags.provisional, last_known_good: st.lkg, safe_mode: st.safe, safe_reason: st.safeReason,
+      fail_count: st.fails, last_failure: st.last_failure, per_game: st.per_game, game,
+      slots: st.slots.map((s, k) => s ? { ...s, id: 'c' + (k + 1) } : { id: 'c' + (k + 1), state: 'empty' }),
+      testing: run && { slot: run.slot, level: run.level }, pending_result: pending, notice, actual: actual(), tests: st.tests.slice(-3),
+      thermal: { level: th.level, reason: th.reason, reduced, last: thNotice }, telemetry: { rate_ms: sub ? RATES[sub] : 0 },
+      games: { source: 'steam', running: session ? session.appid : null, seconds: session ? Math.round((performance.now() - session.t0) / 1000) : null }
+    }));
+  }
+  function endTrial() { try { applyProfile(st.lkg); notice = null; } catch (e) { notice = e.code; } delete flags.trial; }
+  /* BEFORE / AFTER (stoned: stability.compare). Sustained GPU clock, temperature, power and
+     time throttled; not FPS, which only exist inside a game (MangoHud). */
+  function compare(b, a) {
+    if (!b || !b.median_clock_mhz || a.median_clock_mhz == null) return { verdict: 'insufficient' };
+    const gain = Math.round(1000 * (a.median_clock_mhz - b.median_clock_mhz) / b.median_clock_mhz) / 10;
+    const thr = (a.throttle_pct || 0) - (b.throttle_pct || 0);
+    const verdict = thr >= 10 || gain < 0 ? 'worse' : gain < 2 ? 'no_gain' : 'better';
+    return { verdict, clock_gain_pct: gain, temp_delta_c: a.max_temp_c - b.max_temp_c, power_delta_w: a.avg_power_w - b.avg_power_w,
+      throttle_delta_pts: thr, baseline_profile: b.profile, level: a.level };
+  }
+  const result = (slot, level, v, t) => ({ slot, level, passed: true, reason: null, max_temp_c: t.temp, median_clock_mhz: t.clk,
+    avg_power_w: t.ppt, throttle_pct: t.clk < .95 * v.max && t.temp >= v.temp - 1 ? 60 : 0, values: v });
+  const baselineFor = level => [...st.tests].reverse().find(t => t.kind === 'baseline' && t.passed && t.level === level);
+  function finish(result) {
+    clearInterval(run.timer); const r = run; run = null;
+    if (r.baseline) { result.kind = 'baseline'; result.profile = r.baseline; st.tests = [...st.tests, result].slice(-10); return emit('testFinished', result); }
+    result.kind = 'slot';
+    if (result.passed) result.comparison = compare(baselineFor(r.level), result);
+    endTrial();
+    pending = result.passed ? { slot: r.slot, values: r.values, level: r.level } : null;
+    st.tests = [...st.tests, result].slice(-10);
+    emit('testFinished', result);
+  }
+  const api = {
+    on(ev, f) { (listeners[ev] = listeners[ev] || []).push(f); },
+    async getCapabilities() { await gate(false); return caps(); },
+    async getState() { await gate(false); return state(); },
+    async getMetrics() { await gate(false); return sample(); },
+    async subscribe(ctx) {
+      await gate(false);
+      if (!RATES[ctx]) fail('InvalidValue');
+      if (sub !== ctx) { clearInterval(telTimer); sub = ctx; telTimer = setInterval(() => { if (fault !== 'unavailable') emit('metrics', sample()); }, RATES[ctx]); }
+      emit('metrics', sample());
+      return { rate_ms: RATES[ctx] };
+    },
+    async unsubscribe() { clearInterval(telTimer); telTimer = 0; sub = null; return { rate_ms: 0 }; },
+    async homeReady() {
+      await gate(true);
+      if (!home) {
+        home = true;
+        if (!st.safe && safeToApply(st.profile) && st.profile !== 'balanced' && hasGov()) { try { applyProfile(st.profile); } catch (e) { /* stays at factory */ } }
+        setTimeout(() => { delete flags.boot; }, 60000);
+      }
+      return state();
+    },
+    async setProfile(id) {
+      await gate(true);
+      if (run) fail('Busy');
+      if (!isProfile(id)) fail('InvalidValue');
+      const k = slotIdx(id);
+      if (k !== null && st.slots[k].state === 'failed') fail('NotValidated');
+      canApply(values(id));
+      const prov = !safeToApply(id);
+      if (prov) flags.provisional = { profile: id }; else delete flags.provisional;   /* flag before hardware */
+      applyProfile(id);
+      st.profile = id; if (!prov) st.lkg = id;
+      return state();
+    },
+    async setSessionProfile(id) {
+      await gate(true);
+      if (!game) fail('InvalidValue', 'no game');
+      if (!isProfile(id)) fail('InvalidValue');
+      const k = slotIdx(id);
+      if (k !== null && st.slots[k].state === 'failed') fail('NotValidated');
+      canApply(values(id));
+      if (!safeToApply(id)) flags.provisional = { profile: id, appid: game.appid };
+      else if (flags.provisional && flags.provisional.appid === game.appid) delete flags.provisional;
+      applyProfile(id); game.profile = id;
+      return state();
+    },
+    async startTest(slot, v, level) {
+      await gate(true);
+      if (run) fail('Busy');
+      if (!TEST_MS[level] || ![0, 1, 2].includes(slot)) fail('InvalidValue');
+      if (!hasGov()) fail('Unsupported');
+      const vals = validate(v);
+      canApply(vals);
+      if (st.safe) fail('Unsupported', 'safe mode');
+      if (safeToApply(st.profile)) st.lkg = st.profile;          /* LAST KNOWN GOOD first */
+      flags.trial = { profile: 'c' + (slot + 1), values: vals, level };   /* then the flag */
+      apply(vals);                                                /* then the hardware */
+      pending = null;
+      const t0 = performance.now(), dur = TEST_MS[level] * (S.rm ? .5 : 1), target = sim({ n: 'draft', ...vals });
+      run = { slot, values: vals, level, t0, timer: setInterval(() => {
+        const p = Math.min(1, (performance.now() - t0) / dur);
+        emit('testProgress', { p, target, values: vals });
+        if (fault === 'gpuerr' && p > .6) return finish({ slot, level, passed: false, reason: 'gpu_errors', max_temp_c: target.temp, values: vals });
+        if (p >= 1) finish(result(slot, level, vals, target));
+      }, 120) };
+      return state();
+    },
+    async measureBaseline(level) {
+      await gate(true);
+      if (run) fail('Busy');
+      if (!TEST_MS[level]) fail('InvalidValue');
+      if (!hasGov()) fail('Unsupported');
+      if (reduced) fail('ThermalLimit');
+      const pid = effId(), vals = values(pid), t0 = performance.now(), dur = TEST_MS[level] * (S.rm ? .5 : 1), target = sim(vals);
+      run = { slot: null, values: vals, level, t0, baseline: pid, timer: setInterval(() => {
+        const p = Math.min(1, (performance.now() - t0) / dur);
+        emit('testProgress', { p, target, values: vals });
+        if (p >= 1) finish(result(null, level, vals, target));
+      }, 120) };
+      return state();
+    },
+    async cancelTest() {
+      await gate(true);
+      if (!run) return state();
+      clearInterval(run.timer);
+      st.tests = [...st.tests, { slot: run.slot, level: run.level, passed: false, reason: 'cancelled' }].slice(-10);
+      const wasBaseline = !!run.baseline; run = null;
+      if (!wasBaseline) endTrial();          /* a baseline never changed the hardware */
+      return state();
+    },
+    async saveTestResult() {
+      await gate(true);
+      if (!pending) fail('InvalidValue', 'nothing to save');
+      const { slot: k, values: v } = pending; let level = pending.level; pending = null;
+      const prev = st.slots[k];
+      if (prev && prev.state !== 'failed' && ['standard', 'extended'].includes(prev.test_level) && level === 'quick'
+        && ['max', 'min', 'temp', 'resp'].every(x => prev[x] === v[x])) level = prev.test_level;
+      st.slots[k] = { ...v, state: 'tested', test_level: level };   /* saved, never activated (P0-3) */
+      const sid = 'c' + (k + 1);
+      if (st.lkg === sid) st.lkg = 'balanced';
+      if (st.profile === sid) { st.profile = st.lkg; try { applyProfile(st.profile); } catch (e) { notice = e.code; } }
+      return state();
+    },
+    async discardTestResult() { await gate(true); pending = null; return state(); },
+    async restoreDefaults() {
+      await gate(true);
+      if (run) { clearInterval(run.timer); run = null; delete flags.trial; }
+      delete flags.provisional; pending = null;
+      st.profile = st.lkg = 'balanced'; st.per_game = {}; st.fails = 0; st.safe = false; st.safeReq = false; st.safeReason = null;
+      if (hasGov()) Object.assign(gov, INITIAL);
+      return state();
+    },
+    async enterSafeMode() {
+      await gate(true);
+      if (run) { clearInterval(run.timer); run = null; endTrial(); }
+      pending = null; delete flags.provisional;
+      st.safeReq = true; st.safe = true; st.safeReason = 'manual';
+      if (!['silent', 'balanced'].includes(st.profile)) st.profile = 'balanced';      /* nothing above BALANCED */
+      if (game) game.profile = st.profile;
+      if (hasGov()) { Object.assign(gov, INITIAL); if (st.profile === 'silent') applyProfile('silent'); }
+      return state();
+    },
+    async exitSafeMode() {
+      await gate(true);
+      st.safeReq = false; st.safe = false; st.safeReason = null; st.fails = 0;
+      return state();
+    },
+    async setGameProfile(appid, id) {
+      await gate(true);
+      if (!/^\d+$/.test(appid)) fail('InvalidValue');
+      if (id === 'global' || id === '') delete st.per_game[appid];
+      else if (isProfile(id)) st.per_game[appid] = id; else fail('InvalidValue');
+      return state();
+    },
+    /* Game sessions are not announced by the UI: stoned detects them from Steam's
+       `reaper SteamLaunch AppId=N` process (games.py). Here sim.steamLaunch/steamExit play Steam. */
+    _gameStarted(appid) {
+      const id = st.safe ? null : st.per_game[appid];
+      game = { appid, profile: id || st.profile };
+      if (id && id !== st.profile && !run) {
+        const k = slotIdx(id);
+        if (k === null || st.slots[k].state !== 'failed') {
+          if (!safeToApply(id)) flags.provisional = { profile: id, appid };
+          try { applyProfile(id); } catch (e) { delete flags.provisional; game.profile = st.profile; }
+        }
+      }
+    },
+    _gameEnded(appid, normal) {
+      const prov = flags.provisional, same = !!game && game.appid === appid;
+      if (prov && same) {
+        const k = slotIdx(prov.profile), s = k !== null ? st.slots[k] : null;
+        if (s && normal && s.state === 'tested' && ['standard', 'extended'].includes(s.test_level)) {
+          s.state = 'validated';                                    /* STANDARD + one clean session */
+          if (st.profile === prov.profile) st.lkg = prov.profile;
+        }
+        if (prov.appid === appid || (s && s.state === 'validated')) delete flags.provisional;
+      }
+      if (same && game.profile !== st.profile) { try { applyProfile(st.profile); } catch (e) { /* reported by actual */ } }
+      game = null;
+    },
+    /* simulation only: the machine around stoned */
+    sim: {
+      /* Steam starts a game (reaper SteamLaunch AppId=N appears) */
+      steamLaunch(appid) { session = { appid, t0: performance.now() }; api._gameStarted(appid); emit('state', state()); },
+      /* the reaper process is gone: clean = long enough and no GPU error in the kernel log */
+      steamExit(appid) {
+        if (!session || session.appid !== appid) return;
+        const clean = performance.now() - session.t0 >= MIN_SESSION_MS && fault !== 'gpuerr';
+        session = null; api._gameEnded(appid, clean); emit('state', state()); return clean;
+      },
+      setFault(f) { fault = f; clearTimeout(thTimer); thTimer = setTimeout(thermalTick, 50); },
+      get fault() { return fault; },
+      crash() { if (run) { clearInterval(run.timer); run = null; } game = null; session = null; },   /* flags stay behind */
+      powerOff() { flags.clean = true; game = null; session = null; },                              /* orderly shutdown */
+      powerOn() {                                                                   /* stoned --recover */
+        const rep = { counted: false };
+        if (flags.clean) st.fails = 0;
+        else if (flags.trial || flags.provisional || flags.boot || slotIdx(st.profile) !== null) {
+          st.fails += 1; rep.counted = true;
+          let failed = flags.trial ? flags.trial.profile : null;
+          if (flags.provisional) {
+            const k = slotIdx(flags.provisional.profile);
+            if (k !== null && st.slots[k] && st.slots[k].state !== 'validated') { st.slots[k].state = 'failed'; failed = flags.provisional.profile; }
+          }
+          if (!failed && slotIdx(st.profile) !== null) failed = st.profile;
+          st.last_failure = { during: flags.trial ? 'test' : flags.provisional ? 'provisional' : 'boot', profile: failed };
+          if (!safeToApply(st.profile) || failed === st.profile) { if (st.lkg === failed) st.lkg = 'balanced'; st.profile = st.lkg; }
+        }
+        st.safeReason = st.safeReq ? 'manual' : st.fails >= 2 ? 'failures' : null;   /* stone.safe=1: not simulated */
+        st.safe = st.safeReason !== null;
+        if (!safeToApply(st.profile)) st.profile = st.lkg;
+        flags = { boot: true }; game = null; run = null; pending = null; home = false;
+        Object.assign(gov, INITIAL);                                                /* governor restarts from its file */
+        reduced = false; th = { ...th, level: 'normal', reason: null, hot: null, vhot: null, cool: null, crit: false };
+        rep.safe = st.safe; rep.reason = st.safeReason; rep.failure = st.last_failure;
+        return rep;
+      },
+      get telemetryRate() { return sub ? RATES[sub] : 0; },
+      wipe() { reduced = false; th = { level: 'normal', reason: null, hot: null, vhot: null, cool: null, fanSeen: false, fanFailed: false, crit: false }; st = blank(); flags = { clean: true }; game = null; if (run) clearInterval(run.timer); run = null; pending = null; Object.assign(gov, INITIAL); }
+    }
+  };
+  return api;
+})();
+const PerfAPI = SimStoned;
+
+const noLimitText = () => S.actual && S.actual.error === 'Unsupported' ? 'Regulador de GPU no detectado' : 'Servicio de rendimiento no disponible';
+function slotLabel(s) { return !s ? 'vacía' : s.state === 'validated' ? 'validado' : s.state === 'failed' ? 'falló' : 'provisional'; }
+/* The UI cache is rebuilt from what stoned returns; nothing here is set from a request. */
+function adopt(st) {
+  if (!st || st.profile === undefined) return;
+  S.prof = st.profile; S.lkg = st.last_known_good; S.safeMode = st.safe_mode; S.actual = st.actual; S.game = st.game || null;
+  S.provisional = st.provisional; S.pending = st.pending_result || null; S.thermal = st.thermal || null;
+  S.safeReason = st.safe_reason || null;
+  const sb = document.getElementById('safeBadge'); if (sb) sb.hidden = !st.safe_mode;
+  st.slots.forEach((s, k) => { slots[k] = s.state === 'empty' ? null : { max: s.max, min: s.min, temp: s.temp, resp: s.resp, state: s.state, test_level: s.test_level }; });
+  G.forEach(g => { g.perf = st.per_game[g.appid] || null; });
+}
+async function api(method, ...args) {
+  try { const st = await PerfAPI[method](...args); adopt(st); return st; }
+  catch (e) {
+    if (!(e instanceof PerfError)) throw e;
+    if (e.code === 'ServiceUnavailable') S.actual = { error: 'ServiceUnavailable' };
+    play('error'); toast(ERR_TEXT[e.code] || e.message, false);
+    return null;
+  }
+}
+/* ---------- Readings: stoned samples only while something on screen shows them ---------- */
+const nv = (v, u) => v === null || v === undefined ? '—' : `${v}${u}`;
+function readingsText(m) {
+  if (!m) return 'Lecturas: esperando al servicio de rendimiento';
+  return `GPU ${nv(m.gpu_temp_c, ' °C')} · CPU ${nv(m.cpu_temp_c, ' °C')} · ${nv(m.gpu_clock_mhz, ' MHz')} · uso GPU ${nv(m.gpu_busy_pct, ' %')} · consumo GPU ${nv(m.gpu_power_w, ' W')} · ventilador ${nv(m.fan_rpm, ' RPM')}${m.simulated ? ' · lecturas simuladas' : ''}`;
+}
+let telCtx = null;
+function telemetrySync() {
+  const want = ['perf', 'tuning'].includes(S.screen) ? 'performance_center' : (S.tech && !$('#metrics').hidden ? 'overlay' : null);
+  if (want === telCtx) return;
+  telCtx = want;
+  (want ? PerfAPI.subscribe(want) : PerfAPI.unsubscribe()).catch(() => { telCtx = null; });
+}
+PerfAPI.on('state', st => adopt(st));
+PerfAPI.on('metrics', m => {
+  S.metrics = m;
+  const r = $('#pread'); if (r) r.textContent = readingsText(m);
+  const tr = $('#tread'); if (tr) tr.innerHTML = tuningReadings(m);
+  if (S.tech && !$('#metrics').hidden) metricsTick();
+});
+PerfAPI.on('thermal', ev => {
+  api('getState').then(() => {
+    const back = ev.back ? ` Vuelve ${profOf(ev.back).n}.` : '';
+    const msg = { warning: `STONE MACHINE se está calentando (GPU ${ev.gpu_temp_c} °C). Revisa que la ventilación no esté tapada`,
+      reduced: ev.reason === 'fan' ? 'El ventilador no gira: STONE bajó a SILENT. Revisa el ventilador antes de seguir jugando'
+        : `Temperatura alta (GPU ${ev.gpu_temp_c} °C): STONE bajó a SILENT hasta que se enfríe`,
+      critical: `GPU a ${ev.gpu_temp_c} °C. Si sigue subiendo, la placa se apagará sola para protegerse. Apaga la consola y revisa la ventilación`,
+      normal: `La temperatura volvió a la normalidad.${back}` }[ev.level];
+    if (msg) { if (ev.level !== 'normal') play('error'); toast(msg, ev.level === 'normal'); }
+    if (S.screen === 'perf') $('#perf .pstatus').innerHTML = statusLine(S.prof);
+  });
+});
+function tuningReadings(m) {
+  if (!m) return '<div class="kv"><span>Lecturas</span><span>esperando…</span></div>';
+  return [['GPU', nv(m.gpu_temp_c, ' °C')], ['CPU', nv(m.cpu_temp_c, ' °C')], ['Frecuencia GPU', nv(m.gpu_clock_mhz, ' MHz')], ['Consumo GPU', nv(m.gpu_power_w, ' W')], ['Ventilador', nv(m.fan_rpm, ' RPM')]]
+    .map(([l, v]) => `<div class="kv"><span>${l}</span><b>${v}</b></div>`).join('') + (m.simulated ? '<div class="kv"><span>Datos</span><span>simulados</span></div>' : '');
+}
+const refreshCaps = () => PerfAPI.getCapabilities().then(c => { S.caps = c; }).catch(() => { S.caps = null; });
+
+const SIZES = ['Normal', '1.25×', '1.5×'];
+
+/* ---------- Example library ---------- */
+const G = [
+  {n:'Marea Lenta', o:'Steam', h:42, last:'Hace 12 min', ach:[24,50], sz:'38 GB', inst:true, scene:'sea', sky:['#8a8770','#c47a1c'], gr:['#2a2a2b','#6b4416']},
+  {n:'Basalto', o:'Steam', h:18, last:'Ayer', ach:[11,40], sz:'22 GB', inst:true, scene:'mount', sky:['#1b2230','#4d5a6b'], gr:['#0d0f12','#20252c']},
+  {n:'Órbita Norte', o:'Heroic · GOG', h:7, last:'Hace 3 días', ach:null, sz:'14 GB', inst:true, scene:'space', sky:['#030305','#0b0b12'], gr:['#a39582','#5a5046']},
+  {n:'La Última Sala', o:'Steam', h:3, last:'La semana pasada', ach:[2,30], sz:'9 GB', inst:true, scene:'grid', sky:['#000000','#0a0a0a'], gr:['#d8d8d4','#9a9a96']},
+  {n:'Polvo Rojo', o:'Heroic · Epic', h:26, last:'Hace 2 semanas', ach:null, sz:'61 GB', inst:true, scene:'desert', sky:['#d9a77a','#b5502c'], gr:['#5a2414','#8a3a1e']},
+  {n:'Vigía', o:'Emulación', h:11, last:'Hace 1 mes', ach:null, sz:'2 GB', inst:true, scene:'fog', sky:['#c9ccc8','#e9e6dc'], gr:['#7d8079','#a8aaa3']},
+  {n:'Cartógrafo', o:'Steam', h:64, last:'Hace 2 meses', ach:[38,45], sz:'27 GB', inst:true, scene:'dawn', sky:['#c8c3ad','#f2e3a7'], gr:['#3d3121','#6e5a35']},
+  {n:'Sal y Hierro', o:'Steam', h:0, last:'Nunca', ach:[0,60], sz:'44 GB', inst:false, scene:'sea', sky:['#52677a','#a7b6bf'], gr:['#18222b','#3c4f5d']},
+  {n:'Umbral', o:'Emulación', h:2, last:'Hace 4 meses', ach:null, sz:'1 GB', inst:true, scene:'grid', sky:['#0b0710','#1d1424'], gr:['#6a5a7a','#3a2f45']},
+  {n:'Ceniza', o:'Heroic · Epic', h:0, last:'Nunca', ach:null, sz:'52 GB', inst:false, scene:'mount', sky:['#3a3634','#7a6f66'], gr:['#141212','#2b2725']},
+  {n:'Los Faros', o:'Steam', h:9, last:'Hace 5 meses', ach:[5,20], sz:'6 GB', inst:true, scene:null, fav:false},
+  {n:'Atlas Mudo', o:'Heroic · GOG', h:31, last:'Hace 6 meses', ach:null, sz:'18 GB', inst:true, scene:'desert', sky:['#e6d2a8','#c98f4c'], gr:['#6d4b28','#a97a45'], fav:true}
+];
+G.forEach((g, i) => { g.i = i; g.appid = String(3100100 + i * 7); /* AppID ficticio */ if (g.fav === undefined) g.fav = (i === 0 || i === 6); });
+let recent = [0, 1, 2, 3, 4, 5];
+
+/* ---------- Generated artwork (stand-ins for real game art) ---------- */
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function paint(g, w, h, hy) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'), R = rng(g.i * 97 + 13), Y = h * hy;
+  let sg = x.createLinearGradient(0, 0, 0, Y); sg.addColorStop(0, g.sky[0]); sg.addColorStop(1, g.sky[1]);
+  x.fillStyle = sg; x.fillRect(0, 0, w, Y + 1);
+  let gg = x.createLinearGradient(0, Y, 0, h); gg.addColorStop(0, g.gr[1]); gg.addColorStop(1, g.gr[0]);
+  x.fillStyle = gg; x.fillRect(0, Y, w, h - Y);
+  const s = g.scene;
+  if (s === 'space') {
+    for (let k = 0; k < w * h / 900; k++) { x.fillStyle = `rgba(255,255,255,${R() * .7})`; x.fillRect(R() * w, R() * h, 1.2, 1.2); }
+    const r = h * .9; x.fillStyle = g.gr[0]; x.beginPath(); x.arc(w * .82, h * 1.12, r, 0, Math.PI * 2); x.fill();
+    const pg = x.createRadialGradient(w * .62, h * .5, 0, w * .82, h * 1.12, r); pg.addColorStop(0, 'rgba(255,240,220,.35)'); pg.addColorStop(1, 'rgba(0,0,0,.5)');
+    x.fillStyle = pg; x.beginPath(); x.arc(w * .82, h * 1.12, r, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#e8e4dc'; x.beginPath(); x.arc(w * .42, h * .28, h * .035, 0, Math.PI * 2); x.fill();
+  } else if (s === 'grid') {
+    x.strokeStyle = 'rgba(0,0,0,.85)'; x.lineWidth = Math.max(2, w / 300);
+    for (let k = 0; k < 9; k++) { const t = Math.pow(k / 8, 2.2), yy = Y + (h - Y) * t; x.beginPath(); x.moveTo(0, yy); x.lineTo(w, yy); x.stroke(); }
+    for (let k = -10; k <= 10; k++) { x.beginPath(); x.moveTo(w / 2 + k * w * .02, Y); x.lineTo(w / 2 + k * w * .22, h); x.stroke(); }
+    x.fillStyle = g.sky[1]; x.fillRect(w * .44, Y - h * .09, w * .12, h * .09);
+  } else if (s === 'desert' || s === 'dawn' || s === 'fog') {
+    const sx = w * (.3 + R() * .4), sy = Y - h * .14;
+    const glow = x.createRadialGradient(sx, sy, 0, sx, sy, h * .6); glow.addColorStop(0, 'rgba(255,248,225,.75)'); glow.addColorStop(1, 'rgba(255,248,225,0)');
+    x.fillStyle = glow; x.fillRect(0, 0, w, h);
+    x.fillStyle = '#fffaf0'; x.beginPath(); x.arc(sx, sy, h * .018, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(0,0,0,.28)';
+    for (let k = 0; k < 3; k++) { const bx = R() * w, bw = w * (.08 + R() * .12); x.beginPath(); x.ellipse(bx, Y + 2, bw, h * .012, 0, Math.PI, 0); x.fill(); }
+    if (s === 'fog') { const f = x.createLinearGradient(0, Y - h * .2, 0, Y + h * .1); f.addColorStop(0, 'rgba(240,240,236,0)'); f.addColorStop(.6, 'rgba(240,240,236,.7)'); f.addColorStop(1, 'rgba(240,240,236,0)'); x.fillStyle = f; x.fillRect(0, 0, w, h); }
+  } else if (s === 'mount') {
+    x.fillStyle = 'rgba(255,255,255,.06)';
+    for (let k = 0; k < w * h / 4000; k++) x.fillRect(R() * w, R() * Y * .7, 1, 1);
+    for (let layer = 0; layer < 3; layer++) {
+      x.fillStyle = layer === 0 ? 'rgba(80,90,105,.55)' : layer === 1 ? 'rgba(40,46,56,.85)' : g.gr[0];
+      x.beginPath(); x.moveTo(0, h); let yy = Y - h * (.18 - layer * .05);
+      for (let px = 0; px <= w; px += w / 24) { yy += (R() - .5) * h * .07; yy = Math.min(Y + h * .02, Math.max(Y - h * .3, yy)); x.lineTo(px, yy); }
+      x.lineTo(w, h); x.closePath(); x.fill();
+    }
+  } else if (s === 'sea') {
+    const sx = w * .5, sy = Y;
+    const glow = x.createRadialGradient(sx, sy, 0, sx, sy, w * .6); glow.addColorStop(0, 'rgba(255,200,120,.45)'); glow.addColorStop(1, 'rgba(255,200,120,0)');
+    x.fillStyle = glow; x.fillRect(0, 0, w, h);
+    for (let k = 0; k < 46; k++) {
+      const t = k / 46, yy = Y + (h - Y) * Math.pow(t, 1.6), a = .1 + t * .35;
+      x.strokeStyle = k % 2 ? `rgba(0,0,0,${a})` : `rgba(${parseInt(g.sky[1].slice(1, 3), 16)},${parseInt(g.sky[1].slice(3, 5), 16)},${parseInt(g.sky[1].slice(5, 7), 16)},${a * .9})`;
+      x.lineWidth = 1 + t * h / 160; x.beginPath();
+      for (let px = 0; px <= w; px += 8) { const yo = Math.sin(px / (30 + t * 60) + k) * (1 + t * 5); px ? x.lineTo(px, yy + yo) : x.moveTo(px, yy + yo); }
+      x.stroke();
+    }
+  }
+  const v = x.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .3, w / 2, h / 2, Math.max(w, h) * .8);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.35)'); x.fillStyle = v; x.fillRect(0, 0, w, h);
+  return c;
+}
+function spaced(x, text, cx, y, track) {
+  const chars = [...text]; const widths = chars.map(ch => x.measureText(ch).width);
+  const total = widths.reduce((a, b) => a + b, 0) + track * (chars.length - 1);
+  let px = cx - total / 2; chars.forEach((ch, k) => { x.fillText(ch, px, y); px += widths[k] + track; });
+}
+/* Art cache. HOT: what is on screen (generated first). WARM: recent items kept as compressed JPEG strings in a small LRU.
+   COLD: everything else, never generated until needed. Generation runs in idle time, never all at once. */
+const ART = { caps: new Map(), heroes: new Map(), queue: [], queued: new Set(), busy: false };
+const CAP_MAX = 48, HERO_MAX = 8;
+const lruGet = (m, k) => { if (!m.has(k)) return null; const v = m.get(k); m.delete(k); m.set(k, v); return v; };
+const lruSet = (m, k, v, max) => { m.delete(k); m.set(k, v); while (m.size > max) m.delete(m.keys().next().value); };
+const capOf = g => g.scene ? lruGet(ART.caps, g.i) : null;
+const heroOf = g => g.scene ? lruGet(ART.heroes, g.i) : null;
+function makeHero(g) {
+  const hero = paint(g, 1280, 720, .58), small = document.createElement('canvas'); small.width = 64; small.height = 36;
+  small.getContext('2d').drawImage(hero, 0, 0, 64, 36);
+  return { hero: hero.toDataURL('image/jpeg', .86), blur: small.toDataURL('image/png') };
+}
+function makeCap(g) {
+  const cap = paint(g, 400, 600, .5), x = cap.getContext('2d');
+  const fade = x.createLinearGradient(0, 380, 0, 600); fade.addColorStop(0, 'rgba(10,10,11,0)'); fade.addColorStop(1, 'rgba(10,10,11,.85)');
+  x.fillStyle = fade; x.fillRect(0, 380, 400, 220);
+  x.fillStyle = '#ede9e3'; x.font = '300 30px Jost, Futura, sans-serif'; x.textBaseline = 'alphabetic';
+  const words = g.n.toUpperCase().split(' ');
+  const lines = words.length > 2 ? [words.slice(0, 2).join(' '), words.slice(2).join(' ')] : [words.join(' ')];
+  lines.forEach((ln, k) => spaced(x, ln, 200, 540 - (lines.length - 1 - k) * 42, 7));
+  return cap.toDataURL('image/jpeg', .86);
+}
+function want(g, kind, urgent) {
+  if (!g || !g.scene) return;
+  const key = kind + g.i, have = kind === 'cap' ? ART.caps.has(g.i) : ART.heroes.has(g.i);
+  if (have) return;
+  if (ART.queued.has(key)) { if (urgent) { const k = ART.queue.findIndex(q => q[0] === kind && q[1] === g); if (k > 0) ART.queue.unshift(ART.queue.splice(k, 1)[0]); } return; }
+  ART.queued.add(key); if (urgent) ART.queue.unshift([kind, g]); else ART.queue.push([kind, g]);
+  pumpArt();
+}
+const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 100 })) : (f => setTimeout(() => f({ timeRemaining: () => 10 }), 16));
+function pumpArt() { if (ART.busy || !ART.queue.length) return; ART.busy = true; idle(workArt); }
+function workArt(dl) {
+  do {
+    const [kind, g] = ART.queue.shift(); ART.queued.delete(kind + g.i);
+    if (kind === 'cap') lruSet(ART.caps, g.i, makeCap(g), CAP_MAX); else lruSet(ART.heroes, g.i, makeHero(g), HERO_MAX);
+    artReady(kind, g);
+  } while (ART.queue.length && dl.timeRemaining() > 12);
+  ART.busy = false; pumpArt();
+}
+function artReady(kind, g) {
+  if (kind === 'cap') {
+    const c = ART.caps.get(g.i);
+    document.querySelectorAll(`.card.cap[data-g="${g.i}"], #library .card[data-g="${g.i}"]`).forEach(el => { el.style.backgroundImage = `url(${c})`; });
+    return;
+  }
+  const h = ART.heroes.get(g.i);
+  document.querySelectorAll(`.card.hero[data-g="${g.i}"]`).forEach(el => { el.style.backgroundImage = `url(${h.hero})`; });
+  if (S.bgFor && S.bgFor.i === g.i) bgGame(g, S.bgFor.sharp, S.bgFor.veil);
+  if (S.running === g.i && (S.screen === 'game' || S.screen === 'quick')) $('#game .art').style.backgroundImage = `url(${h.hero})`;
+}
+/* Game mode: keep only the running game's hero; caps stay as small compressed strings for an instant return. */
+function trimArt() { for (const k of [...ART.heroes.keys()]) if (k !== S.running) ART.heroes.delete(k); }
+
+/* ---------- Sound ----------
+   Only event sounds: soft sine tones for buttons, plus startup and shutdown. No background sound.
+   Everything is synthesized; nothing is loaded. */
+let AC = null, master = null, uiBus = null, verb = null;
+function impulse(sec, decay) {
+  const n = Math.floor(AC.sampleRate * sec), b = AC.createBuffer(2, n, AC.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); let lp = 0; for (let k = 0; k < n; k++) { lp = lp * .6 + (Math.random() * 2 - 1) * .4; d[k] = lp * Math.pow(1 - k / n, decay); } }
+  return b;
+}
+function audio() {
+  if (AC || !S.sound) return AC;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = S.vol; master.connect(AC.destination);
+    verb = AC.createConvolver(); verb.buffer = impulse(2.4, 2.6);
+    const wet = AC.createGain(); wet.gain.value = .55; verb.connect(wet); wet.connect(master);
+    uiBus = AC.createGain(); uiBus.gain.value = 1; uiBus.connect(master);
+  } catch (e) { AC = null; }
+  return AC;
+}
+/* A soft tone: sine by default, gentle attack, exponential release, low-passed, with a reverb send. */
+/* Audio sleeps only where no interface sound is expected: during a game and in deep idle. Menus keep it running. */
+function audioSleep() { if (AC && AC.state === 'running') AC.suspend(); }
+function tone(freq, dur, gain, o = {}) {
+  if (!S.sound || !audio()) return;
+  /* a suspended context is resumed first and the tone scheduled once it runs, so no sound is cut */
+  if (AC.state !== 'running') { AC.resume().then(() => tone(freq, dur, gain, o)); return; }
+  const t = AC.currentTime + (o.delay || 0), osc = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter(), send = AC.createGain();
+  osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(freq, t);
+  if (o.glide) osc.frequency.exponentialRampToValueAtTime(o.glide, t + dur * .8);
+  f.type = 'lowpass'; f.frequency.value = o.lp || 1600; f.Q.value = .3;
+  const a = o.attack || .012;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  send.gain.value = o.wet === undefined ? .35 : o.wet;
+  osc.connect(f); f.connect(g); g.connect(uiBus); g.connect(send); send.connect(verb);
+  osc.start(t); osc.stop(t + dur + .1);
+}
+const SND = {
+  nav: () => tone(740, .11, .032, { glide: 720, attack: .006, lp: 2200, wet: .25 }),
+  edge: () => tone(196, .18, .03, { glide: 174, attack: .01, lp: 700, wet: .15 }),
+  select: () => { tone(440, .42, .05, { attack: .01, wet: .4 }); tone(659, .5, .022, { attack: .014, delay: .015, wet: .5 }); },
+  back: () => { tone(392, .3, .035, { glide: 330, attack: .01, wet: .3 }); },
+  notify: () => { tone(880, 1.1, .03, { attack: .02, lp: 3000, wet: .7 }); tone(1318, 1.3, .012, { attack: .03, delay: .04, lp: 3600, wet: .8 }); },
+  error: () => { tone(233, .22, .04, { attack: .01, lp: 900 }); tone(220, .3, .04, { attack: .01, lp: 900, delay: .18 }); },
+  start: () => {
+    tone(55, 3.4, .12, { glide: 110, attack: 1.2, lp: 500, wet: .6 });
+    tone(82.5, 3.2, .05, { type: 'triangle', glide: 110, attack: 1.4, lp: 600, wet: .6, delay: .3 });
+    tone(880, 2.2, .022, { attack: .04, lp: 3200, wet: .9, delay: 1.7 });
+    tone(1320, 2.4, .009, { attack: .06, lp: 3600, wet: .9, delay: 1.75 });
+  },
+  stop: () => { tone(330, 2, .025, { glide: 165, attack: .2, wet: .7 }); tone(110, 2.6, .07, { glide: 55, attack: .3, lp: 400, wet: .6 }); }
+};
+const play = k => { try { SND[k](); } catch (e) {} };
+
+/* ---------- Helpers ---------- */
+const wait = ms => new Promise(r => setTimeout(r, ms * (S.rm ? .35 : 1)));
+function stageBox(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== stage) {
+    x += n.offsetLeft; y += n.offsetTop;
+    if (n.dataset && n.dataset.sx) x += +n.dataset.sx;
+    if (n.dataset && n.dataset.sy) y += +n.dataset.sy;
+    n = n.offsetParent;
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function setLine(x, y, w, opts = {}) {
+  line.classList.toggle('slow', !!opts.slow);
+  line.style.transform = `translate(${x}px,${y}px) scaleX(${Math.max(0, w) / 1920})`;
+  line.classList.toggle('off', !!opts.hidden);
+}
+function bump(dir) {
+  play('edge');
+  line.style.translate = `${dir * 6}px 0`;
+  setTimeout(() => { line.style.translate = ''; }, 160);
+}
+let toastT = 0;
+function toast(msg, sound) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  const p = $('#pulse'); p.classList.remove('go'); void p.offsetWidth; p.classList.add('go');
+  if (sound !== false) play('notify');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2800);
+}
+const glyph = k => `<span class="g">${k}</span>`;
+let hintIdle = 0;
+function hints(list) {
+  const h = $('#hints');
+  h.innerHTML = list.map(([k, l]) => `<div>${glyph(k)}${l}</div>`).join('');
+  h.classList.remove('hide'); clearTimeout(hintIdle);
+  hintIdle = setTimeout(() => h.classList.add('hide'), 5000);
+}
+function showHints() { $('#hints').classList.remove('hide'); clearTimeout(hintIdle); hintIdle = setTimeout(() => $('#hints').classList.add('hide'), 5000); }
+let bgFlip = false, bgCur = '', bgTok = 0;
+function setBg(css, veil, keepFor) {
+  if (!keepFor) S.bgFor = null;
+  $('#veil').className = veil === undefined ? 'none' : veil;
+  if (css === bgCur) return; bgCur = css;
+  const a = bgFlip ? $('#bgA') : $('#bgB'), b = bgFlip ? $('#bgB') : $('#bgA');
+  a.style.backgroundImage = css || 'none'; a.style.backgroundColor = css ? '' : 'transparent';
+  a.classList.add('on'); b.classList.remove('on'); bgFlip = !bgFlip;
+  /* after the crossfade, the hidden layer lets go of its image so only one full-screen picture stays decoded */
+  const tok = ++bgTok; setTimeout(() => { if (tok === bgTok) b.style.backgroundImage = 'none'; }, S.rm ? 400 : 1000);
+}
+function bgGame(g, sharp, veil) {
+  S.bgFor = { i: g.i, sharp, veil };
+  if (!g.scene) return setBg(neutralBg, veil, true);
+  const h = heroOf(g);
+  if (h) return setBg(`url(${sharp ? h.hero : h.blur})`, veil, true);
+  $('#veil').className = veil; want(g, 'hero', true);
+}
+const neutralBg = 'linear-gradient(to bottom, #1c1d1f 0%, #141517 60%, #0a0a0b 100%)';
+function chrome(on, tabsOn) {
+  $('#hdr').classList.toggle('hide', !on);
+  $('#tabs').classList.toggle('hide', !tabsOn);
+  [...$('#tabs').children].forEach((s, k) => s.classList.toggle('cur', k === S.section));
+}
+function clock() { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }); }
+/* one wake-up per minute, aligned to the minute change */
+(function tickClock() { clock(); setTimeout(tickClock, 60050 - Date.now() % 60000); })();
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  telemetrySync();
+}
+
+/* ---------- Focus grids ---------- */
+/* A screen's nav: rows of elements, the focused {r,c}, per-row memory, and how its line is placed. */
+let NAV = null;
+function mkNav(rows, opt = {}) { return { rows, r: opt.r || 0, c: opt.c || 0, mem: rows.map(() => 0), place: opt.place, scroll: opt.scroll, onFocus: opt.onFocus, onA: opt.onA, wrapV: false }; }
+function focusEl() { return NAV && NAV.rows[NAV.r] && NAV.rows[NAV.r][NAV.c]; }
+let spreadEls = [];
+function applyFocus(opts = {}) {
+  if (!NAV) return;
+  if (NAV.ensure) NAV.ensure(NAV.r);
+  const el = focusEl(); if (!el) return;
+  if (NAV.scroll) NAV.scroll(el);
+  /* reads first (one layout), writes after: no forced layouts in between */
+  const b = stageBox(el);
+  const p = NAV.place ? NAV.place(el, b, NAV.r) : { x: b.x, y: b.y + b.h + 16, w: b.w };
+  const isCard = el.classList.contains('card'), grow = isCard ? el.offsetWidth * (S.rm ? 0 : 0.06) : 0;
+  document.querySelectorAll('.f').forEach(e => e.classList.remove('f'));
+  setLine(p.x, p.y, p.w, { slow: opts.slow });
+  el.classList.add('f');
+  spread(el, isCard, grow);
+  NAV.mem[NAV.r] = NAV.c;
+  if (NAV.onFocus) NAV.onFocus(el, NAV.r, NAV.c);
+}
+/* Keep the gap constant: cards after the focused one slide right by exactly what it grew. */
+function spread(el, isCard, grow) {
+  spreadEls.forEach(c => { c.style.translate = ''; }); spreadEls = [];
+  if (!isCard) return;
+  const row = NAV.rows[NAV.r], k = row.indexOf(el);
+  spreadEls = row.slice(k + 1); spreadEls.forEach(c => { c.style.translate = grow + 'px 0'; });
+}
+function move(dir) {
+  if (!NAV) return;
+  const rows = NAV.rows;
+  if (dir === 'left' || dir === 'right') {
+    const d = dir === 'left' ? -1 : 1, nc = NAV.c + d;
+    if (nc < 0 || nc >= rows[NAV.r].length) return bump(d);
+    NAV.c = nc; play('nav'); applyFocus(); return;
+  }
+  const d = dir === 'up' ? -1 : 1; let nr = NAV.r + d;
+  while (nr >= 0 && nr < rows.length && !rows[nr].length) nr += d;
+  if (nr < 0 || nr >= rows.length) { play('edge'); return; }
+  const cur = stageBox(focusEl()), cx = cur.x + cur.w / 2;
+  let best = 0, bd = 1e9;
+  rows[nr].forEach((el, k) => { const b = stageBox(el), dd = Math.abs(b.x + b.w / 2 - cx); if (dd < bd) { bd = dd; best = k; } });
+  NAV.r = nr; NAV.c = best; play('nav'); applyFocus();
+}
+
+/* ---------- HOME ---------- */
+let metaT = 0;
+function homeHTML() {
+  let cards = '', ctxRows;
+  if (S.section === 0) {
+    const g0 = G[recent[0]];
+    const h0 = heroOf(g0); if (!h0) want(g0, 'hero', true);
+    cards += `<div class="card hero" data-f data-g="${g0.i}" style="background-image:${h0 ? `url(${h0.hero})` : 'none'};background-color:var(--shale)">${S.running === g0.i ? '<span class="run">EN CURSO</span>' : ''}</div>`;
+    recent.slice(1).forEach(i => { const g = G[i], c = capOf(g); if (!c) want(g, 'cap'); cards += `<div class="card cap" data-f data-g="${i}" style="background-image:${c ? `url(${c})` : 'none'}"></div>`; });
+    cards += `<div class="card tile" data-f data-act="library">BIBLIOTECA</div>`;
+  } else if (S.section === 2) {
+    [['STEAM STORE', 'Tienda de Steam'], ['EPIC GAMES', 'A través de Heroic'], ['GOG', 'A través de Heroic'], ['NOVEDADES', 'Sin descargas pendientes']]
+      .forEach(([t, s]) => { cards += `<div class="card wide" data-f data-act="store" data-name="${t}"><b>${t}</b><span>${s}</span></div>`; });
+  } else {
+    [['VÍDEO', '[App de vídeo instalada]'], ['MÚSICA', '[App de música instalada]'], ['CAPTURAS', 'Galería de STONE']]
+      .forEach(([t, s]) => { cards += `<div class="card wide" data-f data-act="media" data-name="${t}"><b>${t}</b><span>${s}</span></div>`; });
+  }
+  const ico = {
+    lib: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="6" height="18"/><rect x="11" y="4" width="6" height="18"/><path d="M19 5l4 1-3 16-4-1"/></svg>',
+    exp: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><circle cx="13" cy="13" r="9"/><path d="M16.5 9.5l-2 5-5 2 2-5z"/></svg>',
+    set: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><path d="M4 7h18M4 13h18M4 19h18"/><rect x="8" y="5" width="4" height="4" fill="#141517"/><rect x="15" y="11" width="4" height="4" fill="#141517"/><rect x="6" y="17" width="4" height="4" fill="#141517"/></svg>',
+    pow: '<svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke-width="2" aria-hidden="true"><path d="M13 3v9"/><path d="M7.5 7a8 8 0 1 0 11 0"/></svg>'
+  };
+  return `<div class="clip"><div class="track" data-sx="0">${cards}</div></div>
+    <div class="horizon"></div>
+    <div class="ctx"><div class="kicker" id="hk"></div><div class="ctx-title" id="ht"></div><div class="meta" id="hm"></div></div>
+    <div class="sys">
+      <span class="txt-f" data-f data-act="library">${ico.lib}Biblioteca</span>
+      <span class="txt-f" data-f data-act="explore">${ico.exp}Explorar</span>
+      <span class="txt-f" data-f data-act="settings">${ico.set}Ajustes</span>
+      <span class="txt-f" data-f data-act="power">${ico.pow}Apagar</span>
+    </div>`;
+}
+function homeContext(el) {
+  const hk = $('#hk'), ht = $('#ht'), hm = $('#hm');
+  hm.classList.remove('on'); clearTimeout(metaT);
+  const gi = el.dataset.g;
+  if (gi !== undefined) {
+    const g = G[+gi], first = el.classList.contains('hero');
+    hk.innerHTML = first ? `CONTINUAR${S.running === g.i ? ' · <span class="now">EN CURSO</span>' : ''}` : 'RECIENTE';
+    ht.textContent = g.n;
+    hm.textContent = `${S.running === g.i ? 'Abierto ahora' : g.last} · ${g.h} h jugadas${g.o !== 'Steam' ? ' · ' + g.o : ''}`;
+    metaT = setTimeout(() => hm.classList.add('on'), S.rm ? 150 : 600);
+    bgGame(g, false, '');
+    [NAV && NAV.rows[0][NAV.c + 1], NAV && NAV.rows[0][NAV.c - 1]].forEach(nx => { if (nx && nx.dataset.g !== undefined) want(G[+nx.dataset.g], 'hero'); });
+  } else {
+    const a = el.dataset.act;
+    const label = { library: ['BIBLIOTECA', `${G.length} juegos de ejemplo`], explore: ['EXPLORAR', 'Tiendas y novedades'], settings: ['AJUSTES', 'Pantalla, audio, mandos y más'], power: ['APAGAR', 'Suspender, apagar o reiniciar'], store: [el.dataset.name, 'Se abre la tienda correspondiente'], media: [el.dataset.name, 'Aplicación multimedia'] }[a] || ['', ''];
+    hk.textContent = S.section === 2 ? 'EXPLORAR' : S.section === 3 ? 'MEDIA' : 'SISTEMA';
+    ht.textContent = label[0]; hm.textContent = label[1];
+    metaT = setTimeout(() => hm.classList.add('on'), S.rm ? 150 : 600);
+    if (el.closest('.sys') == null || S.section !== 0) setBg(neutralBg, '');
+  }
+}
+function enterHome(opts = {}) {
+  S.screen = 'home'; S.from = 'home';
+  if (S.section === 1) S.section = 0;
+  const h = $('#home'); h.innerHTML = homeHTML();
+  showScreen('home'); chrome(true, true);
+  const track = h.querySelector('.track');
+  const rows = [[...track.children], [...h.querySelectorAll('.sys [data-f]')]];
+  const prev = NAV && NAV.id === 'home' ? NAV : null;
+  NAV = mkNav(rows, {
+    r: opts.r ?? (prev ? prev.r : 0), c: opts.c ?? (prev ? prev.c : 0),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: 668, w: b.w * (S.rm ? 1 : 1.06) } : { x: b.x, y: b.y + b.h + 14, w: b.w },
+    scroll: el => {
+      if (!el.closest('.track')) return;
+      let sx = +track.dataset.sx; const l = el.offsetLeft, r = l + el.offsetWidth * 1.06, view = 1728;
+      if (l + sx < 0) sx = -l; else if (r + sx > view) sx = view - r;
+      track.dataset.sx = sx; track.style.transform = `translateX(${sx}px)`;
+    },
+    onFocus: homeContext
+  });
+  NAV.id = 'home';
+  if (NAV.c >= rows[NAV.r].length) NAV.c = rows[NAV.r].length - 1;
+  requestAnimationFrame(() => applyFocus({ slow: opts.slow }));
+  hints([['A', S.section === 0 ? 'Abrir' : 'Elegir'], ['LB RB', 'Sección'], ['Y', 'Buscar']]);
+}
+function homeA(el) {
+  const a = el.dataset.act;
+  if (el.dataset.g !== undefined) {
+    const g = G[+el.dataset.g];
+    if (S.running === g.i && el.classList.contains('hero')) { play('select'); return resumeGame(); }
+    play('select'); return enterDetail(g.i);
+  }
+  if (a === 'library') { play('select'); S.section = 1; return enterLibrary(); }
+  if (a === 'explore') { play('select'); S.section = 2; return enterHome({ r: 0, c: 0 }); }
+  if (a === 'settings') { play('select'); return enterSettings(); }
+  if (a === 'power') { play('select'); return openPower(); }
+  if (a === 'store') { play('select'); return toast(`${el.dataset.name}: se abre en Steam o Heroic (fuera del prototipo)`, false); }
+  if (a === 'media') { play('select'); return toast(`${el.dataset.name}: se abre la aplicación (fuera del prototipo)`, false); }
+}
+function section(d) {
+  const n = S.section + d;
+  if (n < 0 || n > 3) return bump(d);
+  play('nav'); S.section = n;
+  if (n === 1) enterLibrary(); else { if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 }); }
+}
+
+/* ---------- LIBRARY ---------- */
+const FILTERS = ['Todos', 'Instalados', 'Steam', 'Otros lanzadores', 'Emulación', 'Favoritos'];
+function libList() {
+  const f = S.filter;
+  return G.filter(g => f === 0 || (f === 1 && g.inst) || (f === 2 && g.o === 'Steam') || (f === 3 && g.o.startsWith('Heroic')) || (f === 4 && g.o === 'Emulación') || (f === 5 && g.fav))
+    .sort((a, b) => recent.indexOf(a.i) === -1 ? 1 : recent.indexOf(b.i) === -1 ? -1 : recent.indexOf(a.i) - recent.indexOf(b.i));
+}
+function enterLibrary(opts = {}) {
+  S.screen = 'library'; S.from = 'library'; S.section = 1;
+  const list = libList(), L = $('#library');
+  L.innerHTML = `<div class="filters">${FILTERS.map((f, k) => `<span class="txt-f${k === S.filter ? ' cur' : ''}" data-f data-filter="${k}">${f}</span>`).join('')}</div>
+    <div class="count">${list.length} juegos · Recientes</div>
+    <div class="gclip"><div class="grid" data-sy="0" style="height:${Math.ceil(list.length / 6) * LIB_ROW_H}px"></div></div>
+    ${list.length ? '' : '<div class="empty">No hay juegos con este filtro.</div>'}
+    <div class="sel" id="lsel"></div>`;
+  showScreen('library'); chrome(true, true); setBg(neutralBg, '');
+  /* Only the focused row and its neighbours exist in the DOM (at most 4 rows = 24 cards), whatever the library size. */
+  const grid = L.querySelector('.grid'), R = Math.ceil(list.length / 6), rendered = new Map();
+  const rows = [[...L.querySelectorAll('.filters [data-f]')]];
+  for (let k = 0; k < R; k++) rows.push([]);
+  const ensure = navR => {
+    const center = Math.max(0, navR - 1), lo = Math.max(0, center - 1), hi = Math.min(R - 1, center + 2);
+    for (const [k, els] of rendered) if (k < lo || k > hi) { els.forEach(e => e.remove()); rendered.delete(k); rows[k + 1] = []; }
+    let html = ''; const added = [];
+    for (let k = lo; k <= hi; k++) if (!rendered.has(k)) { html += list.slice(k * 6, k * 6 + 6).map((g, c) => libCard(g, k, c)).join(''); added.push(k); }
+    if (!html) return;
+    grid.insertAdjacentHTML('beforeend', html);
+    for (const k of added) { const els = [...grid.querySelectorAll(`.card[data-row="${k}"]`)]; rendered.set(k, els); rows[k + 1] = els; }
+  };
+  NAV = mkNav(rows, {
+    r: opts.r ?? (list.length ? 1 : 0), c: opts.c ?? (list.length ? 0 : S.filter),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: b.y + b.h + 6, w: b.w } : { x: b.x, y: b.y + b.h + 16, w: b.w * (S.rm ? 1 : 1.06) },
+    scroll: el => {
+      if (!el.closest('.grid')) return;
+      let sy = +grid.dataset.sy; const t = el.offsetTop, bot = t + el.offsetHeight + 24, view = 676;
+      if (t - 30 + sy < 0) sy = -(t - 4); else if (bot + sy > view) sy = view - bot;
+      grid.dataset.sy = sy; grid.style.transform = `translateY(${sy}px)`;
+    },
+    onFocus: (el) => {
+      const s = $('#lsel');
+      if (el.dataset.g !== undefined) { const g = G[+el.dataset.g]; s.textContent = `${g.n} · ${g.inst ? (g.h ? g.last + ' · ' + g.h + ' h' : 'Sin jugar') : 'No instalado · ' + g.sz} · ${g.o}`; }
+      else s.textContent = 'Filtrar la biblioteca';
+    }
+  });
+  NAV.ensure = ensure;
+  NAV.id = 'library';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', 'Abrir'], ['LB RB', 'Sección'], ['B', 'Volver']]);
+}
+const LIB_ROW_H = 437, LIB_COL_W = (1728 - 5 * 40) / 6;
+function libCard(g, row, col) {
+  const c = capOf(g); if (!c) want(g, 'cap');
+  const name = g.scene ? '' : `<span style="position:absolute;left:20px;right:20px;bottom:24px;font-family:var(--f-display);font-weight:300;letter-spacing:.2em;font-size:18px;color:var(--warm)">${g.n.toUpperCase()}</span>`;
+  return `<div class="card${g.inst ? '' : ' dim'}" data-f data-g="${g.i}" data-row="${row}" style="left:${(col * (LIB_COL_W + 40)).toFixed(2)}px;top:${row * LIB_ROW_H}px;background-image:${c ? `url(${c})` : 'none'}">${name}</div>`;
+}
+function libraryA(el) {
+  if (el.dataset.filter !== undefined) { play('select'); S.filter = +el.dataset.filter; return enterLibrary({ r: 0, c: S.filter }); }
+  play('select'); enterDetail(+el.dataset.g);
+}
+
+/* ---------- DETAIL ---------- */
+let curG = 0, installT = 0;
+function enterDetail(i, opts = {}) {
+  curG = i; const g = G[i], running = S.running === i;
+  S.screen = 'detail';
+  const prim = !g.inst ? 'INSTALAR' : running ? 'REANUDAR' : 'JUGAR';
+  const sec = [[g.ach ? `Logros ${g.ach[0]} / ${g.ach[1]}` : 'Logros', 'ach'], ['Opciones', 'opt'], [g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf']];
+  if (running) sec.push(['Cerrar juego', 'close']);
+  $('#detail').innerHTML = `
+    <div class="col"><div class="origin">${g.o}</div><h1>${g.n.toUpperCase()}</h1>
+      <div class="stats">${g.h ? g.h + ' h jugadas' : 'Sin jugar'} · Última sesión: ${running ? 'ahora' : g.last}${g.ach ? ` · Logros ${g.ach[0]} / ${g.ach[1]}` : ''}</div></div>
+    <div class="primary txt-f" data-f data-act="primary" id="dprim">${prim}</div>
+    <div class="second">${sec.map(([s, a]) => `<span class="txt-f" data-f data-act="${a}">${s}</span>`).join('')}</div>
+    <div class="info"><div><span>Tamaño</span><b>${g.sz}</b></div><div><span>Origen</span><b>${g.o}</b></div><div><span>Estado</span><b>${g.inst ? 'Instalado' : 'No instalado'}</b></div><div><span>Compatibilidad</span><b>[según el lanzador]</b></div></div>`;
+  showScreen('detail'); chrome(true, false);
+  bgGame(g, true, 'side');
+  const d = $('#detail');
+  NAV = mkNav([[d.querySelector('#dprim')], [...d.querySelectorAll('.second [data-f]')]], {
+    r: opts.r || 0, c: opts.c || 0,
+    place: (el, b, r) => ({ x: b.x, y: b.y + b.h + (r === 0 ? 16 : 12), w: b.w })
+  });
+  NAV.id = 'detail';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', prim.charAt(0) + prim.slice(1).toLowerCase()], ['B', 'Volver']]);
+}
+function detailA(el) {
+  const g = G[curG], a = el.dataset.act;
+  if (a === 'primary') {
+    if (!g.inst) return install(g);
+    play('select'); return S.running === g.i ? resumeGame() : launch(g);
+  }
+  if (a === 'ach') { play('select'); return toast(g.ach ? `${g.ach[0]} de ${g.ach[1]} logros desbloqueados` : 'Este lanzador no informa logros', false); }
+  if (a === 'opt') { play('select'); return toast('Opciones: propiedades del lanzador (fuera del prototipo)', false); }
+  if (a === 'fav') { play('select'); g.fav = !g.fav; enterDetail(curG, { r: 1, c: 2 }); return toast(g.fav ? 'Añadido a favoritos' : 'Quitado de favoritos', false); }
+  if (a === 'perf') {
+    play('nav'); const list = [null, ...usable()], k = list.indexOf(g.perf || null), next = list[(k + 1) % list.length];
+    return api('setGameProfile', g.appid, next || 'global').then(st => {
+      if (S.screen === 'detail') enterDetail(curG, { r: 1, c: 3 });
+      if (st) toast(g.perf ? `${g.n} usará ${profOf(g.perf).n} al iniciarse` : `${g.n} usará el perfil global`, false);
+    });
+  }
+  if (a === 'close') {
+    play('back'); const before = slots.map(sl => sl && sl.state);
+    S.running = null; setMetrics(false);
+    PerfAPI.sim.steamExit(g.appid);          /* Steam closes the game; stoned sees reaper go */
+    return api('getState').then(() => {
+      if (S.screen === 'detail') enterDetail(curG, { r: 0 });
+      const k = slots.findIndex((sl, i) => sl && sl.state === 'validated' && before[i] !== 'validated');
+      toast(k >= 0 ? `${g.n} se cerró. CUSTOM 0${k + 1} validado: la partida terminó sin errores de GPU` : `${g.n} se cerró`, false);
+    });
+  }
+}
+function install(g) {
+  if (installT) return;
+  play('select');
+  const el = $('#dprim'); el.textContent = 'INSTALANDO';
+  const b = stageBox(el), x0 = b.x, y = b.y + b.h + 16;
+  line.classList.add('load');
+  let p = 0;
+  installT = setInterval(() => {
+    p += 0.04; setLine(x0, y, Math.max(8, 600 * Math.min(1, p)));
+    if (p >= 1) {
+      clearInterval(installT); installT = 0; line.classList.remove('load');
+      g.inst = true; g.last = 'Nunca'; enterDetail(g.i); toast(`${g.n} está listo para jugar`);
+    }
+  }, 160);
+  toast('Instalación simulada en curso', false);
+}
+
+/* ---------- GAME ---------- */
+let tagT = 0, metT = 0;
+async function launch(g) {
+  S.screen = 'transition';
+  const b = stageBox(focusEl());
+  chrome(false, false); $('#hints').classList.add('hide');
+  $('#black').classList.remove('fast'); $('#black').classList.add('on');
+  setLine(b.x + b.w / 2, b.y + b.h + 16, 0, { slow: true });
+  await wait(1200);
+  line.classList.add('off');
+  if (S.running !== null && S.running !== g.i) PerfAPI.sim.steamExit(G[S.running].appid);
+  S.running = g.i; recent = [g.i, ...recent.filter(i => i !== g.i)].slice(0, 6);
+  g.last = 'Ahora'; g.h = g.h || 0;
+  showGame(g, true);
+  PerfAPI.sim.steamLaunch(g.appid);         /* stoned detects it; the UI only reads the state */
+  api('getState').then(st => {
+    if (st && g.perf && st.game) setTimeout(() => toast(`Perfil de este juego: ${profOf(st.game.profile).n} · GPU hasta ${st.actual.max} MHz`, false), 900);
+  });
+}
+/* GAME MODE RESOURCE STATE: menu screens are unmounted, full-screen backgrounds released,
+   the art cache trimmed to the running game, input polling slowed and metrics only if the overlay is on. */
+function gameMode() {
+  ['home', 'library', 'detail', 'settings', 'perf', 'tuning'].forEach(id => { $('#' + id).innerHTML = ''; });
+  spreadEls = [];
+  setBg('', 'none'); $('#bgA').style.backgroundImage = 'none'; $('#bgB').style.backgroundImage = 'none'; bgCur = '';
+  trimArt();
+  setTimeout(() => { if (S.screen === 'game') audioSleep(); }, 2500);
+}
+function showGame(g, fresh) {
+  S.screen = 'game'; NAV = null;
+  const gm = $('#game'), h = heroOf(g);
+  if (!h) want(g, 'hero', true);
+  gm.querySelector('.art').style.backgroundImage = g.scene ? (h ? `url(${h.hero})` : 'none') : neutralBg;
+  const tag = gm.querySelector('.tag'); tag.textContent = `${g.n} · juego en ejecución (simulado) · pulsa H o el botón Inicio para el menú rápido`;
+  tag.classList.remove('gone'); clearTimeout(tagT); tagT = setTimeout(() => tag.classList.add('gone'), 4000);
+  showScreen('game'); setBg('', 'none'); chrome(false, false);
+  $('#hints').classList.add('hide');
+  line.classList.add('off');
+  setTimeout(() => $('#black').classList.remove('on'), fresh ? 200 : 0);
+  setMetrics(S.tech);
+  gameMode();
+}
+function resumeGame() {
+  closeQuick(true);
+  const g = G[S.running];
+  $('#black').classList.add('fast', 'on');
+  setTimeout(() => showGame(g, true), S.rm ? 120 : 450);
+}
+function metricsTick() {
+  if (!S.tech || $('#metrics').hidden) return;
+  const id = effective(), m = S.metrics;
+  const lim = S.actual && !S.actual.error ? `Límite ${S.actual.max} MHz · ${S.actual.temp} °C (regulador)` : noLimitText();
+  $('#metrics').textContent = `STONE ${profOf(id).n}\n${lim}\n` + (m ? `GPU ${nv(m.gpu_temp_c, ' °C')}   ${nv(m.gpu_clock_mhz, ' MHz')}   uso ${nv(m.gpu_busy_pct, ' %')}\nCPU ${nv(m.cpu_temp_c, ' °C')}   uso ${nv(m.cpu_pct, ' %')}   GPU ${nv(m.gpu_power_w, ' W')}\nVentilador ${nv(m.fan_rpm, ' RPM')} · curva de la BIOS\n` : 'Leyendo…\n')
+    + `FPS y frametime: overlay de rendimiento de Steam${m && m.simulated ? '\n(lecturas simuladas)' : ''}`;
+}
+function setMetrics(on) {
+  $('#metrics').hidden = !on;
+  if (on) metricsTick();
+  telemetrySync();        /* the overlay subscribes at 0.5 s; closed, nothing is read */
+}
+
+/* ---------- QUICK MENU ---------- */
+function openQuick() {
+  if (S.screen !== 'game') return;
+  S.screen = 'quick'; play('select');
+  const q = $('#quick .panel');
+  const st = ['Mando', 'Audio', 'Bluetooth', 'Red'];
+  q.innerHTML = `<div class="top"><span class="brand">STONE</span><span>${$('#clock').textContent}</span></div>
+    <div class="main txt-f" data-f data-act="resume">REANUDAR</div>
+    <div class="it txt-f" data-f data-act="home">Volver a STONE</div>
+    <div class="it txt-f" data-f data-act="shot">Captura</div>
+    <div class="seg"><span class="lbl txt-f" data-f data-act="profile">Rendimiento · ${profOf(effective()).n}${String(effective()).startsWith('c') && profOf(effective()).state !== 'validated' ? ' (provisional)' : ''}${S.safeMode ? ' · SAFE MODE' : ''}</span>
+      <span id="qread" style="font-size:18px;color:var(--text-2);font-variant-numeric:tabular-nums">${S.actual && !S.actual.error ? `GPU hasta ${S.actual.max} MHz · ${S.actual.temp} °C` : noLimitText()} · ${quickReadings(S.metrics)}</span>
+      <div class="opts">${['silent', 'balanced', 'performance', 'custom'].map(p => { const cur = p === 'custom' ? String(effective()).startsWith('c') : effective() === p; const label = p === 'custom' ? (String(effective()).startsWith('c') ? profOf(effective()).n : 'CUSTOM') : FACT[p].n; return `<span class="${cur ? 'cur' : ''}" style="font-size:15px;letter-spacing:.06em">${label}</span>`; }).join('')}</div></div>
+    <div class="rule"></div>
+    <div class="steam"><span class="cap">AJUSTES RÁPIDOS DE STEAM</span>
+      ${st.map(s => `<span class="it txt-f" data-f data-act="steam">${s}</span>`).join('')}
+      <span class="it txt-f" data-f data-act="tech">Modo técnico <span class="tog">${S.tech ? 'activado' : 'desactivado'}</span></span>
+      <span class="it txt-f" data-f data-act="power">Apagar</span></div>`;
+  $('#quick').classList.add('on');
+  PerfAPI.getMetrics().then(m => { S.metrics = m; const q = $('#qread'); if (q && S.actual && !S.actual.error) q.textContent = `GPU hasta ${S.actual.max} MHz · ${S.actual.temp} °C · ${quickReadings(m)}`; }).catch(() => {});
+  const items = [...q.querySelectorAll('[data-f]')];
+  NAV = mkNav(items.map(e => [e]), { r: 0, place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'quick';
+  setTimeout(() => { line.classList.remove('off'); applyFocus(); }, S.rm ? 60 : 260);
+  hints([['A', 'Elegir'], ['B', 'Reanudar']]);
+}
+function quickReadings(m) { return m ? `GPU ${nv(m.gpu_temp_c, ' °C')} · uso ${nv(m.gpu_busy_pct, ' %')}${m.simulated ? ' (simulado)' : ''}` : 'leyendo…'; }
+function closeQuick(silent) {
+  $('#quick').classList.remove('on'); line.classList.add('off');
+  setTimeout(() => { if (!$('#quick').classList.contains('on')) $('#quick .panel').innerHTML = ''; }, 700);
+  if (!silent) { play('back'); S.screen = 'game'; NAV = null; $('#hints').classList.add('hide'); }
+}
+function quickA(el) {
+  const a = el.dataset.act;
+  if (a === 'resume') { play('select'); closeQuick(true); S.screen = 'game'; NAV = null; $('#hints').classList.add('hide'); return; }
+  if (a === 'home') {
+    play('select'); closeQuick(true);
+    $('#black').classList.add('fast', 'on');
+    setTimeout(() => { S.section = 0; if (NAV) NAV.id = ''; NAV = null; enterHome({ r: 0, c: 0 }); $('#black').classList.remove('on'); }, S.rm ? 120 : 450);
+    return;
+  }
+  if (a === 'shot') { play('select'); return toast('Captura guardada en Media · Capturas'); }
+  if (a === 'profile') { play('select'); return api('setSessionProfile', nextSession(1)).then(() => { if (S.screen === 'quick') refreshQuick(); }); }
+  if (a === 'tech') { play('select'); S.tech = !S.tech; setMetrics(S.tech); return refreshQuick(); }
+  if (a === 'steam') { play('select'); return toast(`${el.textContent}: panel nativo de Steam (fuera del prototipo)`, false); }
+  if (a === 'power') { play('select'); closeQuick(true); S.screen = 'game'; return openPower(); }
+}
+/* Quick Menu: this game session only; stoned returns to the global profile when the game ends */
+function nextSession(d, noWrap) {
+  const list = usable(), k = list.indexOf(effective());
+  const n = k + d;
+  if (noWrap && (n < 0 || n >= list.length)) return null;
+  return list[(n + list.length) % list.length];
+}
+function refreshQuick() { const r = NAV.r; $('#quick').classList.remove('on'); S.screen = 'game'; openQuick(); NAV.r = r; applyFocus(); }
+function quickLR(dir) {
+  const el = focusEl();
+  if (el && el.dataset.act === 'profile') {
+    const n = nextSession(dir === 'left' ? -1 : 1, true);
+    if (!n) return bump(dir === 'left' ? -1 : 1);
+    play('nav'); api('setSessionProfile', n).then(() => { if (S.screen === 'quick') refreshQuick(); metricsTick(); }); return;
+  }
+  bump(dir === 'left' ? -1 : 1);
+}
+
+/* ---------- SETTINGS ---------- */
+const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Rendimiento', 'Energía', 'Actualizaciones', 'Accesibilidad', 'Acerca de'];
+let cat = 1;
+function catRows() {
+  const steam = (t, d) => [{ l: t, s: d, v: 'Abre el ajuste de Steam', act: 'steam' }];
+  switch (CATS[cat]) {
+    case 'Pantalla': return { d: 'Ajusta cómo se ve STONE en tu televisor.', rows: [
+      { l: 'Área segura', s: 'Usa ← → hasta que las cuatro esquinas se vean completas', v: `${S.safe} %`, key: 'safe' },
+      { l: 'Resolución y frecuencia', s: '[3840 × 2160 · 60 Hz]', v: 'Abre el ajuste de Steam', act: 'steam' },
+      { l: 'HDR', s: '[Activado]', v: 'Abre el ajuste de Steam', act: 'steam' },
+      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
+    case 'Audio': return { d: 'Sonidos del sistema y volumen de la interfaz.', rows: [
+      { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
+      { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },
+      ...steam('Salida de audio', 'Altavoces, auriculares, HDMI')] };
+    case 'Rendimiento': return { d: `Perfil activo: ${profOf(S.prof).n}. Elige entre silencio y rendimiento, o ajusta tu propio perfil.`, rows: [
+      { l: 'Performance Center', s: 'SILENT, BALANCED, PERFORMANCE y CUSTOM', v: 'Abrir', act: 'perf' },
+      { l: 'Modo técnico', s: 'Muestra temperaturas, frecuencia y consumo durante el juego', v: S.tech ? 'Activado' : 'Desactivado', key: 'tech' },
+      { l: 'Safe Mode', s: S.safeMode ? `Activo: ${SAFE_REASON[S.safeReason] || 'valores de fábrica'}` : 'Sólo valores de fábrica: sin CUSTOM, sin perfiles por juego ni pruebas', v: S.safeMode ? 'Salir' : 'Activar', act: 'safe' }] };
+    case 'Energía': return { d: 'STONE MACHINE no tiene modo de reposo. Apagarla cuando no se usa ahorra entre 55 y 105 W.', rows: [
+      { l: 'Apagar tras inactividad', s: 'Sólo en STONE Home, nunca durante un juego', v: IDLE[S.idle], key: 'idle' }] };
+    case 'Accesibilidad': return { d: 'Haz que STONE sea más fácil de leer y más tranquilo.', rows: [
+      { l: 'Alto contraste', s: 'Línea de 4 px y texto secundario más claro', v: S.hc ? 'Activado' : 'Desactivado', key: 'hc' },
+      { l: 'Reducir movimiento', s: 'Sin escalas ni desplazamientos de fondo', v: S.rm ? 'Activado' : 'Desactivado', key: 'rm' },
+      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
+    case 'Acerca de': return { d: 'STONE MACHINE · STONE OS', rows: [
+      { l: 'Versión', s: 'STONE OS 0.6 · prototipo de interfaz', v: '' },
+      { l: 'Hardware', s: 'AMD BC-250 · Zen 2 6 núcleos · GPU 24 CU · 16 GB GDDR6', v: '' },
+      { l: 'Sistema base', s: 'Bazzite (imagen derivada de bazzite-deck)', v: '' },
+      { l: 'Novedades de esta versión', s: 'Ajustes, menú rápido y biblioteca navegables', v: '' },
+      { l: 'Modo escritorio', s: 'Para usuarios avanzados', v: 'Requiere confirmación', act: 'desk' }] };
+    case 'Actualizaciones': return { d: 'Las actualizaciones se descargan solas y se aplican al reiniciar.', rows: [
+      { l: 'Estado', s: 'Sistema al día', v: '' }, ...steam('Buscar actualizaciones', 'Gestionado por Bazzite desde Steam')] };
+    default: return { d: `${CATS[cat]}: este ajuste lo resuelve Steam con el tema de STONE.`, rows: steam(`Abrir ${CATS[cat].toLowerCase()}`, 'Panel nativo, tematizado') };
+  }
+}
+function enterSettings(opts = {}) {
+  S.screen = 'settings';
+  const c = catRows();
+  $('#settings').innerHTML = `<div class="ttl">AJUSTES</div>
+    <div class="cats">${CATS.map((n, k) => `<span class="txt-f${k === cat ? ' cur' : ''}" data-f data-cat="${k}">${n}</span>`).join('')}</div>
+    <div class="vr"></div>
+    <div class="pane"><div class="desc">${c.d}</div><div class="rows">${c.rows.map((r, k) => `<div class="srow" data-f data-row="${k}"><div class="l"><b>${r.l}</b><small>${r.s}</small></div><div class="v">${r.key && !['sound', 'hc', 'rm', 'tech'].includes(r.key) ? `<span class="ar">‹</span>${r.v}<span class="ar">›</span>` : r.v}</div></div>`).join('')}</div></div>`;
+  showScreen('settings'); chrome(true, false); setBg('', 'none');
+  const s = $('#settings');
+  const left = [...s.querySelectorAll('.cats [data-f]')], right = [...s.querySelectorAll('.srow')];
+  /* two columns: the nav grid is column-major (rows = list items, col 0 = categories, col 1 = options) */
+  NAV = mkNav([left], { r: 0, c: cat, place: (el, b) => el.classList.contains('srow') ? { x: b.x, y: b.y + b.h - 1, w: b.w } : { x: b.x, y: b.y + b.h + 6, w: b.w } });
+  NAV.id = 'settings'; NAV.pane = opts.pane ? 1 : 0; NAV.right = right; NAV.ri = opts.ri || 0;
+  if (NAV.pane && right.length) NAV.rows = [right], NAV.c = Math.min(NAV.ri, right.length - 1);
+  requestAnimationFrame(() => applyFocus());
+  $('#safe').classList.toggle('on', CATS[cat] === 'Pantalla' && !!NAV.pane && NAV.c === 0);
+  hints([['A', 'Elegir'], ['B', 'Volver']]);
+}
+function settingsMove(dir) {
+  const inPane = NAV.pane === 1;
+  if (!inPane) {
+    if (dir === 'up' || dir === 'down') {
+      const n = cat + (dir === 'up' ? -1 : 1);
+      if (n < 0 || n >= CATS.length) return play('edge');
+      cat = n; play('nav'); return enterSettings();
+    }
+    if (dir === 'right') { play('nav'); return enterSettings({ pane: true, ri: 0 }); }
+    return bump(-1);
+  }
+  const rowsDef = catRows().rows, r = rowsDef[NAV.c];
+  if (dir === 'up' || dir === 'down') {
+    const n = NAV.c + (dir === 'up' ? -1 : 1);
+    if (n < 0 || n >= NAV.rows[0].length) return play('edge');
+    play('nav'); return enterSettings({ pane: true, ri: n });
+  }
+  if (r && r.key) return adjust(r.key, dir === 'left' ? -1 : 1, NAV.c);
+  if (dir === 'left') { play('back'); return enterSettings(); }
+  bump(1);
+}
+function applyPrefs() {
+  stage.classList.toggle('hc', S.hc);
+  stage.classList.toggle('rm', S.rm);
+  const k = S.rm ? .3 : 1, r = document.documentElement.style;
+  [['--d-step', 220], ['--d-settle', 360], ['--d-exit', 450], ['--d-enter', 600], ['--d-light', 900], ['--d-cer', 1200]].forEach(([n, v]) => r.setProperty(n, Math.round(v * k) + 'ms'));
+  r.setProperty('--fscale', S.rm ? 1 : 1.06);
+  r.setProperty('--ts', [1, 1.25, 1.5][S.ts]);
+  stage.style.setProperty('--sx', (1920 * S.safe / 100) + 'px'); stage.style.setProperty('--sy', (1080 * S.safe / 100) + 'px');
+  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);
+  $('#bSound').textContent = `Sonido: ${S.sound ? 'activado' : 'desactivado'}`;
+}
+function adjust(key, d, ri) {
+  if (key === 'safe') { const n = S.safe + d; if (n < 0 || n > 8) return bump(d); S.safe = n; }
+  else if (key === 'ts') { const n = S.ts + d; if (n < 0 || n > 2) return bump(d); S.ts = n; }
+  else if (key === 'vol') { const n = Math.round(S.vol * 10) + d; if (n < 0 || n > 10) return bump(d); S.vol = n / 10; }
+  else if (key === 'idle') { const n = S.idle + d; if (n < 0 || n > 3) return bump(d); S.idle = n; }
+  else if (key === 'sound') { S.sound = !S.sound; if (S.sound) audio(); }
+  else if (key === 'hc') { S.hc = !S.hc; }
+  else if (key === 'rm') { S.rm = !S.rm; }
+  else if (key === 'tech') { S.tech = !S.tech; }
+  applyPrefs(); play('nav'); enterSettings({ pane: true, ri });
+}
+function settingsA(el) {
+  if (!NAV.pane) { play('select'); return enterSettings({ pane: true, ri: 0 }); }
+  const r = catRows().rows[NAV.c];
+  if (!r) return;
+  if (r.key) return adjust(r.key, 1, NAV.c);
+  if (r.act === 'steam') { play('select'); return toast('Se abre el panel de Steam con el tema de STONE (fuera del prototipo)', false); }
+  if (r.act === 'desk') { play('error'); return toast('El modo escritorio queda oculto en el producto final', false); }
+  if (r.act === 'perf') { play('select'); return enterPerf(); }
+  if (r.act === 'safe') { play('select'); return S.safeMode ? leaveSafeMode(NAV.c) : askSafeMode(NAV.c); }
+}
+const SAFE_REASON = { failures: 'STONE MACHINE se detuvo dos veces seguidas', manual: 'lo activaste tú', kernel: 'pedido en el arranque (stone.safe=1)' };
+function askSafeMode(ri) {
+  openDlg(`<h2>ACTIVAR SAFE MODE</h2><p>STONE vuelve ahora a valores de fábrica: nada por encima de BALANCED, sin perfiles CUSTOM, sin perfiles por juego y sin pruebas. Tus ranuras y tus perfiles por juego se conservan.</p><p>Sigue activo aunque reinicies, hasta que salgas desde aquí. Si la pantalla no funciona, también se puede activar desde una terminal con <b>sudo stonectl safe-mode on</b>.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="yes">ACTIVAR</span><span class="txt-f" data-f data-b="no">CANCELAR</span></div>`, {
+    onA: el => { closeDlg(); if (el.dataset.b !== 'yes') { play('back'); return enterSettings({ pane: true, ri }); }
+      api('enterSafeMode').then(st => { enterSettings({ pane: true, ri }); if (st) toast('Safe Mode activado: sólo valores de fábrica'); }); },
+    onB: () => { closeDlg(); play('back'); enterSettings({ pane: true, ri }); }
+  });
+}
+function leaveSafeMode(ri) {
+  api('exitSafeMode').then(st => { enterSettings({ pane: true, ri }); if (st) toast(`Safe Mode desactivado. Activo: ${profOf(S.prof).n}`); });
+}
+
+/* ---------- PERFORMANCE CENTER ---------- */
+let D = null;
+function statusLine(id) {
+  const a = S.actual;
+  const real = !a ? 'leyendo el estado…' : a.error === 'Unsupported' ? '<b>Regulador de GPU no detectado</b>: la GPU sigue con su configuración de fábrica'
+    : a.error ? '<b>Servicio de rendimiento no disponible</b>: el estado real no se puede leer'
+    : `GPU hasta ${a.max} MHz · límite ${a.temp} °C (leído del regulador)`;
+  return `${a && a.error ? 'Elegido' : 'Activo'}: <b>${profOf(id).n}</b>${String(id).startsWith('c') ? ' · ' + slotLabel(profOf(id)) : ''}${S.safeMode ? ' · <b>SAFE MODE</b>' : ''}${S.thermal && S.thermal.reduced ? ' · <b>REDUCIDO A SILENT POR TEMPERATURA</b>' : ''} · ${real} · regulador simulado en el prototipo`;
+}
+function enterPerf(opts = {}) {
+  S.screen = 'perf';
+  const isC = String(S.prof).startsWith('c');
+  const saved = slots.map((sl, k) => sl ? `CUSTOM 0${k + 1} · ${slotLabel(sl)}` : null).filter(Boolean);
+  const noAdv = S.caps && !S.caps.advanced;
+  const tile = id => { const p = FACT[id]; return `<div class="card ptile" data-f data-p="${id}"><span class="pa">${S.prof === id ? 'ACTIVO' : ''}</span><span class="pn">${p.n}</span><span class="pd">${p.d}</span><span class="ps">GPU hasta ${p.max} MHz · límite ${p.temp} °C<br>Sugerencia: ${p.fps}</span></div>`; };
+  $('#perf').innerHTML = `<div class="pttl">RENDIMIENTO</div><div class="pstatus">${statusLine(S.prof)}</div><div class="pread" id="pread">${readingsText(S.metrics)}</div>
+    <div class="prow">${tile('silent')}${tile('balanced')}${tile('performance')}
+      <div class="card ptile" data-f data-p="custom"><span class="pa">${isC ? 'ACTIVO · ' + profOf(S.prof).n : ''}</span><span class="pn">CUSTOM</span><span class="pd">${noAdv ? 'No disponible en esta consola: falta ' + S.caps.missing.join(', ') : saved.length ? saved.join('<br>') : 'Ajusta frecuencia y temperatura con STONE TUNING. Cada cambio se prueba antes de guardarse.'}</span><span class="ps">${noAdv ? 'Sólo perfiles de fábrica' : 'Abrir STONE TUNING'}</span></div></div>
+    <div class="acts"><span class="txt-f" data-f data-act="tuning">STONE TUNING</span><span class="txt-f" data-f data-act="reset">Restaurar valores de fábrica</span></div>
+    <div class="note">Todos los perfiles se mantienen dentro del rango estable de la BC-250: hasta 2000 MHz con la curva de voltaje de fábrica del regulador, y nunca por encima de 85 °C. STONE no toca el voltaje y la protección térmica siempre está activa. Las sugerencias de FPS se ajustan en Steam: STONE no limita los FPS.</div>`;
+  showScreen('perf'); chrome(true, false); setBg('', 'none');
+  const P = $('#perf');
+  NAV = mkNav([[...P.querySelectorAll('.ptile')], [...P.querySelectorAll('.acts [data-f]')]], {
+    r: opts.r ?? 0, c: opts.c ?? Math.max(0, ['silent', 'balanced', 'performance'].indexOf(S.prof) === -1 ? 3 : ['silent', 'balanced', 'performance'].indexOf(S.prof)),
+    place: (el, b, r) => r === 0 ? { x: b.x, y: b.y + b.h + 16, w: b.w * (S.rm ? 1 : 1.06) } : { x: b.x, y: b.y + b.h + 8, w: b.w }
+  });
+  NAV.id = 'perf';
+  requestAnimationFrame(() => applyFocus());
+  hints([['A', 'Elegir'], ['B', 'Volver']]);
+  if (!opts.fresh) api('getState').then(st => { if (st && S.screen === 'perf') $('#perf .pstatus').innerHTML = statusLine(S.prof); });
+}
+function perfA(el) {
+  const p = el.dataset.p, a = el.dataset.act, c = NAV.c;
+  if (p && FACT[p]) {
+    play('select');
+    return api('setProfile', p).then(st => {
+      if (S.screen === 'perf') enterPerf({ r: 0, c, fresh: true });
+      if (st) toast(`${FACT[p].n} activo · GPU hasta ${st.actual.max} MHz`);
+    });
+  }
+  if (p === 'custom' || a === 'tuning') {
+    if (S.caps && !S.caps.advanced) { play('error'); return toast(`${ERR_TEXT.Unsupported}: falta ${S.caps.missing.join(', ')}`, false); }
+    play('select'); D = null; return enterTuning();
+  }
+  if (a === 'reset') { play('select'); return restoreDefaults(() => { if (S.screen === 'perf') enterPerf({ r: 1, c: 1, fresh: true }); }); }
+}
+function restoreDefaults(then) {
+  return api('restoreDefaults').then(st => { S.adv = false; D = null; if (then) then(st); if (st) toast('Valores de fábrica restaurados: BALANCED'); });
+}
+function baseOf(k) { return slots[k] ? { ...slots[k] } : { max: FACT.balanced.max, min: 1000, temp: 85, resp: 1 }; }
+function changed() { const b = baseOf(D.slot); return ['max', 'min', 'temp', 'resp'].some(k => b[k] !== D[k]); }
+function tuningRows() {
+  const sl = slots[D.slot];
+  const st = !sl ? 'Vacía' : sl.state === 'validated' ? 'Validado' : sl.state === 'failed' ? 'Falló: la consola se detuvo con estos valores. Pruébala de nuevo'
+    : `Provisional (prueba ${sl.test_level === 'quick' ? 'rápida' : 'estándar'}): se valida con la prueba estándar y una partida sin fallos`;
+  const m = sim(S.prof, .35), rpm = 1300 + Math.round((m.temp - 55) * 35), mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);
+  const rows = [
+    { l: 'Ranura', s: st, v: `CUSTOM 0${D.slot + 1}`, key: 'slot' },
+    { l: 'Frecuencia máxima de GPU', s: `${mr[0]}–${mr[1]} MHz · rango que acepta el regulador`, v: `${D.max} MHz`, key: 'max' },
+    { l: 'Límite de temperatura', s: `${tr[0]}–${tr[1]} °C · sólo puede bajar respecto al de fábrica`, v: `${D.temp} °C`, key: 'temp' },
+    { l: 'Ventilador', s: 'Curva de la BIOS; el control por software llegará si se valida en placa', v: S.metrics ? nv(S.metrics.fan_rpm, ' RPM') : '—', ro: true },
+    { l: 'FPS, resolución, refresco, VRR y escalado', s: 'Los gestiona Steam con el tema de STONE', v: 'Abre el panel de Steam', act: 'steam' },
+    { l: 'Modo avanzado', s: S.adv ? 'Frecuencia mínima y respuesta del regulador' : 'Parámetros adicionales del regulador de GPU', v: S.adv ? 'Activado' : 'Desactivado', key: 'adv' }
+  ];
+  if (S.adv) rows.push(
+    { l: 'Frecuencia mínima de GPU', s: `${nr[0]}–${nr[1]} MHz · nunca por encima de la máxima`, v: `${D.min} MHz`, key: 'min' },
+    { l: 'Respuesta del regulador', s: 'Cuánto se anticipa a la carga del juego', v: RESP[D.resp], key: 'resp' },
+    { l: 'Voltaje', s: 'Lo fija la curva de fábrica del regulador para cada frecuencia. STONE no lo cambia', v: 'Curva del regulador', ro: true });
+  rows.push(
+    { l: 'Revisar y probar', s: changed() ? 'Prueba de estabilidad antes de guardar' : 'Sin cambios pendientes', v: '', act: 'review' },
+    { l: 'Medir el perfil actual', s: lastBaseline() ? `Referencia: ${profOf(lastBaseline().profile).n} · ${lastBaseline().median_clock_mhz} MHz sostenidos` : 'Mide el perfil activo para saber si un ajuste mejora de verdad', v: '', act: 'baseline' },
+    { l: `Usar CUSTOM 0${D.slot + 1}`, s: !sl ? 'Guarda primero una configuración probada' : sl.state === 'validated' ? 'Activa este perfil en toda la consola' : sl.state === 'failed' ? 'No disponible hasta que vuelva a pasar la prueba' : 'Sólo hasta apagar la consola, hasta que se valide', v: '', act: 'use' },
+    { l: 'Restaurar valores de fábrica', s: 'Vuelve a BALANCED', v: '', act: 'reset' });
+  return rows;
+}
+function enterTuning(opts = {}) {
+  S.screen = 'tuning';
+  if (!D) { const k = String(S.prof).startsWith('c') ? +S.prof.slice(1) - 1 : Math.max(0, slots.findIndex(x => !x)); D = { slot: k, ...baseOf(k) }; }
+  const rows = tuningRows(), b = baseOf(D.slot);
+  const kv = (l, a, c) => `<div class="kv"><span>${l}</span><b class="${a !== c ? 'chg' : ''}">${a === c ? c : a + ' → ' + c}</b></div>`;
+  $('#tuning').innerHTML = `<div class="pttl">STONE TUNING</div><div class="pstatus">${statusLine(S.prof)}</div>
+    <div class="tclip"><div class="trows" data-sy="0">${rows.map((r, k) => `<div class="srow" data-f data-row="${k}"><div class="l"><b>${r.l}</b><small>${r.s}</small></div><div class="v${r.ro ? ' ro' : ''}">${r.key ? `<span class="ar">‹</span>${r.v}<span class="ar">›</span>` : r.v}</div></div>`).join('')}</div></div>
+    <div class="side">
+      <div class="pbox"><h3>BORRADOR · CUSTOM 0${D.slot + 1}</h3>
+        ${kv('Frecuencia máxima', b.max + ' MHz', D.max + ' MHz')}${kv('Límite de temperatura', b.temp + ' °C', D.temp + ' °C')}
+        ${S.adv ? kv('Frecuencia mínima', b.min + ' MHz', D.min + ' MHz') + kv('Respuesta', RESP[b.resp], RESP[D.resp]) : ''}
+        <div class="kv"><span>Voltaje</span><b>curva del regulador</b></div></div>
+      <div class="pbox"><h3>ESTIMACIÓN EN JUEGO</h3>${(m => `<div class="kv"><span>Frecuencia sostenida</span><b>${m.clk} MHz</b></div><div class="kv"><span>Temperatura</span><b>${m.temp} °C</b></div><div class="kv"><span>Consumo GPU</span><b>${m.ppt} W</b></div>`)(draftSim())}<div class="kv"><span>Datos</span><span>simulados</span></div></div>
+      <div class="pbox"><h3>LECTURAS</h3><div id="tread">${tuningReadings(S.metrics)}</div></div>
+      <div class="pbox"><h3>RANURAS</h3>${slots.map((sl, k) => `<div class="kv"><span>CUSTOM 0${k + 1}</span><b>${sl ? slotLabel(sl) + ' · ' + sl.max + ' MHz' : 'vacía'}</b></div>`).join('')}</div>
+    </div>`;
+  showScreen('tuning'); chrome(true, false); setBg('', 'none');
+  const T = $('#tuning'), trows = T.querySelector('.trows'), els = [...trows.children];
+  NAV = mkNav(els.map(e => [e]), {
+    r: Math.min(opts.ri || 0, els.length - 1),
+    place: (el, bx) => ({ x: bx.x, y: bx.y + bx.h - 1, w: bx.w }),
+    scroll: el => {
+      let sy = +trows.dataset.sy; const t = el.offsetTop, bot = t + el.offsetHeight, view = 700;
+      if (t + sy < 0) sy = -t; else if (bot + sy > view) sy = view - bot;
+      trows.dataset.sy = sy; trows.style.transform = `translateY(${sy}px)`;
+    }
+  });
+  NAV.id = 'tuning';
+  requestAnimationFrame(() => applyFocus());
+  hints([['← →', 'Ajustar'], ['A', 'Elegir'], ['B', 'Volver']]);
+}
+function draftSim() { return sim({ n: 'draft', ...D }); }
+const capRange = (k, d) => S.caps && S.caps[k] && S.caps[k].length ? S.caps[k] : d;   /* limits come from stoned */
+function tuningLR(d) {
+  const r = tuningRows()[NAV.r]; if (!r || !r.key) return bump(d);
+  const ri = NAV.r;
+  const mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);
+  if (r.key === 'slot') { const n = D.slot + d; if (n < 0 || n > 2) return bump(d); D = { slot: n, ...baseOf(n) }; }
+  else if (r.key === 'max') { const n = D.max + d * 50; if (n < mr[0] || n > mr[1]) return bump(d); D.max = n; if (D.min > n) D.min = nr[0]; }
+  else if (r.key === 'temp') { const n = D.temp + d * 5; if (n < tr[0] || n > tr[1]) return bump(d); D.temp = n; }
+  else if (r.key === 'min') { const n = D.min + d * 100; if (n < nr[0] || n > Math.min(nr[1], D.max)) return bump(d); D.min = n; }
+  else if (r.key === 'resp') { const n = D.resp + d; if (n < 0 || n > 2) return bump(d); D.resp = n; }
+  else if (r.key === 'adv') return toggleAdv(ri);
+  play('nav'); enterTuning({ ri });
+}
+function toggleAdv(ri) {
+  if (S.adv) { S.adv = false; D.min = baseOf(D.slot).min; D.resp = baseOf(D.slot).resp; play('nav'); return enterTuning({ ri }); }
+  if (S.advAck) { S.adv = true; play('nav'); return enterTuning({ ri }); }
+  play('select');
+  openDlg(`<h2>ADVANCED PERFORMANCE SETTINGS</h2><p>Cambiar frecuencias o límites térmicos puede causar inestabilidad, cierres, pérdida de datos o daños en el hardware.</p><p>STONE sólo ofrece valores dentro del rango estable y prueba cada cambio antes de guardarlo.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="no">CANCELAR</span><span class="txt-f" data-f data-b="yes">CONTINUAR</span></div>`, {
+    onA: el => { closeDlg(); if (el.dataset.b === 'yes') { S.advAck = true; S.adv = true; play('select'); } else play('back'); enterTuning({ ri }); },
+    onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+function tuningA(el) {
+  const ri = NAV.r, r = tuningRows()[ri]; if (!r) return;
+  if (r.key === 'adv') return toggleAdv(ri);
+  if (r.key) return tuningLR(1);
+  if (r.ro) return bump(1);
+  if (r.act === 'steam') { play('select'); return toast('Se abre el panel de rendimiento de Steam (fuera del prototipo)', false); }
+  if (r.act === 'reset') { play('select'); return restoreDefaults(() => { if (S.screen === 'tuning') enterTuning({ ri }); }); }
+  if (r.act === 'use') {
+    if (!slots[D.slot]) { play('error'); return toast('Esta ranura está vacía: prueba y guarda una configuración primero', false); }
+    play('select'); const k = D.slot;
+    return api('setProfile', slotId(k)).then(st => {
+      if (S.screen === 'tuning') enterTuning({ ri });
+      if (!st) return;
+      /* P0-3: an unvalidated slot is used only until the console turns off */
+      toast(st.provisional ? `CUSTOM 0${k + 1} activo hasta apagar (provisional) · GPU hasta ${st.actual.max} MHz` : `CUSTOM 0${k + 1} activo · GPU hasta ${st.actual.max} MHz`, !st.provisional);
+    });
+  }
+  if (r.act === 'baseline') { play('select'); return runBaseline(ri); }
+  if (r.act === 'review') {
+    if (!changed()) { play('error'); return toast('No hay cambios que probar', false); }
+    play('select'); return review(ri);
+  }
+}
+function review(ri) {
+  const b = baseOf(D.slot), line2 = (l, a, c) => a === c ? '' : `<div class="kv"><span>${l}</span><b class="chg">${a} → ${c}</b></div>`;
+  openDlg(`<h2>REVISAR CAMBIOS</h2><div class="kvs">${line2('Frecuencia máxima', b.max + ' MHz', D.max + ' MHz')}${line2('Límite de temperatura', b.temp + ' °C', D.temp + ' °C')}${line2('Frecuencia mínima', b.min + ' MHz', D.min + ' MHz')}${line2('Respuesta del regulador', RESP[b.resp], RESP[D.resp])}</div>
+    <p>La prueba rápida carga la GPU 5 minutos y la estándar 30 en STONE MACHINE; aquí se simulan en 12 y 20 segundos. Para validar una ranura hacen falta la estándar y una partida sin fallos. Si la consola se bloquea, al reiniciar vuelve a la última configuración buena.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="test">PRUEBA RÁPIDA</span><span class="txt-f" data-f data-b="std">PRUEBA ESTÁNDAR</span><span class="txt-f" data-f data-b="no">DESCARTAR</span></div>`, {
+    onA: el => { if (el.dataset.b === 'test' || el.dataset.b === 'std') { play('select'); return runTest(ri, el.dataset.b === 'std' ? 'standard' : 'quick'); } closeDlg(); play('back'); D = { slot: D.slot, ...baseOf(D.slot) }; enterTuning({ ri }); },
+    onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+let testUI = null, lastTests = [];
+const lastBaseline = () => [...lastTests].reverse().find(t => t.kind === 'baseline' && t.passed);
+function runBaseline(ri) {
+  api('measureBaseline', 'quick').then(st => {
+    if (!st) return enterTuning({ ri });
+    openDlg(`<h2>MEDICIÓN DE REFERENCIA</h2><p>Misma carga que la prueba rápida sobre ${profOf(effective()).n}, sin cambiar nada · simulada</p>
+    <div class="live"><div><span>Carga GPU</span><b id="tLoad">0 %</b></div><div><span>Frecuencia</span><b id="tClk">1000 MHz</b></div><div><span>Temperatura</span><b id="tTemp">55 °C</b></div><div><span>Consumo</span><b id="tPow">60 W</b></div></div>
+    <div class="ptrack" id="tTrack"></div><p id="tMsg">Sin cambios en el regulador: GPU hasta ${st.actual.max} MHz</p>`, { onA: () => {}, onB: () => {
+      testUI = null; api('cancelTest').then(() => { closeDlg(); play('back'); toast('Medición cancelada', false); enterTuning({ ri }); });
+    } }, true);
+    const bx = stageBox($('#tTrack')); line.classList.remove('off'); setLine(bx.x, bx.y - 0.5, 0);
+    hints([['B', 'Cancelar']]);
+    testUI = { ri, bx, baseline: true };
+  });
+}
+function baselineDone(ri, r) {
+  play('notify');
+  openDlg(`<h2>REFERENCIA GUARDADA</h2><p>${profOf(r.profile).n}: ${r.median_clock_mhz} MHz sostenidos, ${r.max_temp_c} °C como máximo, ${r.avg_power_w} W de GPU (simulado).</p><p>Las próximas pruebas rápidas se compararán con esta medición.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">ENTENDIDO</span></div>`, { onA: () => { closeDlg(); play('back'); enterTuning({ ri }); }, onB: () => { closeDlg(); play('back'); enterTuning({ ri }); } });
+}
+function comparisonText(c) {
+  if (!c) return '';
+  if (c.verdict === 'insufficient') return 'Para saber si mejora, mide antes el perfil actual con «Medir el perfil actual».';
+  const base = profOf(c.baseline_profile).n, sg = v => (v > 0 ? '+' : '') + String(v).replace('.', ',');
+  if (c.verdict === 'better') return `Frente a ${base}: ${sg(c.clock_gain_pct)} % de frecuencia sostenida, ${sg(c.temp_delta_c)} °C, ${sg(c.power_delta_w)} W.`;
+  if (c.verdict === 'no_gain') return `Frente a ${base}: la frecuencia sostenida apenas cambia (${sg(c.clock_gain_pct)} %). Más techo no mejora el rendimiento en esta consola.`;
+  return `Frente a ${base}: la GPU pasa más tiempo limitada por temperatura (${sg(c.throttle_delta_pts)} puntos) y sostiene ${sg(c.clock_gain_pct)} % de frecuencia. Aquí más frecuencia rinde peor.`;
+}
+function runTest(ri, level) {
+  const vals = { max: D.max, min: D.min, temp: D.temp, resp: D.resp };
+  api('startTest', D.slot, vals, level).then(st => {
+    if (!st) { closeDlg(); return enterTuning({ ri }); }
+    openDlg(`<h2>STONE TESTING</h2><p>Prueba ${level === 'quick' ? 'rápida' : 'estándar'} de GPU · CUSTOM 0${D.slot + 1} · simulada</p>
+    <div class="live"><div><span>Carga GPU</span><b id="tLoad">0 %</b></div><div><span>Frecuencia</span><b id="tClk">${st.actual.max ? 1000 : '—'} MHz</b></div><div><span>Temperatura</span><b id="tTemp">55 °C</b></div><div><span>Consumo</span><b id="tPow">60 W</b></div></div>
+    <div class="ptrack" id="tTrack"></div><p id="tMsg">Aplicado en el regulador: GPU hasta ${st.actual.max} MHz · límite ${st.actual.temp} °C</p>`, { onA: () => {}, onB: () => {
+      testUI = null; $('#bCrash').disabled = true;
+      api('cancelTest').then(() => { closeDlg(); play('back'); toast(`Prueba cancelada; no se guardó nada. Activo: ${profOf(S.prof).n}`, false); enterTuning({ ri }); });
+    } }, true);
+    const tr = $('#tTrack'), bx = stageBox(tr);
+    line.classList.remove('off'); setLine(bx.x, bx.y - 0.5, 0);
+    hints([['B', 'Cancelar prueba']]);
+    testUI = { ri, bx, slot: D.slot };
+    $('#bCrash').disabled = false;
+  });
+}
+PerfAPI.on('testProgress', ({ p, target, values }) => {
+  if (!testUI || !$('#tLoad')) return;
+  const ramp = Math.min(1, p * 2.2);
+  setLine(testUI.bx.x, testUI.bx.y - 0.5, testUI.bx.w * p);
+  $('#tLoad').textContent = Math.round(ramp * 97 + Math.random() * 2) + ' %';
+  $('#tClk').textContent = Math.round((1000 + (target.clk - 1000) * ramp) / 10) * 10 + ' MHz';
+  $('#tTemp').textContent = Math.round(55 + (target.temp - 55) * Math.pow(p, .6)) + ' °C';
+  $('#tPow').textContent = Math.round(60 + (target.ppt - 60) * ramp) + ' W';
+  if (target.clk < values.max && p > .5) $('#tMsg').textContent = `Sin errores por ahora · la GPU limita a ${target.clk} MHz para respetar ${values.temp} °C`;
+});
+PerfAPI.on('testFinished', r => {
+  const t = testUI; testUI = null; $('#bCrash').disabled = true;
+  if (!t) return;
+  api('getState').then(st => {
+    if (st && st.tests) lastTests = st.tests;
+    if (r.kind === 'baseline') return baselineDone(t.ri, r);
+    r.passed ? testPassed(t.ri, r) : testFailed(t.ri, r);
+  });
+});
+function testPassed(ri, r) {
+  play('notify');
+  openDlg(`<div class="res">SIN ERRORES EN LA PRUEBA</div><p>Prueba ${r.level === 'quick' ? 'rápida' : 'estándar'} sin errores de GPU. Temperatura máxima ${r.max_temp_c} °C, frecuencia sostenida ${r.median_clock_mhz} MHz (simulado). Una prueba superada reduce el riesgo, pero no garantiza estabilidad.</p>${r.comparison ? `<p class="cmp">${comparisonText(r.comparison)} Se compara la frecuencia sostenida, no los FPS.</p>` : ''}<p>Al terminar, STONE volvió a ${profOf(S.prof).n}. Si guardas, la ranura queda provisional y sin activarse; nunca se usa al encender hasta validarla${r.level === 'quick' ? ' con la prueba estándar y' : ' con'} una partida sin fallos.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="save">GUARDAR EN CUSTOM 0${r.slot + 1}</span><span class="txt-f" data-f data-b="no">DESCARTAR</span></div>`, {
+    onA: el => {
+      closeDlg();
+      if (el.dataset.b === 'save') {
+        play('select');
+        return api('saveTestResult').then(st => { D = { slot: r.slot, ...baseOf(r.slot) }; if (st) toast(`CUSTOM 0${r.slot + 1} guardado (provisional). Sigue activo ${profOf(S.prof).n}`); enterTuning({ ri }); });
+      }
+      play('back'); api('discardTestResult').then(() => { D = { slot: r.slot, ...baseOf(r.slot) }; enterTuning({ ri }); });
+    },
+    onB: () => { closeDlg(); play('back'); api('discardTestResult').then(() => { D = { slot: r.slot, ...baseOf(r.slot) }; enterTuning({ ri }); }); }
+  });
+}
+function testFailed(ri, r) {
+  play('error');
+  openDlg(`<h2>LA PRUEBA NO SE SUPERÓ</h2><p>Motivo: ${REASON_TEXT[r.reason] || r.reason}. No se guardó nada.</p><p>STONE volvió a la última configuración buena: ${profOf(S.prof).n}${S.actual && !S.actual.error ? ` (GPU hasta ${S.actual.max} MHz)` : ''}.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">ENTENDIDO</span></div>`, {
+    onA: () => { closeDlg(); play('back'); enterTuning({ ri }); }, onB: () => { closeDlg(); play('back'); enterTuning({ ri }); }
+  });
+}
+/* Fail-safe demo: a GPU fault on the BC-250 takes the whole machine down, so recovery happens on the next boot. */
+async function simulateCrash() {
+  if (!testUI) return;
+  testUI = null; $('#bCrash').disabled = true;
+  PerfAPI.sim.crash();
+  S.screen = 'transition'; play('error');
+  $('#black').classList.add('fast', 'on'); line.classList.add('off');
+  closeDlg(); chrome(false, false); $('#hints').classList.add('hide');
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); setBg('', 'none');
+  S.running = null; setMetrics(false); D = null;
+  await new Promise(r => setTimeout(r, 1800));
+  boot();
+}
+/* After boot, Home tells stoned it is on screen; stoned answers with what it decided at boot. */
+function bootNotices(st, rep) {
+  if (st.safe_mode && st.safe_reason === 'failures') return safeModeDlg();
+  if (st.safe_mode) return toast(`STONE arrancó en Safe Mode (${SAFE_REASON[st.safe_reason]}). Para salir: Ajustes → Rendimiento`, false);
+  if (!rep || !rep.counted) return;
+  const f = rep.failure || {};
+  if (f.during === 'test') toast(`La prueba no terminó. STONE volvió a la última configuración buena: ${profOf(S.prof).n}.`);
+  else if (f.during === 'provisional') toast(`${f.profile ? 'CUSTOM 0' + f.profile.slice(1) : 'La ranura'} falló y quedó desactivada. Activo: ${profOf(S.prof).n}.`);
+  else toast(`STONE MACHINE no se apagó bien. Activo: ${profOf(S.prof).n}.`, false);
+}
+function safeModeDlg() {
+  openDlg(`<div class="brand" style="font-size:40px">STONE</div><h2>SAFE MODE</h2><p>STONE MACHINE se detuvo dos veces seguidas. Arrancó con valores de fábrica, sin perfiles CUSTOM ni perfiles por juego.</p><p>Restaurar los ajustes de fábrica sale de Safe Mode. Tus ranuras CUSTOM se conservan.</p>
+    <div class="btns"><span class="txt-f" data-f data-b="ok">RESTAURAR</span><span class="txt-f" data-f data-b="stay">SEGUIR EN SAFE MODE</span></div>`, {
+    onA: el => {
+      closeDlg();
+      if (el.dataset.b === 'ok') { play('select'); return restoreDefaults(() => { if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 }); }); }
+      play('back'); if (NAV) NAV.id = ''; enterHome({ r: 0, c: 0 });
+    }
+  }, false, true);
+}
+let DLG = null, dlgPrev = null;
+function openDlg(html, handlers, noButtons, solid) {
+  if (!DLG) dlgPrev = { screen: S.screen };
+  DLG = handlers; S.screen = 'dlg';
+  const d = $('#dlg'); d.classList.toggle('solid', !!solid); d.querySelector('.box').innerHTML = html; d.classList.add('on');
+  const btns = [...d.querySelectorAll('.btns [data-f]')];
+  NAV = mkNav(btns.length ? [btns] : [[d.querySelector('.box')]], { place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'dlg';
+  if (btns.length) requestAnimationFrame(() => { line.classList.remove('off'); applyFocus(); });
+  if (btns.length) hints([['A', 'Elegir'], ...(handlers.onB ? [['B', 'Volver']] : [])]);
+}
+function closeDlg() { $('#dlg').classList.remove('on'); DLG = null; dlgPrev = null; }
+
+/* ---------- POWER ---------- */
+let powerFrom = 'home';
+function openPower() {
+  powerFrom = S.screen === 'game' ? 'game' : S.screen;
+  S.screen = 'power';
+  const box = $('#power .box');
+  box.innerHTML = `<div class="h">ENERGÍA</div>
+    <div class="main txt-f" data-f data-act="off">APAGAR</div>
+    <div class="txt-f" style="font-size:26px" data-f data-act="reboot">Reiniciar</div>
+    ${S.running !== null ? `<div class="warn">${G[S.running].n} se cerrará al apagar o reiniciar.</div>` : ''}`;
+  $('#power').classList.add('on'); line.classList.remove('off');
+  const items = [...box.querySelectorAll('[data-f]')];
+  NAV = mkNav(items.map(e => [e]), { place: (el, b) => ({ x: b.x, y: b.y + b.h + 8, w: b.w }) });
+  NAV.id = 'power';
+  setTimeout(() => applyFocus(), S.rm ? 60 : 200);
+  hints([['A', 'Elegir'], ['B', 'Cerrar']]);
+}
+function closePower() {
+  play('back'); $('#power').classList.remove('on');
+  if (powerFrom === 'game') { S.screen = 'game'; NAV = null; line.classList.add('off'); $('#hints').classList.add('hide'); return; }
+  if (powerFrom === 'settings') return enterSettings();
+  if (NAV) NAV.id = '';
+  enterHome({ r: 1, c: 3 });
+}
+async function powerA(el) {
+  const a = el.dataset.act; play('select');
+  $('#power').classList.remove('on');
+  if (a === 'sleep') return suspend();
+  if (a === 'off') return shutdown(false);
+  if (a === 'reboot') return shutdown(true);
+}
+async function suspend() {
+  S.screen = 'transition'; $('#hints').classList.add('hide');
+  $('#black').classList.remove('fast'); $('#black').classList.add('on'); line.classList.add('boot');
+  setLine(720, 886, 480, { slow: true }); await wait(900);
+  setLine(960, 886, 0, { slow: true }); await wait(1200);
+  line.classList.add('off'); S.screen = 'asleep';
+  $('#offmsg').textContent = 'Suspendida · Pulsa A o Enter para reanudar'; $('#offmsg').classList.add('on');
+}
+async function wake() {
+  S.screen = 'transition'; $('#offmsg').classList.remove('on'); play('select');
+  setLine(960, 886, 0); line.classList.remove('off'); await wait(60);
+  setLine(720, 886, 480, { slow: true }); await wait(900);
+  if (powerFrom === 'game' && S.running !== null) { setLine(960, 886, 0, { slow: true }); await wait(500); return showGame(G[S.running], true); }
+  $('#black').classList.remove('on');
+  if (powerFrom === 'settings') enterSettings(); else { if (NAV) NAV.id = ''; enterHome({ r: 1, c: 3, slow: true }); }
+}
+async function shutdown(reboot) {
+  if (S.running !== null) PerfAPI.sim.steamExit(G[S.running].appid);
+  PerfAPI.sim.powerOff();               /* orderly shutdown: stoned writes its clean marker */
+  S.screen = 'transition'; $('#hints').classList.add('hide'); play('stop');
+  chrome(false, false);
+  $('#black').classList.remove('fast'); $('#black').classList.add('on');
+  setLine(720, 886, 480, { slow: true }); await wait(1000);
+  setLine(960, 886, 0, { slow: true }); await wait(1300);
+  line.classList.add('off');
+  S.running = null; setMetrics(false); NAV = null;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); setBg('', 'none');
+  if (reboot) { await wait(900); return boot(); }
+  S.screen = 'off'; await wait(1200);
+  $('#offmsg').textContent = 'STONE MACHINE · Pulsa A o Enter para encender'; $('#offmsg').classList.add('on');
+}
+
+/* ---------- BOOT ---------- */
+async function boot() {
+  const rep = PerfAPI.sim.powerOn();    /* stoned --recover: decides, never applies */
+  refreshCaps();
+  S.screen = 'transition'; $('#offmsg').classList.remove('on');
+  $('#black').classList.add('on'); line.classList.add('boot');
+  await wait(500);
+  setLine(957, 883, 6); line.classList.remove('off'); line.style.height = '6px'; line.style.borderRadius = '50%';
+  await wait(500);
+  line.style.height = ''; line.style.borderRadius = '';
+  play('start');
+  setLine(720, 886, 480, { slow: true });
+  await wait(1100);
+  $('#bootword').classList.add('on');
+  await wait(1300);
+  $('#bootword').classList.remove('on');
+  await wait(400);
+  $('#black').classList.remove('on');
+  S.section = 0; if (NAV) NAV.id = ''; NAV = null;
+  enterHome({ r: 0, c: 0, slow: true });
+  setTimeout(() => line.classList.remove('boot'), 1300);
+  /* Home is on screen: only now may stoned apply the saved profile (factory or validated) */
+  api('homeReady').then(st => { if (st) setTimeout(() => bootNotices(st, rep), 1400); });
+}
+
+/* ---------- Input dispatch ---------- */
+function act(a) {
+  if (S.screen === 'transition') return;
+  if (S.screen === 'off') { if (a === 'a') { audio(); boot(); } return; }
+  if (S.screen === 'asleep') { if (a === 'a') wake(); return; }
+  if (S.screen === 'game') { if (a === 'home' || a === 'menu') openQuick(); return; }
+  showHints();
+  const dirs = ['up', 'down', 'left', 'right'];
+  if (S.screen === 'quick') {
+    if (a === 'b' || a === 'home') return closeQuick();
+    if (a === 'left' || a === 'right') return quickLR(a);
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return quickA(focusEl());
+    return;
+  }
+  if (S.screen === 'power') {
+    if (a === 'b') return closePower();
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return powerA(focusEl());
+    return;
+  }
+  if (S.screen === 'dlg') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return DLG.onA(focusEl());
+    if (a === 'b' && DLG.onB) return DLG.onB();
+    return;
+  }
+  if (S.screen === 'perf') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return perfA(focusEl());
+    if (a === 'b') { play('back'); cat = CATS.indexOf('Rendimiento'); return enterSettings({ pane: true, ri: 0 }); }
+    if (a === 'home') { if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+    return;
+  }
+  if (S.screen === 'tuning') {
+    if (a === 'up' || a === 'down') return move(a);
+    if (a === 'left' || a === 'right') return tuningLR(a === 'left' ? -1 : 1);
+    if (a === 'a') return tuningA(focusEl());
+    if (a === 'b') { play('back'); return enterPerf({ r: 0, c: 3 }); }
+    return;
+  }
+  if (S.screen === 'settings') {
+    if (dirs.includes(a)) return settingsMove(a);
+    if (a === 'a') return settingsA(focusEl());
+    if (a === 'b') { play('back'); $('#safe').classList.remove('on'); if (NAV.pane) return enterSettings(); if (NAV) NAV.id = ''; return enterHome({ r: 1, c: 2 }); }
+    if (a === 'home') return enterHome({ r: 0, c: 0 });
+    return;
+  }
+  if (S.screen === 'home') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return homeA(focusEl());
+    if (a === 'lb' || a === 'rb') return section(a === 'lb' ? -1 : 1);
+    if (a === 'y') return toast('Búsqueda: fuera de este prototipo', false);
+    if (a === 'b') { if (S.section !== 0) { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); } return; }
+    if (a === 'home') { if (NAV.r !== 0 || NAV.c !== 0) { play('nav'); NAV.r = 0; NAV.c = 0; applyFocus(); } return; }
+    return;
+  }
+  if (S.screen === 'library') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return libraryA(focusEl());
+    if (a === 'lb' || a === 'rb') return section(a === 'lb' ? -1 : 1);
+    if (a === 'b' || a === 'home') { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+    if (a === 'lt' || a === 'rt') return letterJump(a === 'lt' ? -1 : 1);
+    return;
+  }
+  if (S.screen === 'detail') {
+    if (dirs.includes(a)) return move(a);
+    if (a === 'a') return detailA(focusEl());
+    if (a === 'b') { play('back'); clearInterval(installT); installT = 0; line.classList.remove('load'); return S.from === 'library' ? enterLibrary({ r: libRowOf(curG), c: libColOf(curG) }) : enterHome({ r: 0, c: Math.max(0, recent.indexOf(curG)) }); }
+    if (a === 'home') { play('back'); S.section = 0; if (NAV) NAV.id = ''; return enterHome({ r: 0, c: 0 }); }
+  }
+}
+function libRowOf(i) { const k = libList().findIndex(g => g.i === i); return k < 0 ? 1 : 1 + Math.floor(k / 6); }
+function libColOf(i) { const k = libList().findIndex(g => g.i === i); return k < 0 ? 0 : k % 6; }
+function letterJump(d) {
+  if (NAV.r === 0) return;
+  const list = libList(), k = (NAV.r - 1) * 6 + NAV.c, cur = list[k].n[0];
+  let j = k; do { j += d; } while (j >= 0 && j < list.length && list[j].n[0] === cur);
+  if (j < 0 || j >= list.length) return bump(d);
+  NAV.r = 1 + Math.floor(j / 6); NAV.c = j % 6; play('nav'); applyFocus(); toast(list[j].n[0].toUpperCase(), false);
+}
+
+/* Directional hold: one step, 400 ms pause, then 8 steps/s, 16 steps/s after 2 s */
+const hold = { dir: null, t0: 0, next: 0 };
+function startHold(dir) { hold.dir = dir; hold.t0 = performance.now(); hold.next = hold.t0 + 400; act(dir); ensureLoop(); }
+function stopHold(dir) { if (!dir || hold.dir === dir) hold.dir = null; }
+function holdTick(now) {
+  if (hold.dir && now >= hold.next) { act(hold.dir); hold.next = now + (now - hold.t0 > 2000 ? 62 : 125); }
+}
+
+const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'a', ' ': 'a', Escape: 'b', Backspace: 'b', q: 'lb', Q: 'lb', e: 'rb', E: 'rb', h: 'home', H: 'home', Home: 'home', y: 'y', Y: 'y', z: 'lt', Z: 'lt', x: 'rt', X: 'rt', Tab: 'menu' };
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('#bar')) return;
+  const a = KEYS[e.key]; if (!a) return;
+  e.preventDefault(); touched();
+  if (e.repeat) return;
+  if (['up', 'down', 'left', 'right'].includes(a)) startHold(a); else act(a);
+});
+window.addEventListener('keyup', e => { const a = KEYS[e.key]; if (a) stopHold(a); });
+window.addEventListener('blur', () => stopHold());
+
+/* Gamepad (standard mapping) */
+const GP_BTN = { 0: 'a', 1: 'b', 3: 'y', 4: 'lb', 5: 'rb', 6: 'lt', 7: 'rt', 9: 'menu', 16: 'home', 8: 'home' };
+let gpPrev = {}, gpDir = null, padOn = false;
+function pollPads() {
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  const on = pads.length > 0;
+  if (on !== padOn) { padOn = on; document.querySelector('#status .pad').classList.toggle('on', on); if (S.screen !== 'off') toast(on ? 'Mando conectado' : 'Mando desconectado', on); }
+  const p = pads[0]; if (!p) return;
+  for (const [i, a] of Object.entries(GP_BTN)) {
+    const pr = p.buttons[i] && p.buttons[i].pressed;
+    if (pr && !gpPrev[i]) { touched(); audio(); act(a); }
+    gpPrev[i] = pr;
+  }
+  const ax = p.axes[0] || 0, ay = p.axes[1] || 0, b = i => p.buttons[i] && p.buttons[i].pressed;
+  let dir = null;
+  if (b(12) || ay < -.6) dir = 'up'; else if (b(13) || ay > .6) dir = 'down'; else if (b(14) || ax < -.6) dir = 'left'; else if (b(15) || ax > .6) dir = 'right';
+  if (dir !== gpDir) { if (dir) touched(); if (gpDir) stopHold(gpDir); if (dir) startHold(dir); gpDir = dir; }
+}
+/* The loop exists only while a gamepad is connected or a direction is held. Rate by state:
+   menus every frame; game, off and transitions 20 Hz; deep idle (60 s without input) 15 Hz. */
+let loopH = 0, idleT = 0;
+function inputRate() {
+  if (S.screen === 'quick' || S.screen === 'dlg') return 'raf';
+  if (S.screen === 'game') return 16;   /* game: no rAF, but the Home button keeps frame-level latency */
+  if (S.screen === 'off' || S.screen === 'transition') return 50;
+  return S.deep ? 66 : 'raf';
+}
+function ensureLoop() {
+  if (loopH) return;
+  const r = inputRate();
+  loopH = r === 'raf' ? requestAnimationFrame(tickInput) : setTimeout(tickInput, r);
+}
+function tickInput() { loopH = 0; pollPads(); holdTick(performance.now()); if (padOn || hold.dir) ensureLoop(); }
+function touched() {
+  if (S.deep) { S.deep = false; if (AC && AC.state !== 'running' && S.screen !== 'game') AC.resume(); }
+  clearTimeout(idleT);
+  idleT = setTimeout(() => { S.deep = true; if (S.screen !== 'game' && S.screen !== 'quick') audioSleep(); }, 60000);
+}
+window.addEventListener('gamepadconnected', () => { pollPads(); ensureLoop(); });
+window.addEventListener('gamepaddisconnected', () => { pollPads(); });
+
+/* Pointer: click focuses and activates, as the same focus model */
+stage.addEventListener('click', e => {
+  stage.focus({ preventScroll: true }); touched();
+  if (S.screen === 'off' || S.screen === 'asleep') return act('a');
+  const el = e.target.closest('[data-f]');
+  if (!el || !NAV) return;
+  if (S.screen === 'settings') {
+    if (el.dataset.cat !== undefined) { cat = +el.dataset.cat; play('nav'); return enterSettings(); }
+    if (el.classList.contains('srow')) { const ri = +el.dataset.row; if (!NAV.pane || NAV.c !== ri) { play('nav'); return enterSettings({ pane: true, ri }); } return settingsA(el); }
+  }
+  for (let r = 0; r < NAV.rows.length; r++) {
+    const c = NAV.rows[r].indexOf(el);
+    if (c >= 0) {
+      if (NAV.r === r && NAV.c === c) return act('a');
+      NAV.r = r; NAV.c = c; play('nav'); return applyFocus();
+    }
+  }
+});
+
+/* Bar buttons */
+$('#bCrash').addEventListener('click', () => { simulateCrash(); });
+/* Fault injection: what the UI shows when stoned or the governor misbehave */
+$('#bFault').addEventListener('change', e => {
+  PerfAPI.sim.setFault(e.target.value);
+  refreshCaps().then(() => api('getState')).then(() => {
+    if (S.screen === 'perf') enterPerf({ r: NAV.r, c: NAV.c, fresh: true });
+    else if (S.screen === 'tuning') { D = null; enterTuning({ ri: NAV.r }); }
+  });
+});
+$('#bSound').addEventListener('click', () => { S.sound = !S.sound; applyPrefs(); if (S.sound) { audio(); play('select'); } if (S.screen === 'settings') enterSettings({ pane: !!NAV.pane, ri: NAV.c }); });
+$('#bReset').addEventListener('click', () => {
+  S.running = null; S.tech = false; recent = [0, 1, 2, 3, 4, 5]; S.filter = 0; cat = 1;
+  testUI = null; $('#bCrash').disabled = true; closeDlg(); PerfAPI.sim.wipe(); slots.fill(null); S.adv = false; S.advAck = false; D = null; G.forEach(g => { g.perf = null; });
+  $('#quick').classList.remove('on'); $('#power').classList.remove('on'); setMetrics(false);
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); setBg('', 'none'); chrome(false, false);
+  $('#hints').classList.add('hide'); line.classList.add('off', 'boot'); NAV = null;
+  stage.focus({ preventScroll: true }); audio(); boot();
+});
+
+/* ---------- Start ---------- */
+applyPrefs();
+const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 2500))]) : Promise.resolve();
+ready.then(() => {
+  /* only what the first Home needs is prepared, in idle time; the rest of the library stays COLD */
+  want(G[recent[0]], 'hero', true); recent.forEach(i => want(G[i], 'cap')); recent.forEach(i => want(G[i], 'hero'));
+  $('#offmsg').classList.add('on');
+  stage.focus({ preventScroll: true });
+  touched(); pollPads(); if (padOn) ensureLoop();
+});
+})();
+</script>
+
+</body></html>

@@ -1,0 +1,40 @@
+[Unit]
+Description=STONE System Service
+Requires=stoned-recover.service dbus.service
+After=stoned-recover.service dbus.service cyan-skillfish-governor-smu.service
+Wants=cyan-skillfish-governor-smu.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=stoned
+Group=stoned
+SupplementaryGroups=render systemd-journal
+ExecStart=/usr/bin/stoned
+Restart=on-failure
+RestartSec=2
+WatchdogSec=15
+StateDirectory=stone
+StateDirectoryMode=0700
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+SystemCallArchitectures=native
+# GPU render node for the stability workload; nothing else under /dev.
+DevicePolicy=closed
+DeviceAllow=char-drm rw
+
+[Install]
+WantedBy=multi-user.target

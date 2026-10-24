@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=STONE
+Description=Arranque de STONE MACHINE: negro y una línea blanca que se abre en el tercio inferior.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/stone
+ScriptFile=/usr/share/plymouth/themes/stone/stone.script

@@ -1,0 +1,42 @@
+# STONE — tema Plymouth
+# Negro absoluto. Una línea blanca nace en el centro del tercio inferior (82 % de la altura,
+# la misma posición relativa que la línea del frontal de STONE MACHINE), se abre en ~1,6 s
+# y después respira lentamente mientras el sistema arranca.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+line_y = Math.Int(screen_h * 0.82);
+thick = Math.Max(2, Math.Int(screen_h / 540));
+max_w = Math.Int(screen_w * 0.25);
+
+base = Image("line.png");
+line = Sprite();
+line.SetZ(10);
+
+frame = 0;
+
+fun refresh_callback ()
+{
+    frame = frame + 1;
+
+    # Apertura: 80 cuadros a 50 por segundo, con frenado suave (sin rebote)
+    open = Math.Clamp(frame / 80, 0, 1);
+    rest = 1 - open;
+    eased = 1 - rest * rest * rest;
+
+    w = Math.Max(thick, Math.Int(max_w * eased));
+    line.SetImage(base.Scale(w, thick));
+    line.SetX(Math.Int(screen_w / 2 - w / 2));
+    line.SetY(line_y);
+
+    if (open < 1)
+        line.SetOpacity(1);
+    else
+        line.SetOpacity(0.78 + 0.22 * Math.Cos(frame / 25));
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

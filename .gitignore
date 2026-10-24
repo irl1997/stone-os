@@ -1,0 +1,11 @@
+# local builds and test byproducts
+output/
+dist/
+*.iso
+e2e-failure.png
+tests/e2e/node_modules/
+__pycache__/
+*.pyc
+.ruff_cache/
+# signing key: never commit (see GITHUB_SETUP.md)
+cosign.key

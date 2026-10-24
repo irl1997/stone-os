@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# STONE Home inside Steam Game Mode: register | launch | status
+import sys
+sys.path.insert(0, "/usr/lib/stone")
+from stone_home.session import main
+sys.exit(main(sys.argv[1:]))

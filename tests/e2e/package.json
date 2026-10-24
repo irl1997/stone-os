@@ -1,0 +1,11 @@
+{
+  "name": "stone-home-e2e",
+  "private": true,
+  "description": "End-to-end test and lint of the STONE Home page (CI and development only, not part of the image).",
+  "type": "module",
+  "devDependencies": {
+    "eslint": "9.39.1",
+    "globals": "16.5.0",
+    "playwright": "1.63.0"
+  }
+}

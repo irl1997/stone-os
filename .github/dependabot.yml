@@ -1,0 +1,12 @@
+# Proposes updates of the pinned GitHub Actions (by commit SHA) and of the test-only npm
+# packages. Each update arrives as a pull request and must pass CI before merging.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /tests/e2e
+    schedule:
+      interval: monthly

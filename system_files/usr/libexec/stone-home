@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# STONE Home process (see /usr/bin/stone-home, which starts it with a clean environment).
+import sys
+sys.path.insert(0, "/usr/lib/stone")
+from stone_home.app import main
+sys.exit(main(sys.argv))
