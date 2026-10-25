@@ -483,16 +483,62 @@ def H02_launch_only_games_from_the_last_library_scan():
         root = FX.build(os.path.join(d, "Steam"))
         seen = []
         h = host_mod.Host(lambda *a: None, stoned=FakeStoned(), sysapi=system.System(spawn=seen.append), steam_root=root)
+        h.steam_ui = FakeSteamUI(ok=False)                 # Steam's interface not reachable: URL fallback
         assert run_host(h, {"method": "launch", "args": ["1001"]})[1] == "InvalidValue"   # no scan yet
         lib, code = run_host(h, {"method": "library", "args": []})
         assert code is None and len(lib["games"]) == 4
-        assert run_host(h, {"method": "launch", "args": ["1001"]}) == ({"ok": True}, None)
+        assert run_host(h, {"method": "launch", "args": ["1001"]}) == ({"ok": True, "via": "url"}, None)
         assert run_host(h, {"method": "launch", "args": [str(FX.EMU_APPID)]})[1] is None
         assert run_host(h, {"method": "launch", "args": ["228980"]})[1] == "InvalidValue"
         assert run_host(h, {"method": "openSteam", "args": ["store"]})[1] is None
         assert run_host(h, {"method": "openSteam", "args": ["steam://install/1"]})[1] == "InvalidValue"
         assert seen == ["steam://rungameid/1001", f"steam://rungameid/{(FX.EMU_APPID << 32) | 0x02000000}",
                         "steam://url/StoreFrontPage"]
+
+
+class FakeSteamUI:
+    def __init__(self, ok=True):
+        self.ok, self.calls = ok, []
+
+    def _r(self, what):
+        self.calls.append(what)
+        return "cef[SharedJSContext]: ok" if self.ok else "cef unavailable (URLError)"
+
+    def run_game(self, gid):
+        return self._r(("run", gid))
+
+    def open_settings(self, sec):
+        return self._r(("settings", sec))
+
+    def open_page(self, page):
+        return self._r(("page", page))
+
+
+@test
+def H04_steam_ui_first_for_games_and_steam_settings_only_known_sections():
+    with Tmp() as d:
+        root = FX.build(os.path.join(d, "Steam"))
+        seen = []
+        h = host_mod.Host(lambda *a: None, stoned=FakeStoned(), sysapi=system.System(spawn=seen.append), steam_root=root)
+        ui = h.steam_ui = FakeSteamUI(ok=True)
+        run_host(h, {"method": "library", "args": []})
+        assert run_host(h, {"method": "launch", "args": ["1001"]}) == ({"ok": True, "via": "steam-ui"}, None)
+        assert run_host(h, {"method": "openSteamSettings", "args": ["Display"]}) == ({"ok": True, "via": "steam-ui"}, None)
+        assert run_host(h, {"method": "openSteamSettings", "args": ["Display');x('"]})[1] == "InvalidValue"
+        assert run_host(h, {"method": "openSteam", "args": ["downloads"]})[0]["via"] == "steam-ui"
+        assert ui.calls == [("run", 1001), ("settings", "Display"), ("page", "Downloads")] and seen == []
+        ui.ok = False                                      # settings have no URL fallback: say where instead
+        assert run_host(h, {"method": "openSteamSettings", "args": ["Audio"]})[1] == "Unsupported"
+        assert run_host(h, {"method": "restart", "args": []})[1] == "Unsupported"     # not wired outside app.py
+    from stone_home import steamcef
+    assert "n.Settings('Display')" in steamcef.open_settings_expression("Display")
+    for bad in ("display", "Display'", ""):
+        try:
+            steamcef.open_settings_expression(bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    assert system.clean_prefs({"render": 2})["render"] == 2 and system.clean_prefs({"render": 7})["render"] == 0
 
 
 @test

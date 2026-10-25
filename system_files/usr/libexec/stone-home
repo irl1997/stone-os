@@ -1,6 +1,34 @@
 #!/usr/bin/python3 -I
 # STONE Home process (see /usr/bin/stone-home, which starts it with a clean environment).
+import json
+import os
 import sys
+
+# STONE Home is the console's menu: games come first. A lower CPU priority, inherited by
+# WebKit's processes, keeps it from taking time from a running game.
+try:
+    os.nice(5)
+except OSError:
+    pass
+
+# Drawing mode inside Game Mode, chosen in Ajustes -> Pantalla (prefs "render"), applied here
+# because GTK and WebKit read it only at start. ~/.config/stone/home.env, when present, wins.
+if (os.environ.get("XDG_CURRENT_DESKTOP") == "gamescope" or os.environ.get("GAMESCOPE_WAYLAND_DISPLAY")) \
+        and os.environ.get("STONE_HOME_ENV_FILE") != "1":
+    try:
+        cfg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+        with open(os.path.join(cfg, "stone", "home.json")) as f:
+            render = json.load(f).get("render", 0)
+    except (OSError, ValueError, AttributeError):
+        render = 0
+    if render == 1:                       # light: software, 1280x720, Gamescope scales it up
+        os.environ["STONE_HOME_SIZE"] = "1280x720"
+    elif render == 2:                     # fluid: GPU, full redraw on every frame
+        os.environ["GSK_RENDERER"] = "gl"
+        os.environ["GSK_DEBUG"] = "full-redraw"
+        os.environ.pop("WEBKIT_DISABLE_COMPOSITING_MODE", None)
+    os.environ["STONE_HOME_RENDER"] = str(render)
+
 sys.path.insert(0, "/usr/lib/stone")
-from stone_home.app import main
+from stone_home.app import main  # noqa: E402
 sys.exit(main(sys.argv))

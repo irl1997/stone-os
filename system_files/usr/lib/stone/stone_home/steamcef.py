@@ -146,8 +146,8 @@ def run_game_expression(game_id):
             f"SteamClient.Apps.RunGame('{gid}','',-1,100);return 'ok';}})()")
 
 
-def run_game(game_id, port=PORT):
-    """Ask Steam's interface to start game_id. Returns a short status string, never raises."""
+def ui_eval(expression, port=PORT):
+    """Run one fixed expression in Steam's interface. Returns a short status, never raises."""
     try:
         page = pick(targets(port))
     except (OSError, ValueError) as e:
@@ -155,6 +155,51 @@ def run_game(game_id, port=PORT):
     if not page:
         return "cef: no Steam page yet"
     try:
-        return f"cef[{page.get('title', '?')}]: {evaluate(page['webSocketDebuggerUrl'], run_game_expression(game_id))}"
+        return f"cef[{page.get('title', '?')}]: {evaluate(page['webSocketDebuggerUrl'], expression)}"
     except (OSError, ValueError, RuntimeError) as e:
         return f"cef error: {e}"
+
+
+def run_game(game_id, port=PORT):
+    """Ask Steam's interface to start game_id (a Steam app id or a shortcut's 64-bit game id)."""
+    return ui_eval(run_game_expression(game_id), port)
+
+
+# Sections of Steam's own settings (SettingsSection_t in decky-frontend-lib) STONE may open.
+SETTINGS_SECTIONS = ("Display", "Audio", "Controller", "Internet", "Bluetooth", "Storage", "System",
+                     "Power", "Accessibility", "Keyboard", "Downloads")
+PAGES = ("Downloads",)
+
+# Steam's interface: the focused window (or the Game Mode main window) and its navigator.
+# The main menu is opened first so Steam's interface comes over the running app (STONE is
+# itself the "game" Steam is showing), then menus are closed after navigating, as Decky does.
+_NAV = ("const S=window.SteamUIStore;if(!S)return 'no SteamUIStore';let w=null;"
+        "try{w=S.GetFocusedWindowInstance();}catch(e){}"
+        "const main=S.WindowStore&&S.WindowStore.GamepadUIMainWindowInstance;"
+        "if(!w||!(w.Navigator||w.m_Navigator))w=main||w;"
+        "const n=w&&(w.Navigator||w.m_Navigator);if(!n)return 'no Navigator';"
+        "const m=w.MenuStore;try{m&&m.OpenMainMenu&&m.OpenMainMenu();}catch(e){}")
+
+
+def open_settings_expression(section):
+    if section not in SETTINGS_SECTIONS:
+        raise ValueError("unknown settings section")
+    return ("(async()=>{" + _NAV + f"if(!n.Settings)return 'no Settings';n.Settings('{section}');"
+            "await new Promise(r=>setTimeout(r,150));try{m&&m.CloseSideMenus&&m.CloseSideMenus();}catch(e){}"
+            "return 'ok';})()")
+
+
+def open_page_expression(page):
+    if page not in PAGES:
+        raise ValueError("unknown page")
+    return ("(async()=>{" + _NAV + f"if(!n.{page})return 'no {page}';n.{page}();"
+            "await new Promise(r=>setTimeout(r,150));try{m&&m.CloseSideMenus&&m.CloseSideMenus();}catch(e){}"
+            "return 'ok';})()")
+
+
+def open_settings(section, port=PORT):
+    return ui_eval(open_settings_expression(section), port)
+
+
+def open_page(page, port=PORT):
+    return ui_eval(open_page_expression(page), port)

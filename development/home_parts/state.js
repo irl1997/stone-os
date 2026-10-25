@@ -5,7 +5,7 @@ const S = {
   hc: false, rm: reduceOS, ts: 0, safe: 5, section: 0, filter: 0, from: 'home',
   prof: 'balanced', lkg: 'balanced', adv: false, advAck: false, idle: 2,
   caps: null, actual: null, safeMode: false, game: null, provisional: false, pending: null,
-  info: null, libReady: false, libFound: true, launching: null, st: null
+  render: 0, info: null, libReady: false, libFound: true, launching: null, st: null
 };
 /* Performance profiles: all values stay inside the range documented as stable on every BC-250 (≤ 2000 MHz at 1000 mV, ≤ 85 °C).
    stoned holds the same table (profiles.py) and is the one that applies it; these are for display. */

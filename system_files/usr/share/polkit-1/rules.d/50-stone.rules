@@ -1,0 +1,21 @@
+// STONE OS: the console user may change performance profiles and power off / restart from
+// STONE Home.
+//
+// The policy's allow_active=yes is not enough in Steam Game Mode: STONE Home runs under the
+// user's systemd manager (gamescope-session-plus@.service), outside the logind session, so
+// polkit sees it as neither local nor active and refused every change (board, RC4:
+// "no tiene los permisos"). Same approach as Bazzite's own Game Mode rules
+// (10-gamescope-session.rules): members of "wheel", the administrator created at install.
+// stoned still checks every value against the governor's factory range.
+polkit.addRule(function (action, subject) {
+    if ((action.id == "org.stonemachine.performance.change" ||
+         action.id == "org.stonemachine.performance.tune") &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+    if ((action.id == "org.freedesktop.login1.power-off" ||
+         action.id == "org.freedesktop.login1.reboot") &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

@@ -1,13 +1,36 @@
+/* Steam's own settings section for each STONE category (opened in Steam's interface). */
+const STEAM_SEC = { 'Sistema': 'System', 'Pantalla': 'Display', 'Audio': 'Audio', 'Mandos': 'Controller', 'Red': 'Internet',
+  'Bluetooth': 'Bluetooth', 'Almacenamiento': 'Storage', 'Energía': 'Power', 'Actualizaciones': 'System', 'Accesibilidad': 'Accessibility' };
+const RENDER = ['Estable', 'Ligero', 'Fluido'];
+const RENDER_TXT = ['Sin GPU, resolución completa. Sin parpadeo; animaciones más lentas',
+  'Sin GPU, a 1280 × 720 escalado. Animaciones más fluidas, texto algo más suave',
+  'Con GPU. Lo más fluido y lo que menos carga la consola; confírmalo en tu televisor'];
+/* Opens the matching section of Steam's settings over STONE; if Steam cannot be reached, says where it is. */
+function openSteamSettings(r) {
+  if (!r.sec) return toast(r.where, false);
+  return Sys.openSteamSettings(r.sec).then(res => { if (!res || !res.ok) toast(r.where, false); }, () => toast(r.where, false));
+}
+/* A new drawing mode applies when STONE Home starts: save, say so, restart. */
+function applyRender() {
+  clearTimeout(saveT);
+  toast(`Modo de imagen: ${RENDER[S.render]}. STONE se reinicia…`, false);
+  Sys.prefsSet({ sound: S.sound, vol: S.vol, hc: S.hc, rm: S.rm, ts: S.ts, safe: S.safe, idle: S.idle, tech: S.tech,
+    adv_ack: S.advAck, render: S.render, favorites: [...favs] })
+    .then(() => setTimeout(() => Sys.restart().catch(() => toast('Se aplica la próxima vez que abras STONE', false)), 900))
+    .catch(() => toast('No se pudo guardar el modo de imagen', false));
+  enterSettings({ pane: true, ri: NAV.c });
+}
 function catRows() {
-  /* Settings Steam already handles stay in Steam; STONE says exactly where. */
-  const steam = (t, d, where) => ({ l: t, s: d, v: 'En Steam', act: 'steam', where });
+  /* Settings Steam already handles open in Steam's own settings; if that fails, STONE says where. */
+  const steam = (t, d, where) => ({ l: t, s: d, v: 'Abrir en Steam', act: 'steam', where, sec: STEAM_SEC[CATS[cat]] });
   const rel = (S.info && S.info.release) || {}, dep = (S.info && S.info.deployments) || null;
   switch (CATS[cat]) {
     case 'Pantalla': return { d: 'Ajusta cómo se ve STONE en tu televisor.', rows: [
       { l: 'Área segura', s: 'Usa ← → hasta que las cuatro esquinas se vean completas', v: `${S.safe} %`, key: 'safe' },
       steam('Resolución y frecuencia', 'Las fija Steam para todo el sistema', 'Botón STEAM → Ajustes → Pantalla'),
       steam('HDR', 'Según el televisor y el juego', 'Botón STEAM → Ajustes → Pantalla'),
-      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
+      { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' },
+      { l: 'Modo de imagen', s: RENDER_TXT[S.render], v: RENDER[S.render], key: 'render' }] };
     case 'Audio': return { d: 'Sonidos del sistema y volumen de la interfaz.', rows: [
       { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
       { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },

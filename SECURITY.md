@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc4
+# Seguridad de STONE OS 0.1.0-rc5
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -61,3 +61,7 @@ Para informar de un problema de seguridad, abre un *security advisory* privado e
 Para abrir STONE Home al arrancar, STONE crea `~/.local/share/Steam/.cef-enable-remote-debugging`. Con ese archivo, Steam abre su protocolo de depuración en `127.0.0.1:8080` (sólo local) y STONE lo usa para una única llamada: `SteamClient.Apps.RunGame('<id de STONE>', '', -1, 100)`, con el identificador comprobado como número. Es lo mismo que hace Decky Loader, habitual en Bazzite.
 
 Riesgo aceptado: mientras Steam corre, cualquier programa de la propia consola puede controlar Steam por ese puerto. No es accesible desde la red. Para desactivarlo: `STONE_HOME_CEF=0` en las unidades `stone-home-register` y `stone-home-autostart` y borrar el archivo; STONE vuelve entonces a `steam://rungameid`, que en el modo juego no abre accesos directos.
+
+## Regla de polkit para el modo juego (desde 0.1.0-rc5)
+
+`/usr/share/polkit-1/rules.d/50-stone.rules` concede a los miembros de `wheel` (el administrador creado al instalar) las acciones `org.stonemachine.performance.change` y `.tune`, y `org.freedesktop.login1.power-off` y `.reboot`, sin preguntar contraseña. Motivo: en el modo juego STONE Home corre fuera de la sesión de logind y polkit no la considera activa. Es el mismo criterio que usa Bazzite para sus acciones del modo juego. `stoned` sigue validando cada valor (rango de fábrica, sin voltaje). `scripts/validate.sh` comprueba que la regla no concede nada más.

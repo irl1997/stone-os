@@ -61,6 +61,18 @@ PY
 then ok "json and toml"; else bad "json/toml"; fi
 if have xmllint; then
     if xmllint --noout system_files/usr/share/polkit-1/actions/*.policy system_files/usr/share/dbus-1/system.d/*.conf; then ok "xml"; else bad "xml"; fi
+# polkit rule: grants the STONE actions (and power) to wheel only, nothing else.
+if command -v node >/dev/null 2>&1; then
+    if node -e "
+let rule; const polkit = { Result: { YES: 'yes' }, addRule: f => { rule = f; } };
+eval(require('fs').readFileSync('system_files/usr/share/polkit-1/rules.d/50-stone.rules', 'utf8'));
+const s = g => ({ isInGroup: x => x === g }), a = id => ({ id });
+const ok = rule(a('org.stonemachine.performance.change'), s('wheel')) === 'yes' && rule(a('org.stonemachine.performance.tune'), s('wheel')) === 'yes'
+  && rule(a('org.stonemachine.performance.change'), s('users')) === undefined && rule(a('org.freedesktop.udisks2.modify'), s('wheel')) === undefined;
+process.exit(ok ? 0 : 1);"; then ok "polkit rule"; else bad "polkit rule grants the wrong things"; fi
+else
+    skip "polkit rule (node not installed)"
+fi
 else skip "xmllint"; fi
 
 # 7. systemd units

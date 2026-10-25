@@ -1,8 +1,18 @@
-# STONE OS 0.1.0-rc4
+# STONE OS 0.1.0-rc5
 
-Cuarta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Quinta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc4
+
+Con RC4 en la placa (25-10-2026): STONE se veía bien, pero las animaciones no eran fluidas, los ajustes que llevan a Steam no abrían nada y los perfiles de rendimiento decían «no tiene los permisos».
+
+- **Perfiles de rendimiento:** STONE Home corre bajo el gestor de servicios del usuario (la sesión del modo juego), fuera de la sesión de logind, y polkit no lo veía como «sesión activa». Nueva regla `/usr/share/polkit-1/rules.d/50-stone.rules`: el administrador de la consola (grupo `wheel`, el usuario creado al instalar) puede cambiar perfiles y ajustar, y apagar o reiniciar. Es el mismo criterio que las reglas de Bazzite para el modo juego. `stoned` sigue comprobando cada valor contra el rango de fábrica del regulador.
+- **Ajustes que llevan a Steam:** abren la sección correspondiente de los ajustes de Steam (Pantalla, Audio, Mandos, Red, Bluetooth, Almacenamiento, Sistema, Energía, Accesibilidad) por la interfaz de Steam (`Navigator.Settings`, como Decky). Si Steam no responde, STONE dice dónde está el ajuste.
+- **Juegos:** JUGAR también pide el juego a la interfaz de Steam; la URL queda de respaldo.
+- **Animaciones:** nuevo ajuste **Pantalla → Modo de imagen**: *Estable* (sin GPU, resolución completa, el de RC3/RC4), *Ligero* (sin GPU, 1280 × 720 que Gamescope escala; más fluido) y *Fluido* (GPU con redibujado completo de cada cuadro, para evitar el parpadeo de RC2; el más fluido y el que menos carga). STONE se reinicia al cambiarlo. *Fluido* está por confirmar en la placa.
+- **Rendimiento de los juegos:** STONE Home y sus procesos corren con prioridad de CPU más baja (`nice 5`), así un juego abierto tiene preferencia.
 
 ## Cambios desde 0.1.0-rc3
 

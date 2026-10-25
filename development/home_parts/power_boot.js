@@ -62,12 +62,12 @@ let saveT = 0;
 function savePrefs() {
   clearTimeout(saveT);
   saveT = setTimeout(() => Sys.prefsSet({ sound: S.sound, vol: S.vol, hc: S.hc, rm: S.rm, ts: S.ts, safe: S.safe, idle: S.idle,
-    tech: S.tech, adv_ack: S.advAck, favorites: [...favs] }).catch(() => {}), 400);
+    tech: S.tech, adv_ack: S.advAck, render: S.render, favorites: [...favs] }).catch(() => {}), 400);
 }
 function loadPrefs(p) {
   if (!p) return;
   S.sound = p.sound; S.vol = p.vol; S.hc = p.hc; S.rm = p.rm || reduceOS; S.ts = p.ts; S.safe = p.safe; S.idle = p.idle;
-  S.tech = p.tech; S.advAck = p.adv_ack; favs.clear(); (p.favorites || []).forEach(a => favs.add(a));
+  S.tech = p.tech; S.advAck = p.adv_ack; S.render = p.render || 0; favs.clear(); (p.favorites || []).forEach(a => favs.add(a));
   applyPrefs();
 }
 

@@ -1,4 +1,4 @@
-# Instalar STONE OS 0.1.0-rc4 en la AMD BC-250
+# Instalar STONE OS 0.1.0-rc5 en la AMD BC-250
 
 Estado: **NOT TESTED en placa.** Estos pasos siguen el instalador estándar de bootc-image-builder (Anaconda) y la documentación de la BC-250; la prueba 16 de HARDWARE_VALIDATION.md los comprueba en la consola real.
 

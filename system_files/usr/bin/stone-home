@@ -25,7 +25,7 @@ conf="${XDG_CONFIG_HOME:-$HOME/.config}/stone/home.env"
 if [ -f "$conf" ]; then
     while IFS='=' read -r key value; do
         case "$key" in
-            GDK_BACKEND|GSK_RENDERER|WEBKIT_DISABLE_COMPOSITING_MODE|WEBKIT_DISABLE_DMABUF_RENDERER|\
+            GDK_BACKEND|GSK_RENDERER|GSK_DEBUG|WEBKIT_DISABLE_COMPOSITING_MODE|WEBKIT_DISABLE_DMABUF_RENDERER|STONE_HOME_SIZE|\
             ENABLE_GAMESCOPE_WSI|STONE_HOME_DEVTOOLS) ;;
             *) continue ;;
         esac
@@ -38,6 +38,9 @@ if [ -f "$conf" ]; then
             export "$key=$value"
         fi
     done < "$conf"
+    # The file takes precedence over the drawing mode chosen in Ajustes.
+    STONE_HOME_ENV_FILE=1
+    export STONE_HOME_ENV_FILE
 fi
 
 # Everything STONE Home and WebKit print goes to ~/.local/state/stone/home.log (the previous

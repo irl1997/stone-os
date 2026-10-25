@@ -33,7 +33,8 @@ const PerfAPI = { on: Bridge.on };
 const Sys = {
   library: () => Bridge.call('library'), launch: appid => Bridge.call('launch', appid), openSteam: k => Bridge.call('openSteam', k),
   power: a => Bridge.call('power', a), info: () => Bridge.call('systemInfo'),
-  prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p)
+  prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p),
+  openSteamSettings: s => Bridge.call('openSteamSettings', s), restart: () => Bridge.call('restart')
 };
 async function sys(method, ...a) {
   try { return await Sys[method](...a); }

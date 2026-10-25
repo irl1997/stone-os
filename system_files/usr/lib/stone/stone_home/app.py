@@ -66,6 +66,7 @@ class HomeWindow:
         self.ready = False
         self.queue = []
         self.host = Host(self.emit)
+        self.host.restart = self._restart
         if selftest:
             self.host.selftest = self._selftest_done
 
@@ -118,9 +119,17 @@ class HomeWindow:
             Gtk.StyleContext.add_provider_for_display(disp, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.win = Gtk.ApplicationWindow(application=app, title="STONE")
         self.win.set_child(self.view)
-        self.win.set_default_size(1920, 1080)
-        if not selftest:
-            self.win.fullscreen()
+        size = os.environ.get("STONE_HOME_SIZE", "")
+        w, _, h = size.partition("x")
+        if not selftest and w.isdigit() and h.isdigit() and 320 <= int(w) <= 3840 and 240 <= int(h) <= 2160:
+            # Light drawing mode: a smaller window Gamescope scales to the screen (fewer pixels
+            # to draw in software). The page scales itself to the window.
+            self.win.set_decorated(False)
+            self.win.set_default_size(int(w), int(h))
+        else:
+            self.win.set_default_size(1920, 1080)
+            if not selftest:
+                self.win.fullscreen()
         self.win.present()
         self.view.load_uri("stone://home/index.html" + ("#selftest" if selftest else ""))
         if selftest:
@@ -189,6 +198,18 @@ class HomeWindow:
             return True
         return False
 
+    def _restart(self):
+        """Same process (Steam keeps tracking it), started again through /usr/bin/stone-home so a
+        new drawing mode applies."""
+        launcher = "/usr/bin/stone-home"
+        if not os.access(launcher, os.X_OK):
+            print("stone-home: restart not possible here", file=sys.stderr, flush=True)
+            return
+        print("[stone] restarting", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(launcher, [launcher])
+
     def _crashed(self, view, reason):
         # The web process died: reload the interface. stoned holds every state that matters.
         print(f"stone-home: web process terminated ({reason}); reloading", file=sys.stderr, flush=True)
@@ -220,8 +241,8 @@ def _startup_log():
     except Exception as e:  # noqa: BLE001  (diagnostics must never stop the interface)
         print(f"stone-home: could not record Steam ids: {e}", file=sys.stderr, flush=True)
     disp = Gdk.Display.get_default()
-    keys = ("DISPLAY", "XDG_CURRENT_DESKTOP", "GDK_BACKEND", "GSK_RENDERER",
-            "WEBKIT_DISABLE_COMPOSITING_MODE", "WEBKIT_DISABLE_DMABUF_RENDERER")
+    keys = ("DISPLAY", "XDG_CURRENT_DESKTOP", "STONE_HOME_RENDER", "STONE_HOME_SIZE", "GDK_BACKEND", "GSK_RENDERER",
+            "GSK_DEBUG", "WEBKIT_DISABLE_COMPOSITING_MODE", "WEBKIT_DISABLE_DMABUF_RENDERER")
     env = " ".join(f"{k}={os.environ.get(k, '-')}" for k in keys)
     print(f"[stone] start: steam_ids={ids} display={type(disp).__name__ if disp else None} "
           f"webkit={WebKit.get_major_version()}.{WebKit.get_minor_version()}.{WebKit.get_micro_version()} {env}",

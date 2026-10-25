@@ -12,6 +12,7 @@ from gi.repository import GLib
 from . import bridge
 from . import library
 from . import shortcuts
+from . import steamcef
 from . import system
 
 
@@ -23,6 +24,8 @@ class Host:
         self.steam_root = steam_root
         self.games = {}                                       # appid -> launch URL, from the last scan
         self.selftest = None                                  # set by app.py --selftest
+        self.restart = None                                   # set by app.py: restart STONE Home
+        self.steam_ui = steamcef                              # Steam's interface (replaced in tests)
 
     def root(self):
         return self.steam_root or shortcuts.steam_root()
@@ -59,23 +62,54 @@ class Host:
         self.games = {g["appid"]: g["launch"] for g in res["games"]}
         done(res)
 
+    def _in_steam_ui(self, call, fallback, done):
+        """Ask Steam's interface first (in Game Mode steam:// URLs are received and ignored for
+        some targets, board RC3); the steam:// URL is the fallback. Runs off the UI thread."""
+        def work():
+            st = call()
+            ok = st.endswith(": ok")
+            err = None
+            if not ok and fallback:
+                try:
+                    fallback()
+                    ok = True
+                except (OSError, ValueError) as e:
+                    err = str(e)
+            print(f"[stone] steam ui: {st}{'' if ok or not err else ' / ' + err}", flush=True)
+            res = ({"ok": True, "via": "steam-ui" if st.endswith(": ok") else "url"}, None, "") if ok \
+                else (None, "Unsupported", st)
+            GLib.idle_add(lambda: (done(*res), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
     def m_launch(self, args, done):
         if len(args) != 1 or args[0] not in self.games:
             return done(None, "InvalidValue", "unknown game")
-        try:
-            self.sys.open_url(self.games[args[0]])
-        except (OSError, ValueError) as e:
-            return done(None, "Unsupported", str(e))
-        done({"ok": True})
+        url = self.games[args[0]]
+        gid = url.rsplit("/", 1)[-1]
+        if not gid.isdigit():
+            return done(None, "InvalidValue", "unknown game")
+        self._in_steam_ui(lambda: self.steam_ui.run_game(int(gid)), lambda: self.sys.open_url(url), done)
 
     def m_openSteam(self, args, done):
         if len(args) != 1 or args[0] not in system.STEAM_URLS:
             return done(None, "InvalidValue", "unknown target")
-        try:
-            self.sys.open_url(system.STEAM_URLS[args[0]])
-        except OSError as e:
-            return done(None, "Unsupported", str(e))
+        page = {"downloads": "Downloads"}.get(args[0])
+        url = system.STEAM_URLS[args[0]]
+        call = (lambda: self.steam_ui.open_page(page)) if page else (lambda: "cef: not used")
+        self._in_steam_ui(call, lambda: self.sys.open_url(url), done)
+
+    def m_openSteamSettings(self, args, done):
+        if len(args) != 1 or args[0] not in steamcef.SETTINGS_SECTIONS:
+            return done(None, "InvalidValue", "unknown settings section")
+        section = args[0]
+        self._in_steam_ui(lambda: self.steam_ui.open_settings(section), None, done)
+
+    def m_restart(self, args, done):
+        """Restart STONE Home (a new drawing mode applies at start)."""
+        if self.restart is None:
+            return done(None, "Unsupported", "restart not available")
         done({"ok": True})
+        GLib.timeout_add(300, lambda: (self.restart(), False)[1])
 
     def art_path(self, appid, kind):
         return library.art_path(self.root(), appid, kind)
