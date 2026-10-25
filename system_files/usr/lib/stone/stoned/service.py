@@ -32,6 +32,7 @@ NAME = "org.stonemachine.Performance1"
 PATH = "/org/stonemachine/Performance1"
 IFACE = "org.stonemachine.Performance1"
 HOME_STABLE_S = 60
+CEILING_CHECK_S = 10           # how often the 40 CU ceiling is re-checked
 
 XML = f"""
 <node>
@@ -133,6 +134,8 @@ class Service:
         self.game_source = os.environ.get("STONE_GAME_SOURCE", "steam")
         self.steam = None
         self._recover_from_service_crash()
+        self._enforce_ceiling()
+        GLib.timeout_add_seconds(CEILING_CHECK_S, lambda: (self._enforce_ceiling(), True)[1])
         if self.game_source == "steam":
             self.steam = games_mod.SteamWatch(self._game_started, self._game_ended)
             self.steam.scan()          # a game already running after a service restart
@@ -155,6 +158,17 @@ class Service:
         self.store.clear_flag(S.FLAG_TRIAL)
         self._record_test({"slot": S.slot_index(trial.get("profile")), "passed": False,
                            "reason": "interrupted", "time": int(time.time())})
+
+    def _enforce_ceiling(self):
+        """40 CU in use: the GPU stays at or below its ceiling even if the governor restarted
+        from its factory file (which allows more)."""
+        if not self.caps["governor"]:
+            return
+        try:
+            if self.backend.enforce_ceiling():
+                log(f"stoned: 40 CU in use, GPU limited to {self.backend.ceiling()} MHz")
+        except StoneError as e:
+            log(f"stoned: could not apply the 40 CU ceiling: {e.code} {e.message}")
 
     # ---- helpers ----------------------------------------------------------------------
     def _save(self):

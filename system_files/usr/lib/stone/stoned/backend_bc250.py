@@ -29,6 +29,15 @@ CYAN_SKILLFISH_IDS = {0x13FE}
 AMD_VENDOR = 0x1002
 TIMEOUT_MS = 2000
 
+# BC-250 40 CU option (stone-cu40). The image's amdgpu has the option; it is in use when the
+# kernel was started with amdgpu.bc250_cc_write_mode=2 or 3 (both write the unlock). With all
+# 40 CU working the GPU draws ~30 W more and runs hotter at the same clock, so STONE then keeps
+# it at 1500 MHz at most, whatever profile is chosen (the unlock's author measured 83 C there,
+# 96 C at 2 GHz).
+CU40_PARAM = "sys/module/amdgpu/parameters/bc250_cc_write_mode"
+CU40_ACTIVE_MODES = {2, 3}
+CU40_CEILING_MHZ = 1500
+
 
 def _root():
     return os.environ.get("STONE_SYSFS_ROOT", "/")
@@ -188,8 +197,44 @@ class BC250Backend:
         else:
             caps["missing"].append("cyan-skillfish-governor-smu (D-Bus)")
         caps["sensors"] = {k: v is not None for k, v in self._sensor_paths().items()}
+        caps["cu40"] = self.cu40()
+        if caps["cu40"]["active"] and caps["governor"]:
+            lo, hi = caps["gpu_range"]
+            caps["gpu_range"] = (lo, min(hi, CU40_CEILING_MHZ))
         self.caps = caps
         return caps
+
+    def cu40(self):
+        """Whether the image's amdgpu has the 40 CU option and whether this boot uses it."""
+        mode = _read_int(_p(CU40_PARAM))
+        active = mode in CU40_ACTIVE_MODES
+        return {"available": mode is not None, "active": active,
+                "ceiling_mhz": CU40_CEILING_MHZ if active else None}
+
+    def ceiling(self):
+        return CU40_CEILING_MHZ if (self.caps or {}).get("cu40", {}).get("active") else None
+
+    def _clamp(self, values):
+        """With 40 CU in use nothing above the ceiling reaches the governor."""
+        top = self.ceiling()
+        if top is None:
+            return values
+        v = dict(values)
+        v["max"] = min(v["max"], top)
+        v["min"] = min(v["min"], v["max"])
+        return v
+
+    def enforce_ceiling(self):
+        """Bring the governor under the ceiling if something (a governor restart, its factory
+        file) put it above. Returns True if it had to act."""
+        top = self.ceiling()
+        if top is None or not self.gov.available():
+            return False
+        cur = self.gov.read_range("current")
+        if cur["max"] <= top:
+            return False
+        self.gov.set_range(min(cur["min"], top), top)
+        return True
 
     # ---- control ----------------------------------------------------------------
     def actual(self):
@@ -206,7 +251,7 @@ class BC250Backend:
             raise StoneError(UNSUPPORTED, "GPU control not available on this machine")
         before = self.actual()
         before["load"] = self.gov.load_target()
-        calls = P.governor_calls(values)
+        calls = P.governor_calls(self._clamp(values))
         try:
             self.gov.set_range(*calls["range"])
             self.gov.set_thresholds(*calls["temperature"])
@@ -235,7 +280,7 @@ class BC250Backend:
 
     def restore_initial(self):
         """Back to the governor's own factory values (what a reboot would give)."""
-        init = (self.caps or {}).get("initial_range") or self.gov.read_range("initial")
+        init = self._clamp((self.caps or {}).get("initial_range") or self.gov.read_range("initial"))
         self.gov.set_range(init["min"], init["max"])
         self.gov.set_thresholds(P.FACTORY["balanced"]["temp"], P.FACTORY["balanced"]["temp"] - P.RECOVERY_GAP)
         up, lo = P.RESPONSE[1]

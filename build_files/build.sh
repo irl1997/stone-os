@@ -78,6 +78,48 @@ for f in index.html icon.png fonts/jost-latin-300-normal.woff2 grid/capsule.png 
     test -s "/usr/share/stone-home/${f}" || { echo "ERROR: STONE Home file missing: ${f}"; exit 1; }
 done
 
+### 8b. BC-250 40 CU option (off by default)
+## amdgpu rebuilt in the Containerfile's cu40 stage for this exact kernel, from the kernel's own
+## source with the BC-250 unlock added (build_files/cu40). With amdgpu.bc250_cc_write_mode
+## unset or 0 it does what Bazzite's module does; only `stone-cu40 enable` (by hand, with sudo)
+## sets it. When the stage could not build it, Bazzite's module stays and the image says why.
+CU40_STATUS="$(cat /cu40/status 2>/dev/null || echo 'unavailable: builder stage gave no result')"
+if [[ "${CU40_STATUS}" == ok ]]; then
+    KVER40="$(cat /cu40/kver)"
+    MODDIR="/usr/lib/modules/${KVER40}"
+    test -d "${MODDIR}" || { echo "ERROR: 40 CU module built for ${KVER40}, which is not this image's kernel"; exit 1; }
+    origs=( "${MODDIR}"/kernel/drivers/gpu/drm/amd/amdgpu/amdgpu.ko* )
+    [[ ${#origs[@]} -eq 1 && -f "${origs[0]}" ]] || { echo "ERROR: Bazzite's amdgpu module not found (or several)"; exit 1; }
+    orig="${origs[0]}"
+    [[ "$(modinfo -F vermagic "${orig}")" == "$(modinfo -F vermagic /cu40/amdgpu.ko)" ]] \
+        || { echo "ERROR: 40 CU module vermagic differs from Bazzite's amdgpu"; exit 1; }
+    tmp40="$(mktemp -d)"
+    cp /cu40/amdgpu.ko "${tmp40}/amdgpu.ko"
+    case "${orig}" in
+        *.ko.xz)  xz --check=crc32 --lzma2=dict=1MiB -f "${tmp40}/amdgpu.ko"; new40="${tmp40}/amdgpu.ko.xz" ;;
+        *.ko.zst) zstd -q --rm -f "${tmp40}/amdgpu.ko"; new40="${tmp40}/amdgpu.ko.zst" ;;
+        *.ko)     new40="${tmp40}/amdgpu.ko" ;;
+        *)        echo "ERROR: unknown module compression: ${orig}"; exit 1 ;;
+    esac
+    install -m644 "${new40}" "${orig}"
+    rm -rf "${tmp40}"
+    modinfo -F parm "${orig}" > /tmp/amdgpu-parm
+    grep -q '^bc250_cc_write_mode:' /tmp/amdgpu-parm || { echo "ERROR: installed amdgpu has no bc250_cc_write_mode"; exit 1; }
+    depmod -a "${KVER40}"
+    CU40_SOURCE="$(cat /cu40/source)"
+    echo "40 CU option: amdgpu replaced (${CU40_SOURCE}); off until amdgpu.bc250_cc_write_mode=3"
+else
+    CU40_SOURCE=""
+    echo "WARNING: 40 CU option not in this image (${CU40_STATUS}); Bazzite's amdgpu kept"
+fi
+if [[ -x /cu40/stone-cu-verify && -s /cu40/stone-cu-verify.spv ]]; then
+    install -Dm755 /cu40/stone-cu-verify /usr/libexec/stone/stone-cu-verify
+    install -Dm644 /cu40/stone-cu-verify.spv /usr/libexec/stone/stone-cu-verify.spv
+else
+    echo "WARNING: stone-cu-verify not built; stone-cu40 cannot test the GPU on this image"
+fi
+systemctl enable stone-cu40-guard.service
+
 ### 9. STONE boot screen (Plymouth)
 ## The STONE theme is a Plymouth script theme; the base image does not ship the script plugin
 ## (first image build: "/usr/lib64/plymouth/script.so does not exist").
@@ -107,6 +149,8 @@ rpmfile() { local v; v="$(rpm -qf --qf '%{NAME} %{VERSION}-%{RELEASE}\n' "$1" 2>
     echo "STONE_MESA=\"$(rpmver mesa-vulkan-drivers)\""
     echo "STONE_GAMESCOPE=\"$(rpmfile /usr/bin/gamescope)\""
     echo "STONE_WEBKITGTK=\"$(rpmver webkitgtk6.0)\""
+    echo "STONE_CU40=\"${CU40_STATUS}\""
+    echo "STONE_CU40_SOURCE=\"${CU40_SOURCE}\""
     echo "STONE_GOVERNOR_VERSION=\"$(rpmver cyan-skillfish-governor-smu)\""
     echo "${GOV_INFO}" | sed -n 's/^STONE_GOV_\([A-Z_]*\)=\(.*\)$/STONE_GOV_\1="\2"/p'
 } > /usr/lib/stone-release

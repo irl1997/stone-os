@@ -1,8 +1,16 @@
-# STONE OS 0.1.0-rc7
+# STONE OS 0.1.0-rc8
 
-Séptima Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Octava Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc7
+
+- **40 CU de la GPU (opcional, apagado por defecto).** El `amdgpu` de la imagen se recompila en cada build para el kernel exacto de Bazzite (fuente de OpenGamingCollective/linux en el tag del kernel, contra el `kernel-devel` de la misma base) con el desbloqueo de la comunidad (duggasco/bc250-40cu-unlock): sólo actúa con `amdgpu.bc250_cc_write_mode=3` y sólo en la GPU 0x13FE. Sin ese argumento hace lo mismo que el de Bazzite. Si un kernel nuevo no permite construirlo, la imagen sale igual con el `amdgpu` de Bazzite y `stone-cu40 status` lo dice.
+- **`stone-cu40`** (a mano, con `sudo`): `enable` pide escribir ACTIVAR, comprueba GPU, temperatura y Modo seguro y añade el argumento del kernel (`rpm-ostree kargs`, nueva entrada de arranque; la anterior queda en el menú). `test` corre `stone-cu-verify` (cálculo en la GPU comprobado contra la CPU, propio de STONE) vigilando temperatura (se detiene a 90 °C), frecuencia y el registro del kernel; si falla, apaga 40 CU solo. `disable` lo quita. Al arrancar, `stone-cu40-guard` apaga 40 CU si el arranque anterior con 40 CU tuvo errores de GPU. Nunca enciende nada solo.
+- **Rango estable con 40 CU:** `stoned` limita la GPU a 1500 MHz en todos los perfiles (al arrancar, en cada cambio y cada 10 s por si el regulador se reinicia), los rangos de STONE TUNING se ajustan y el Performance Center lo muestra. El límite de temperatura del regulador no cambia.
+- **Ajustes → Rendimiento** muestra «GPU · unidades de cálculo» (24/40 CU y cómo activarlo). **Acerca de** muestra los núcleos que ve el sistema (8 en placas desbloqueadas) en vez de 6 fijos.
+- Los 8 núcleos de CPU no necesitan nada de STONE: el desbloqueo vive en el firmware (BIOS) de la placa.
 
 ## Cambios desde 0.1.0-rc6
 

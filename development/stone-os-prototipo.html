@@ -413,7 +413,7 @@ const SimStoned = (() => {
   const gpuTemp = () => fault === 'hot' ? 88 : fault === 'fanfail' ? 74 : 55;
   const caps = () => ({ board: true, driver: 'amdgpu', governor: hasGov(), advanced: hasGov(), gpu_range: ALLOWED,
     max_range: hasGov() ? [1500, 2000] : [], min_range: hasGov() ? [1000, 1500] : [], temp_range: [65, 85],
-    stability_test: hasGov(), missing: hasGov() ? [] : ['regulador de GPU'], simulated: true });
+    stability_test: hasGov(), cu40: { available: true, active: false }, missing: hasGov() ? [] : ['regulador de GPU'], simulated: true });
   const actual = () => fault === 'unavailable' ? { error: 'ServiceUnavailable' } : !hasGov() ? { error: 'Unsupported' }
     : { min: gov.min, max: gov.max, temp: gov.temp, recovery: gov.rec };
   function apply(v) {           /* REQUEST -> EXECUTION -> VERIFY, rollback on mismatch */
@@ -789,6 +789,7 @@ function tuningReadings(m) {
   return [['GPU', nv(m.gpu_temp_c, ' °C')], ['CPU', nv(m.cpu_temp_c, ' °C')], ['Frecuencia GPU', nv(m.gpu_clock_mhz, ' MHz')], ['Consumo GPU', nv(m.gpu_power_w, ' W')], ['Ventilador', nv(m.fan_rpm, ' RPM')]]
     .map(([l, v]) => `<div class="kv"><span>${l}</span><b>${v}</b></div>`).join('') + (m.simulated ? '<div class="kv"><span>Datos</span><span>simulados</span></div>' : '');
 }
+const cu40Top = () => S.caps && S.caps.cu40 && S.caps.cu40.active ? S.caps.cu40.ceiling_mhz : null;
 const refreshCaps = () => PerfAPI.getCapabilities().then(c => { S.caps = c; }).catch(() => { S.caps = null; });
 
 const SIZES = ['Normal', '1.25×', '1.5×'];
@@ -1596,7 +1597,8 @@ function enterPerf(opts = {}) {
   const isC = String(S.prof).startsWith('c');
   const saved = slots.map((sl, k) => sl ? `CUSTOM 0${k + 1} · ${slotLabel(sl)}` : null).filter(Boolean);
   const noAdv = S.caps && !S.caps.advanced;
-  const tile = id => { const p = FACT[id]; return `<div class="card ptile" data-f data-p="${id}"><span class="pa">${S.prof === id ? 'ACTIVO' : ''}</span><span class="pn">${p.n}</span><span class="pd">${p.d}</span><span class="ps">GPU hasta ${p.max} MHz · límite ${p.temp} °C<br>Sugerencia: ${p.fps}</span></div>`; };
+  const top = cu40Top();   /* 40 CU in use: stoned keeps every profile at or below this */
+  const tile = id => { const p = FACT[id]; const mx = top ? Math.min(p.max, top) : p.max; return `<div class="card ptile" data-f data-p="${id}"><span class="pa">${S.prof === id ? 'ACTIVO' : ''}</span><span class="pn">${p.n}</span><span class="pd">${p.d}</span><span class="ps">GPU hasta ${mx} MHz${top ? ' (40 CU)' : ''} · límite ${p.temp} °C<br>Sugerencia: ${p.fps}</span></div>`; };
   $('#perf').innerHTML = `<div class="pttl">RENDIMIENTO</div><div class="pstatus">${statusLine(S.prof)}</div><div class="pread" id="pread">${readingsText(S.metrics)}</div>
     <div class="prow">${tile('silent')}${tile('balanced')}${tile('performance')}
       <div class="card ptile" data-f data-p="custom"><span class="pa">${isC ? 'ACTIVO · ' + profOf(S.prof).n : ''}</span><span class="pn">CUSTOM</span><span class="pd">${noAdv ? 'No disponible en esta consola: falta ' + S.caps.missing.join(', ') : saved.length ? saved.join('<br>') : 'Ajusta frecuencia y temperatura con STONE TUNING. Cada cambio se prueba antes de guardarse.'}</span><span class="ps">${noAdv ? 'Sólo perfiles de fábrica' : 'Abrir STONE TUNING'}</span></div></div>

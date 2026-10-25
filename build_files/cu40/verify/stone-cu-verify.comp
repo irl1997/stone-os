@@ -1,0 +1,40 @@
+// STONE: GPU compute correctness test (stone-cu-verify). Every invocation computes a value the
+// CPU recomputes exactly (integer mixing, a shared-memory exchange inside the workgroup and a
+// chain of float multiply-adds). 256-wide workgroups, tens of thousands of them, so every compute unit gets work;
+// a unit that computes wrong shows up as mismatches.
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer In { uint seed_in[]; };
+layout(std430, set = 0, binding = 1) writeonly buffer OutI { uint out_i[]; };
+layout(std430, set = 0, binding = 2) writeonly buffer OutF { uint out_f[]; };
+
+layout(push_constant) uniform P { uint n; uint salt; uint iters; uint pad; } pc;
+
+shared uint lds[256];
+
+uint rotl(uint v, uint s) { s &= 31u; return s == 0u ? v : (v << s) | (v >> (32u - s)); }
+
+void main()
+{
+    uint idx = gl_GlobalInvocationID.x;
+    uint lid = gl_LocalInvocationID.x;
+    uint x = seed_in[idx] ^ pc.salt;
+    uint y = idx * 0x9e3779b9u + pc.salt;
+    precise float f = uintBitsToFloat(0x3f800000u | (x & 0x007fffffu));     // [1, 2)
+    for (uint j = 0u; j < pc.iters; ++j) {
+        x = x * 1664525u + 1013904223u + j;
+        x ^= rotl(y + j * 0x45d9f3bu, j);
+        y += x ^ (x >> ((j & 7u) + 1u));
+        // precise: one rounded multiply, then one rounded add (no fused multiply-add), as on the CPU
+        precise float t = f * 0.99951171875;
+        f = t + float(y & 255u) * 0.0000019073486328125;
+    }
+    lds[lid] = x ^ y;
+    barrier();
+    uint a = lds[(lid * 17u + pc.salt) & 255u];
+    uint b = lds[(lid + 1u) & 255u];
+    out_i[idx] = (x ^ rotl(a, lid)) + (y ^ b);
+    out_f[idx] = floatBitsToUint(f);
+}

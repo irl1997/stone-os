@@ -97,6 +97,7 @@ function catRows() {
     case 'Rendimiento': return { d: `Perfil activo: ${profOf(S.prof).n}. Elige entre silencio y rendimiento, o ajusta tu propio perfil.`, rows: [
       { l: 'Performance Center', s: 'SILENT, BALANCED, PERFORMANCE y CUSTOM', v: 'Abrir', act: 'perf' },
       { l: 'Modo técnico', s: 'Temperaturas, frecuencia y consumo en el menú de STONE durante el juego', v: S.tech ? 'Activado' : 'Desactivado', key: 'tech' },
+      cu40Row(),
       { l: 'Safe Mode', s: S.safeMode ? `Activo: ${SAFE_REASON[S.safeReason] || 'valores de fábrica'}` : 'Sólo valores de fábrica: sin CUSTOM, sin perfiles por juego ni pruebas', v: S.safeMode ? 'Salir' : 'Activar', act: 'safe' }] };
     case 'Energía': return { d: 'STONE MACHINE no tiene modo de reposo. Apagarla cuando no se usa ahorra entre 55 y 105 W.', rows: [
       { l: 'Apagar tras inactividad', s: 'Sólo en STONE Home, nunca con un juego abierto', v: IDLE[S.idle], key: 'idle' }] };
@@ -106,7 +107,7 @@ function catRows() {
       { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' }] };
     case 'Acerca de': return { d: 'STONE MACHINE · STONE OS', rows: [
       { l: 'Versión', s: rel.STONE_VERSION ? `STONE OS ${rel.STONE_VERSION}${rel.STONE_COMMIT ? ' · ' + rel.STONE_COMMIT.slice(0, 7) : ''}` : 'Leyendo…', v: '' },
-      { l: 'Hardware', s: S.caps ? (S.caps.board ? 'AMD BC-250 detectada · Zen 2 6 núcleos · GPU 24 CU · 16 GB GDDR6' : 'No se detectó una AMD BC-250: el ajuste de rendimiento está desactivado') : 'Leyendo…', v: '' },
+      { l: 'Hardware', s: S.caps ? (S.caps.board ? `AMD BC-250 detectada · Zen 2 ${cores()} núcleos · GPU ${cu40Top() ? 40 : 24} CU · 16 GB GDDR6` : 'No se detectó una AMD BC-250: el ajuste de rendimiento está desactivado') : 'Leyendo…', v: '' },
       { l: 'Sistema base', s: rel.STONE_BASE_IMAGE ? `Bazzite · ${rel.STONE_BASE_IMAGE}${rel.STONE_BASE_DIGEST ? ' @ ' + rel.STONE_BASE_DIGEST.slice(7, 19) : ''}` : 'Bazzite (imagen derivada de bazzite-deck)', v: '' },
       { l: 'Componentes', s: [rel.STONE_KERNEL && `kernel ${rel.STONE_KERNEL}`, rel.STONE_MESA && `Mesa ${rel.STONE_MESA}`, rel.STONE_GOVERNOR_VERSION && `regulador ${rel.STONE_GOVERNOR_VERSION}`].filter(Boolean).join(' · ') || '—', v: '' },
       { l: 'Modo escritorio', s: 'Para usuarios avanzados', v: 'En Steam', act: 'info', where: 'Botón STEAM → Energía → Cambiar a escritorio' }] };
@@ -116,4 +117,20 @@ function catRows() {
       { l: 'Volver a la versión anterior', s: dep && dep.rollback ? `Guardada: ${dep.rollback.version || 'versión anterior'}` : 'No hay una versión anterior guardada todavía', v: 'Cómo', act: 'info', where: 'Reinicia y, en el menú de arranque, elige la segunda entrada. STONE OS arranca con la versión anterior' }] };
     default: return { d: `${CATS[cat]}: lo gestiona Steam.`, rows: [steam(`Abrir ${CATS[cat].toLowerCase()}`, 'Panel nativo de Steam', `Botón STEAM → Ajustes → ${CATS[cat]}`)] };
   }
+}
+
+/* CPU cores the system sees (threads / 2: Zen 2 has 2 threads per core). Boards sold
+   unlocked report 8; the BC-250's stock firmware 6. */
+function cores() { const t = navigator.hardwareConcurrency || 12; return Math.max(1, Math.round(t / 2)); }
+
+/* 40 CU: shown, never switched from here. It changes how the kernel starts, so it is done by
+   hand with sudo stone-cu40 (confirmation, GPU test, automatic way back). */
+function cu40Row() {
+  const c = S.caps && S.caps.cu40;
+  const how = 'En una terminal (Konsole o Ctrl+Alt+F3): sudo stone-cu40 enable → reinicia → sudo stone-cu40 test. '
+    + 'Si la prueba falla, STONE vuelve sola a 24 CU. Para apagarlo: sudo stone-cu40 disable';
+  if (!S.caps) return { l: 'GPU · unidades de cálculo', s: 'Leyendo…', v: '' };
+  if (!c || !c.available) return { l: 'GPU · unidades de cálculo', s: 'Esta versión de STONE OS no trae el desbloqueo de 40 CU', v: '24 CU' };
+  if (c.active) return { l: 'GPU · unidades de cálculo', s: `40 CU en uso · STONE limita la GPU a ${c.ceiling_mhz} MHz en todos los perfiles`, v: '40 CU', act: 'info', where: 'Estado y prueba: sudo stone-cu40 status · sudo stone-cu40 test. Para apagarlo: sudo stone-cu40 disable' };
+  return { l: 'GPU · unidades de cálculo', s: '24 CU en uso · 40 CU disponible, se activa a mano con prueba de estabilidad', v: '24 CU', act: 'info', where: how };
 }

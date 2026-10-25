@@ -17,7 +17,8 @@ for f in Containerfile VERSION LICENSE README.md BUILD.md INSTALL.md RECOVERY.md
          RELEASE_NOTES.md DEPENDENCIES.md GITHUB_SETUP.md SECURITY.md config/build.env disk_config/iso.toml \
          build_files/build.sh build_files/check-kernel.sh build_files/governor-config.py \
          .github/workflows/ci.yml .github/workflows/build-image.yml .github/workflows/build-installer.yml .github/workflows/release.yml \
-         system_files/usr/bin/stoned system_files/usr/bin/stonectl system_files/usr/bin/stone-home system_files/usr/bin/stone-home-session \
+         system_files/usr/bin/stoned system_files/usr/bin/stonectl system_files/usr/bin/stone-home system_files/usr/bin/stone-home-session system_files/usr/bin/stone-cu40 \
+         build_files/cu40/build-amdgpu.sh build_files/cu40/patch-gfx10.py build_files/cu40/verify/stone-cu-verify.c \
          system_files/usr/share/stone-home/index.html system_files/usr/share/stone-home/icon.png \
          system_files/usr/share/stone-home/boot/stone-startup.webm; do
     [[ -s "$f" ]] || bad "missing or empty: $f"
@@ -34,14 +35,14 @@ if out="$(bash -c 'set -euo pipefail; eval "$(scripts/release-info.sh "v$(tr -d 
         && [[ "${out}" == *"|"* && "${out}" != "|"* ]]; then ok "release-info for shells (${out})"; else bad "release-info --shell: ${out}"; fi
 
 # 3. executables
-for f in build_files/build.sh build_files/check-kernel.sh build_files/governor-config.py scripts/*.sh system_files/usr/bin/* system_files/usr/libexec/*; do
+for f in build_files/build.sh build_files/check-kernel.sh build_files/governor-config.py build_files/cu40/build-amdgpu.sh build_files/cu40/patch-gfx10.py scripts/*.sh system_files/usr/bin/* system_files/usr/libexec/*; do
     [[ -x "$f" ]] || bad "not executable: $f"
 done
 ok "executable bits"
 
 # 4. shell
 if have shellcheck; then
-    if shellcheck -x build_files/*.sh scripts/*.sh system_files/usr/bin/stone-home; then ok "shellcheck"; else bad "shellcheck"; fi
+    if shellcheck -x build_files/*.sh build_files/cu40/*.sh scripts/*.sh system_files/usr/bin/stone-home; then ok "shellcheck"; else bad "shellcheck"; fi
 else skip "shellcheck"; fi
 
 # 5. python

@@ -321,6 +321,20 @@ Instalar la misma imagen en un PC que no sea BC-250 (o una VM).
 
 ---
 
+## 25. 40 CU (opcional, sólo si se quiere usar)
+
+Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validación básica.
+
+1. `stone-cu40 status` → «Esta versión de STONE OS : trae el desbloqueo», «Este arranque: 24 CU».
+2. `sudo stone-cu40 test --minutes 5` con 24 CU → APROBADA (línea de base; anota °C y MHz máximos).
+3. `sudo stone-cu40 enable`, escribir ACTIVAR, `systemctl reboot`.
+4. `sudo stone-cu40 status` → «40 CU (desbloqueo en uso) · el driver cuenta 40 CU». En STONE: Ajustes → Rendimiento → «40 CU en uso»; Performance Center con «GPU hasta 1500 MHz (40 CU)» en los tres perfiles.
+5. `sudo stone-cu40 test --minutes 10` → APROBADA, máximo ≤ 1550 MHz, temperatura máxima anotada (esperado < 85 °C).
+6. Elegir PERFORMANCE y jugar 30 min: `cat /sys/class/drm/card*/device/pp_dpm_sclk` nunca por encima de 1500 MHz; `journalctl -k | grep -i amdgpu` sin «ring … timeout», «GPU reset» ni «page fault».
+7. `sudo stone-cu40 disable`, reiniciar → 24 CU.
+8. Recuperación: con 40 CU activado, en el menú de arranque pulsar `e`, añadir `amdgpu.bc250_cc_write_mode=0` al final de la línea `linux`, Ctrl+X → arranca con 24 CU.
+
+
 ## Matriz de resultados
 
 | Prueba | Esperado | Resultado real | Estado |
@@ -350,3 +364,4 @@ Instalar la misma imagen en un PC que no sea BC-250 (o una VM).
 | 22 ROLLBACK | Arranca la versión anterior | | NOT TESTED |
 | 23 AUTOARRANQUE QUE FALLA | Game Mode normal, STONE a mano | | NOT TESTED |
 | 24 SIN BC-250 | Todo «no disponible», nada se aplica | | NOT TESTED |
+| 25 40 CU (opcional) | 40 CU contados, prueba aprobada, ≤ 1500 MHz, sin errores; vuelta a 24 CU | | NOT TESTED |

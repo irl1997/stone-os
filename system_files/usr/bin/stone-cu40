@@ -1,0 +1,3 @@
+#!/bin/sh
+# STONE: the BC-250's 40 compute units, by hand (see /usr/lib/stone/stone_cu40.py).
+exec /usr/bin/python3 -I /usr/lib/stone/stone_cu40.py "$@"

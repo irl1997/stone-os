@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc7
+# Seguridad de STONE OS 0.1.0-rc8
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -73,3 +73,9 @@ Riesgo aceptado: mientras Steam corre, cualquier programa de la propia consola p
 ## Instalación de emuladores (desde 0.1.0-rc7)
 
 STONE Home sólo instala los identificadores de Flathub de su catálogo fijo (`stone_home/emulators.py`); la página envía una clave del catálogo, nunca un nombre de paquete ni un comando. La instalación es del usuario (`flatpak install --user` desde Flathub), sin root. Los accesos directos que se añaden a Steam ejecutan `/usr/bin/flatpak run <id del catálogo>`.
+
+## 40 CU (desde 0.1.0-rc8)
+
+- El `amdgpu` de la imagen trae el desbloqueo de 40 CU, inactivo salvo que el kernel arranque con `amdgpu.bc250_cc_write_mode=3`, y sólo en la GPU 0x13FE. Se compila en el build desde la fuente del kernel de Bazzite (tag exacto de OpenGamingCollective/linux) y se comprueba que su `vermagic` sea el del kernel de la imagen. El módulo no va firmado: igual que con el resto de módulos que STONE no toca, arranque seguro (Secure Boot) con una clave que no lo reconozca impediría cargarlo. Antes de actualizar, `mokutil --sb-state` debe decir «SecureBoot disabled» (es lo habitual en la BC-250); si no, se vuelve con la entrada anterior del menú de arranque.
+- Nada lo activa solo. `stone-cu40 enable` exige root (`sudo`), una persona en la consola que escriba ACTIVAR y una GPU fría. La única acción automática (`stone-cu40-guard` al arrancar y `stone-cu40 test` al fallar) es apagarlo.
+- Con 40 CU en uso, `stoned` no deja que la GPU pase de 1500 MHz por ninguna vía (perfiles, CUSTOM, valores de fábrica del regulador tras un reinicio del regulador).

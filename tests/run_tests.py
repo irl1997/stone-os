@@ -93,13 +93,17 @@ def set_gpu_temp(root, c):
 class Env:
     def __init__(self, board=True, gov_mode="normal", gov_case="lower", gov=True, polkit_off=True,
                  gpu_errors=False, test_seconds=3, workload=("sleep", "3600"), fan=True, thermal_scale=None,
-                 game_source="dbus", min_session_s=None):
+                 game_source="dbus", min_session_s=None, cu40=None):
         self.tmp = tempfile.mkdtemp(prefix="stoned-test-")
         self.sysfs = os.path.join(self.tmp, "root")
         self.state_dir = os.path.join(self.tmp, "state")
         self.bin = os.path.join(self.tmp, "bin")
         os.makedirs(self.bin)
         make_sysfs(self.sysfs, board=board, fan=fan)
+        if cu40 is not None:     # the image's amdgpu has the 40 CU option; value = this boot's mode
+            os.makedirs(os.path.join(self.sysfs, "sys/module/amdgpu/parameters"))
+            with open(os.path.join(self.sysfs, "sys/module/amdgpu/parameters/bc250_cc_write_mode"), "w") as f:
+                f.write(f"{cu40}\n")
         # fake journalctl: prints an amdgpu error only when asked to
         with open(os.path.join(self.bin, "journalctl"), "w") as f:
             f.write("#!/bin/sh\n" + ("echo 'amdgpu 0000:01:00.0: amdgpu: ring gfx timeout, signaled seq=1'\n" if gpu_errors else "") + "exit 0\n")
@@ -389,6 +393,32 @@ def I01_capabilities_come_from_the_governor(env):
     assert c["board"] and c["governor"] and c["advanced"] and c["gpu_range"] == [1000, 2000], c
     assert c["max_range"] == [1500, 2000] and c["min_range"] == [1000, 1500], c
     assert c["sensors"]["gpu_temp"] and c["sensors"]["fan_rpm"], c
+
+
+@integration(cu40=3)
+def I26_with_40_cu_the_gpu_never_goes_above_1500_mhz(env):
+    c = env.call("GetCapabilities")
+    assert c["cu40"] == {"available": True, "active": True, "ceiling_mhz": 1500}, c
+    assert c["gpu_range"] == [1000, 1500] and c["max_range"] == [1500, 1500], c
+    # the governor started from its factory file (1850): stoned brought it down at start
+    assert env.gov_state()["max"] == 1500, env.gov_state()
+    for pid in ("performance", "balanced"):
+        r = env.call("SetProfile", "(s)", pid)
+        assert r["actual"]["max"] == 1500 and r["profile"] == pid, r
+    assert env.gov_state()["max"] == 1500, env.gov_state()
+    r = env.call("RestoreDefaults")
+    assert r["actual"]["max"] == 1500, r
+    bad = env.call("StartTest", "(ua{sv}s)", 0, V({"max": 1700, "min": 1000, "temp": 80, "resp": 1}), "quick")
+    assert "InvalidValue" in err(bad), bad
+
+
+@integration(cu40=0)
+def I27_40_cu_option_present_but_off_changes_nothing(env):
+    c = env.call("GetCapabilities")
+    assert c["cu40"] == {"available": True, "active": False}, c
+    assert c["gpu_range"] == [1000, 2000], c
+    r = env.call("SetProfile", "(s)", "performance")
+    assert r["actual"]["max"] == 2000, r
 
 
 @integration(board=False)

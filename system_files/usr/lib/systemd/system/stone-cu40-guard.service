@@ -1,0 +1,15 @@
+[Unit]
+Description=STONE 40 CU boot check (only ever turns the unlock off)
+# Only when this boot uses the unlock.
+ConditionKernelCommandLine=amdgpu.bc250_cc_write_mode=3
+After=local-fs.target dbus.service systemd-journald.service
+Wants=dbus.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/stone-cu40 guard
+StateDirectory=stone-cu40
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target
