@@ -1,7 +1,50 @@
 #!/bin/sh
 # STONE Home, the console interface. Steam starts it as the "STONE" shortcut.
+#
 # Steam launches shortcuts with its runtime's libraries and its overlay preloaded; STONE Home
 # is a system application (GTK 4, WebKitGTK 6 from the image) and must not load either.
-# Gamescope still identifies the window through Steam's reaper process, not through the overlay.
+# Gamescope finds the window's app id through the Steam reaper above this process.
 unset LD_LIBRARY_PATH LD_PRELOAD
+
+# Inside Steam Game Mode (Gamescope) the GPU drawing paths of GTK 4 and WebKitGTK flickered
+# and came out see-through on the BC-250 (RC2, 24-10-2026), also with GSK_RENDERER=gl and
+# WEBKIT_DISABLE_DMABUF_RENDERER=1. There STONE Home draws in software, which Gamescope shows
+# as a plain opaque X11 window. Set here, not taken from Steam's launch options, so a leftover
+# option cannot undo it; ~/.config/stone/home.env (below) can.
+if [ "${XDG_CURRENT_DESKTOP:-}" = gamescope ] || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
+    GDK_BACKEND=x11
+    GSK_RENDERER=cairo
+    WEBKIT_DISABLE_COMPOSITING_MODE=1
+    WEBKIT_DISABLE_DMABUF_RENDERER=1
+    export GDK_BACKEND GSK_RENDERER WEBKIT_DISABLE_COMPOSITING_MODE WEBKIT_DISABLE_DMABUF_RENDERER
+fi
+
+# Console-side tuning without a new image: ~/.config/stone/home.env, KEY=VALUE lines, only
+# these keys, only plain values (letters, digits, . _ : -). Anything else is ignored.
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/stone/home.env"
+if [ -f "$conf" ]; then
+    while IFS='=' read -r key value; do
+        case "$key" in
+            GDK_BACKEND|GSK_RENDERER|WEBKIT_DISABLE_COMPOSITING_MODE|WEBKIT_DISABLE_DMABUF_RENDERER|\
+            ENABLE_GAMESCOPE_WSI|STONE_HOME_DEVTOOLS) ;;
+            *) continue ;;
+        esac
+        case "$value" in
+            *[!A-Za-z0-9._:-]*) continue ;;
+        esac
+        if [ -z "$value" ]; then
+            unset "$key"
+        else
+            export "$key=$value"
+        fi
+    done < "$conf"
+fi
+
+# Everything STONE Home and WebKit print goes to ~/.local/state/stone/home.log (the previous
+# start is kept as home.log.1). `stone-home-session diag` shows the relevant lines.
+state="${XDG_STATE_HOME:-$HOME/.local/state}/stone"
+if mkdir -p "$state" 2>/dev/null; then
+    [ -f "$state/home.log" ] && mv -f "$state/home.log" "$state/home.log.1"
+    exec >>"$state/home.log" 2>&1
+fi
 exec /usr/libexec/stone-home "$@"

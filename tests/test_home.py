@@ -154,6 +154,60 @@ def K02_register_adds_once_keeps_user_shortcuts_and_backs_up():
 
 
 @test
+def K08_register_keeps_the_id_steam_gave_and_launch_tries_the_real_ids_first():
+    with Tmp() as d:
+        root = FX.build(os.path.join(d, "Steam"), with_stone_shortcut=False)
+        proc = os.path.join(d, "proc")
+        os.makedirs(proc)
+        os.environ["STONE_HOME_STATE"] = os.path.join(d, "state")
+        try:
+            SC.register(root, proc=proc)
+            path = os.path.join(root, "userdata", FX.ACCOUNT, "config", "shortcuts.vdf")
+            data = vdf.binary_loads(open(path, "rb").read())
+            steam_id = 0x8ABCDEF1                       # Steam reassigned the shortcut's id
+            data["shortcuts"]["1"]["appid"] = steam_id
+            with open(path, "wb") as f:
+                f.write(vdf.binary_dumps(data))
+            assert SC.register(root, proc=proc)["accounts"] == {FX.ACCOUNT: "unchanged"}
+            assert vdf.binary_loads(open(path, "rb").read())["shortcuts"]["1"]["appid"] == steam_id
+            assert SC.shortcut_appids(root) == [steam_id]
+            assert SC.candidate_game_ids(root) == [SC.game_id(steam_id), SC.game_id()]
+            # STONE Home started by Steam: env and the reaper above it give the id really used
+            os.makedirs(os.path.join(proc, "10"))
+            os.makedirs(os.path.join(proc, "20"))
+            with open(os.path.join(proc, "10", "cmdline"), "wb") as f:
+                f.write(b"/home/u/.local/share/Steam/ubuntu12_32/reaper\0SteamLaunch\0AppId=2999999999\0--\0")
+            with open(os.path.join(proc, "10", "stat"), "w") as f:
+                f.write("10 (reaper) S 1 1 1")
+            with open(os.path.join(proc, "20", "cmdline"), "wb") as f:
+                f.write(b"/bin/sh\0/usr/bin/stone-home\0")
+            with open(os.path.join(proc, "20", "stat"), "w") as f:
+                f.write("20 (sh) S 10 1 1")
+            rec = SC.record_ids(env={"SteamGameId": str(SC.game_id(2999999999)), "SteamAppId": "x"}, pid=20, proc=proc)
+            assert rec == {"SteamGameId": SC.game_id(2999999999), "ReaperAppId": 2999999999}, rec
+            assert SC.recorded_ids() == rec
+            assert SC.candidate_game_ids(root) == [SC.game_id(2999999999), SC.game_id(steam_id), SC.game_id()]
+            assert SC.record_ids(env={}, pid=99999, proc=proc) is None          # not started by Steam
+        finally:
+            del os.environ["STONE_HOME_STATE"]
+
+
+@test
+def K09_launch_request_carries_steams_display():
+    from stone_home import session
+    with Tmp() as d:
+        proc = os.path.join(d, "proc")
+        os.makedirs(os.path.join(proc, "77"))
+        with open(os.path.join(proc, "77", "comm"), "w") as f:
+            f.write("steam\n")
+        with open(os.path.join(proc, "77", "environ"), "wb") as f:
+            f.write(b"DISPLAY=:0\0LD_PRELOAD=/x.so\0XDG_CURRENT_DESKTOP=gamescope\0")
+        env = session._steam_env(proc)
+        assert env["DISPLAY"] == ":0" and env["XDG_CURRENT_DESKTOP"] == "gamescope"
+        assert env.get("LD_PRELOAD") == os.environ.get("LD_PRELOAD")      # only display variables copied
+
+
+@test
 def K03_register_never_writes_while_steam_runs_or_over_unreadable_file():
     with Tmp() as d:
         root = FX.build(os.path.join(d, "Steam"), with_stone_shortcut=False)

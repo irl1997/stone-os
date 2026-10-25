@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc2
+# Seguridad de STONE OS 0.1.0-rc3
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 

@@ -20,15 +20,28 @@ import sys
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 gi.require_version("WebKit", "6.0")
 gi.require_version("JavaScriptCore", "6.0")
-from gi.repository import Gio, GLib, Gtk, JavaScriptCore, WebKit  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk, JavaScriptCore, WebKit  # noqa: E402
 
+from . import shortcuts  # noqa: E402
 from .host import Host  # noqa: E402
 
 UI_DIR = os.environ.get("STONE_HOME_UI", "/usr/share/stone-home")
 APP_ID = "org.stonemachine.Home"
 SELFTEST_TIMEOUT_S = 60
+VOID = "#0a0a0b"          # the interface's background (--void); the window is never see-through
+
+# Logged to home.log (console messages go to stdout): whether Web Audio can run here.
+AUDIO_PROBE = """
+(function(){try{var C=window.AudioContext||window.webkitAudioContext;
+if(!C){console.warn('[stone] audio: no AudioContext');return;}
+var c=new C();console.info('[stone] audio: created, state='+c.state+' rate='+c.sampleRate);
+c.resume().then(function(){console.info('[stone] audio: resumed, state='+c.state);setTimeout(function(){c.close();},500);},
+function(e){console.warn('[stone] audio: resume failed '+e);});
+}catch(e){console.warn('[stone] audio: '+e);}})();
+"""
 
 
 def _ui_file(name):
@@ -65,10 +78,26 @@ class HomeWindow:
         ucm = WebKit.UserContentManager()
         ucm.register_script_message_handler_with_reply("stone", None)
         ucm.connect("script-message-with-reply-received::stone", self._on_message)
-        self.view = WebKit.WebView(user_content_manager=ucm)
+        ucm.add_script(WebKit.UserScript.new(AUDIO_PROBE, WebKit.UserContentInjectedFrames.TOP_FRAME,
+                                             WebKit.UserScriptInjectionTime.END, None, None))
+        kw = {"user_content_manager": ucm}
+        try:
+            # Interface sounds start without a click: the controller's buttons are not "user
+            # gestures" for WebKit, so a stricter policy would keep Web Audio suspended forever.
+            kw["website_policies"] = WebKit.WebsitePolicies(autoplay=WebKit.AutoplayPolicy.ALLOW)
+        except (AttributeError, TypeError) as e:
+            print(f"stone-home: autoplay policy not set ({e})", file=sys.stderr, flush=True)
+        self.view = WebKit.WebView(**kw)
+        bg = Gdk.RGBA()
+        bg.parse(VOID)
+        self.view.set_background_color(bg)
         s = self.view.get_settings()
         s.set_enable_developer_extras(bool(os.environ.get("STONE_HOME_DEVTOOLS")))
         s.set_media_playback_requires_user_gesture(False)
+        for name, value in (("set_enable_webaudio", True), ("set_enable_media", True),
+                            ("set_enable_write_console_messages_to_stdout", True)):
+            if hasattr(s, name):
+                getattr(s, name)(value)
         s.set_javascript_can_open_windows_automatically(False)
         s.set_allow_file_access_from_file_urls(False)
         s.set_allow_universal_access_from_file_urls(False)
@@ -78,6 +107,15 @@ class HomeWindow:
         self.view.connect("load-changed", self._load_changed)
         self.view.connect("web-process-terminated", self._crashed)
 
+        css = Gtk.CssProvider()
+        rule = f"window, window.background {{ background-color: {VOID}; }}"
+        if hasattr(css, "load_from_string"):
+            css.load_from_string(rule)
+        else:
+            css.load_from_data(rule.encode(), -1)
+        disp = Gdk.Display.get_default()
+        if disp is not None:
+            Gtk.StyleContext.add_provider_for_display(disp, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.win = Gtk.ApplicationWindow(application=app, title="STONE")
         self.win.set_child(self.view)
         self.win.set_default_size(1920, 1080)
@@ -174,6 +212,22 @@ def _js(value, payload):
     return JavaScriptCore.Value.new_from_json(value.get_context(), json.dumps(payload))
 
 
+def _startup_log():
+    """One line per start in home.log: how STONE Home was started and how it draws."""
+    ids = None
+    try:
+        ids = shortcuts.record_ids()
+    except Exception as e:  # noqa: BLE001  (diagnostics must never stop the interface)
+        print(f"stone-home: could not record Steam ids: {e}", file=sys.stderr, flush=True)
+    disp = Gdk.Display.get_default()
+    keys = ("DISPLAY", "XDG_CURRENT_DESKTOP", "GDK_BACKEND", "GSK_RENDERER",
+            "WEBKIT_DISABLE_COMPOSITING_MODE", "WEBKIT_DISABLE_DMABUF_RENDERER")
+    env = " ".join(f"{k}={os.environ.get(k, '-')}" for k in keys)
+    print(f"[stone] start: steam_ids={ids} display={type(disp).__name__ if disp else None} "
+          f"webkit={WebKit.get_major_version()}.{WebKit.get_minor_version()}.{WebKit.get_micro_version()} {env}",
+          flush=True)
+
+
 def main(argv):
     selftest = "--selftest" in argv
     app = Gtk.Application(application_id=APP_ID if not selftest else APP_ID + ".SelfTest",
@@ -181,6 +235,8 @@ def main(argv):
     holder = {}
 
     def activate(a):
+        if "w" not in holder and not selftest:
+            _startup_log()
         if "w" not in holder:
             holder["w"] = HomeWindow(a, selftest)
         else:

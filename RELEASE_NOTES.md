@@ -1,8 +1,19 @@
-# STONE OS 0.1.0-rc2
+# STONE OS 0.1.0-rc3
 
-Segunda Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Tercera Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc2
+
+Encontrados con RC2 en la BC-250 (24-10-2026): STONE Home parpadeaba y se veía clara y transparente (se veía Steam detrás), no sonaba y no se abría sola (38 peticiones a Steam en 2 minutos, ninguna atendida).
+
+- **Imagen:** dentro del modo juego STONE Home dibuja por software (GTK `cairo`, WebKit sin composición acelerada, X11). En la placa, los caminos por GPU parpadeaban y salían transparentes, también con `GSK_RENDERER=gl` y con `WEBKIT_DISABLE_DMABUF_RENDERER=1`. La ventana y la página son además siempre opacas. Las opciones de lanzamiento de Steam ya no pueden deshacerlo; `~/.config/stone/home.env` sí (sólo unas pocas variables, valores simples).
+- **Sonido:** la política de reproducción automática de WebKit queda en «permitir». Los botones del mando no cuentan como gesto del usuario para WebKit, y con la política estricta el audio quedaba suspendido para siempre. Al arrancar, STONE Home anota en su registro si el audio pudo arrancar.
+- **Apertura automática:** el pedido a Steam lleva la pantalla de Steam (`DISPLAY` y demás, tomados del propio proceso de Steam; la sesión los quita a los servicios de usuario). STONE ya no reescribe el identificador que Steam dio al acceso directo, y prueba en orden el identificador con el que Steam abrió STONE la última vez (lo guarda STONE Home al arrancar), el de `shortcuts.vdf` y el calculado. Lo que responde Steam queda en el registro.
+- **Diagnóstico en un comando:** `stone-home-session diag` muestra en una pantalla la versión, los identificadores, la apertura de este arranque, el registro de STONE Home (`~/.local/state/stone/home.log`) y lo que anotó Steam.
+
+Sin probar todavía en la placa: si el dibujo por software es lo bastante fluido a 1080p y si el sonido y la apertura quedan resueltos. La primera apertura tras actualizar puede necesitar abrir STONE una vez a mano (así STONE aprende el identificador que usa Steam).
 
 ## Cambios desde 0.1.0-rc1
 

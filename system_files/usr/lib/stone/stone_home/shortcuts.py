@@ -12,13 +12,17 @@ non-Steam shortcut, so Steam and Gamescope give it focus, input and overlay like
   movie     Steam's startup movie becomes STONE's (install_boot_video), so the boot line
             continues from Plymouth through Steam's loading.
 
-The shortcut id is fixed and written explicitly ("appid"), so the id used by `launch`
-is the one Steam uses. Formula used by Steam for shortcut ids:
-crc32(exe + name) | 0x80000000; the game id for steam:// URLs is (id << 32) | 0x02000000.
+Shortcut id: a new shortcut is written with crc32(exe + name) | 0x80000000, but Steam may
+assign its own id to a non-Steam shortcut (ValveSoftware/steam-for-linux#9463), and on the
+board (RC2) Steam ignored steam://rungameid for the computed id. So the id Steam really uses
+is never overwritten once present, and `launch` tries, in order: the ids STONE Home saw when
+Steam started it (SteamGameId / reaper AppId=, saved by record_ids), the id in shortcuts.vdf,
+and the computed one. The game id for steam:// URLs is (id << 32) | 0x02000000.
 """
 
 import binascii
 import hashlib
+import json
 import os
 import shutil
 import tempfile
@@ -130,8 +134,11 @@ def register_account(acct, appid=None):
     if mine:
         cur = items[mine[0]]
         merged = dict(cur)
-        for k in ("appid", "AppName", "Exe", "StartDir", "icon", "AllowOverlay", "IsHidden"):
+        for k in ("AppName", "Exe", "StartDir", "icon", "AllowOverlay", "IsHidden"):
             merged[k] = want[k]
+        # The id Steam gave the shortcut is kept: Steam launches it by that id.
+        if not _valid_appid(vdf.get_ci(cur, "appid")):
+            merged["appid"] = want["appid"]
         for extra in mine[1:]:
             del items[extra]
         if merged == cur and len(mine) == 1:
@@ -150,8 +157,124 @@ def register_account(acct, appid=None):
         if os.path.exists(path) and not os.path.exists(path + ".stone-backup"):
             shutil.copy2(path, path + ".stone-backup")
         _write_atomic(path, vdf.binary_dumps(data))
-    _install_grid(cfg, appid)
+    for a in {appid, *_entry_appids(data)}:
+        _install_grid(cfg, a)
     return result
+
+
+def _valid_appid(v):
+    try:
+        v = int(v) & 0xFFFFFFFF
+    except (TypeError, ValueError):
+        return False
+    return v != 0
+
+
+def _entry_appids(data):
+    out = []
+    for v in (data.get("shortcuts") or {}).values():
+        if isinstance(v, dict) and MARK in str(vdf.get_ci(v, "Exe") or ""):
+            a = vdf.get_ci(v, "appid")
+            if _valid_appid(a):
+                out.append(int(a) & 0xFFFFFFFF)
+    return out
+
+
+def shortcut_appids(root=None):
+    """The STONE shortcut's id in every account's shortcuts.vdf (as Steam last saved it)."""
+    root = root or steam_root()
+    out = []
+    for a in accounts(root):
+        try:
+            with open(os.path.join(a, "config", "shortcuts.vdf"), "rb") as f:
+                out.extend(_entry_appids(vdf.binary_loads(f.read())))
+        except (OSError, vdf.VDFError):
+            continue
+    return out
+
+
+# ---- the ids Steam really used ---------------------------------------------------------
+def state_dir(home=None):
+    """Same place as /usr/bin/stone-home writes home.log."""
+    if os.environ.get("STONE_HOME_STATE"):            # tests and development only
+        return os.environ["STONE_HOME_STATE"]
+    base = os.environ.get("XDG_STATE_HOME") or os.path.join(home or os.path.expanduser("~"), ".local", "state")
+    return os.path.join(base, "stone")
+
+
+def _ids_file():
+    return os.path.join(state_dir(), "steam-ids.json")
+
+
+def _reaper_appid(pid, proc="/proc"):
+    """AppId=<n> on the command line of the Steam reaper above `pid` (Steam's launcher)."""
+    for _ in range(12):
+        try:
+            with open(os.path.join(proc, str(pid), "cmdline"), "rb") as f:
+                args = f.read().split(b"\0")
+            with open(os.path.join(proc, str(pid), "stat")) as f:
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return None
+        if args and args[0].endswith(b"/reaper"):
+            for a in args:
+                if a.startswith(b"AppId=") and a[6:].isdigit():
+                    return int(a[6:])
+        if ppid <= 1:
+            return None
+        pid = ppid
+    return None
+
+
+def record_ids(env=None, pid=None, proc="/proc"):
+    """Called by STONE Home when it starts: keep the ids Steam launched it with."""
+    env = os.environ if env is None else env
+    found = {}
+    for k in ("SteamGameId", "SteamAppId"):
+        v = env.get(k, "")
+        if v.isdigit() and int(v):
+            found[k] = int(v)
+    r = _reaper_appid(pid or os.getpid(), proc)
+    if r:
+        found["ReaperAppId"] = r
+    if not found:
+        return None
+    try:
+        os.makedirs(state_dir(), exist_ok=True)
+        _write_atomic(_ids_file(), (json.dumps(found) + "\n").encode())
+    except OSError:
+        pass
+    return found
+
+
+def recorded_ids():
+    try:
+        with open(_ids_file()) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def candidate_game_ids(root=None):
+    """Game ids to try with steam://rungameid, most trustworthy first, without repeats."""
+    rec = recorded_ids()
+    out = []
+
+    def add(gid):
+        if isinstance(gid, int) and gid > 0 and gid not in out:
+            out.append(gid)
+    g = rec.get("SteamGameId")
+    if isinstance(g, int) and g > 0xFFFFFFFF:
+        add(g)
+    for k in ("ReaperAppId", "SteamAppId", "SteamGameId"):
+        v = rec.get(k)
+        if isinstance(v, int) and 0 < v <= 0xFFFFFFFF:
+            add(game_id(v))
+    for a in shortcut_appids(root):
+        add(game_id(a))
+    add(game_id())
+    return out
 
 
 def _install_grid(cfg, appid):
@@ -337,5 +460,9 @@ def install_boot_video(root, src=None, system_dirs=SYSTEM_MOVIE_DIRS):
     return "installed"
 
 
-def launch_url():
-    return f"steam://rungameid/{game_id()}"
+def launch_url(gid=None):
+    return f"steam://rungameid/{game_id() if gid is None else gid}"
+
+
+def launch_urls(root=None):
+    return [launch_url(g) for g in candidate_game_ids(root)]
