@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc3
+# Seguridad de STONE OS 0.1.0-rc4
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -55,3 +55,9 @@ Interruptores de prueba (`STONE_POLKIT=0`, `STONE_BUS`, `STONE_GAME_SOURCE`, `ST
 | El servidor de desarrollo de STONE Home expone la API por HTTP | Sólo para desarrollo y CI | Escucha sólo en 127.0.0.1 y no se instala en la imagen |
 
 Para informar de un problema de seguridad, abre un *security advisory* privado en el repositorio de GitHub (pestaña Security).
+
+## Depuración remota de Steam (desde 0.1.0-rc4)
+
+Para abrir STONE Home al arrancar, STONE crea `~/.local/share/Steam/.cef-enable-remote-debugging`. Con ese archivo, Steam abre su protocolo de depuración en `127.0.0.1:8080` (sólo local) y STONE lo usa para una única llamada: `SteamClient.Apps.RunGame('<id de STONE>', '', -1, 100)`, con el identificador comprobado como número. Es lo mismo que hace Decky Loader, habitual en Bazzite.
+
+Riesgo aceptado: mientras Steam corre, cualquier programa de la propia consola puede controlar Steam por ese puerto. No es accesible desde la red. Para desactivarlo: `STONE_HOME_CEF=0` en las unidades `stone-home-register` y `stone-home-autostart` y borrar el archivo; STONE vuelve entonces a `steam://rungameid`, que en el modo juego no abre accesos directos.

@@ -1,4 +1,4 @@
-# Dependencias de STONE OS 0.1.0-rc3
+# Dependencias de STONE OS 0.1.0-rc4
 
 Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/stone-release` y en `build-metadata.json` (artefacto del build y archivo de cada release). Esta tabla dice de dónde sale cada pieza y cómo se actualiza.
 

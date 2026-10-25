@@ -11,5 +11,5 @@ ExecStart=/usr/bin/stone-home-session launch
 # requests until STONE Home is running. Measure on the board before lowering further
 # (HARDWARE_VALIDATION.md, test 16; timings are logged by every boot).
 Environment=STONE_HOME_SETTLE_S=2 STONE_HOME_RETRY_S=3
-TimeoutStartSec=400
+TimeoutStartSec=520
 SuccessExitStatus=0 1 2

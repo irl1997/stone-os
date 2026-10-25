@@ -28,7 +28,7 @@ import shutil
 import tempfile
 import time
 
-from . import vdf
+from . import steamcef, vdf
 
 NAME = "STONE"
 EXE = '"/usr/bin/stone-home"'
@@ -304,6 +304,10 @@ def register(root=None, proc="/proc"):
     if not accts:
         return {"result": "skipped", "reason": "no Steam account yet (first sign-in pending)", "startup_movie": video}
     out = {"result": "ok", "appid": short_appid(), "startup_movie": video, "accounts": {}}
+    if os.environ.get("STONE_HOME_CEF", "1") != "0":
+        # Steam reads this flag when it starts; it lets `launch` start STONE through Steam's
+        # interface (steamcef.py), the only way that worked for non-Steam shortcuts on the board.
+        out["steam_ui_launch"] = steamcef.enable(root)
     for a in accts:
         try:
             out["accounts"][os.path.basename(a)] = register_account(a)

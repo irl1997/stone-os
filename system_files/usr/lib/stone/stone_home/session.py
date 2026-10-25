@@ -13,8 +13,10 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 from . import shortcuts as SC
+from . import steamcef
 
 
 def _env_float(name, default, lo=0.0, hi=60.0):
@@ -92,12 +94,30 @@ def main(argv):
         env = _steam_env()
         print(f"stone-home-session: DISPLAY={env.get('DISPLAY', '-')} trying {', '.join(urls)}", flush=True)
         sent = []
+        last = {"cef": None}
+        use_cef = os.environ.get("STONE_HOME_CEF", "1") != "0"
+        gids = SC.candidate_game_ids()
 
         def request():
+            # A start that Steam accepted gets 12 s to bring the window up before asking again.
+            if last.get("ok_at") and time.monotonic() - last["ok_at"] < 12:
+                return
+            # First through Steam's interface (SteamClient.Apps.RunGame, as Decky Loader does):
+            # in Game Mode Steam receives steam://rungameid for a non-Steam shortcut and does
+            # nothing (board, RC3). The URL stays as the fallback while that is not reachable.
+            if use_cef and gids:
+                st = steamcef.run_game(gids[len(sent) % len(gids)])
+                if st != last["cef"]:
+                    print(f"stone-home-session: {st}", flush=True)
+                    last["cef"] = st
+                if st.endswith(": ok"):
+                    last["ok_at"] = time.monotonic()
+                    sent.append(f"SteamClient.Apps.RunGame({gids[len(sent) % len(gids)]})")
+                    return
             url = urls[len(sent) % len(urls)]
             sent.append(url)
             _ask_steam(url, env)
-        res = SC.launch_until_running(request, retry_s=retry, timeout_s=_env_float("STONE_HOME_TIMEOUT_S", 180, 10, 600))
+        res = SC.launch_until_running(request, retry_s=retry, timeout_s=_env_float("STONE_HOME_TIMEOUT_S", 300, 10, 600))
         if res["ok"] and sent:
             print(f"stone-home-session: opened with {sent[-1]}", flush=True)
         total = round(waited + res["seconds"], 2)
@@ -147,6 +167,12 @@ def _diag():
     out.append(f"registered={SC.is_registered()} vdf_appids={SC.shortcut_appids()} computed={SC.short_appid()}")
     out.append(f"steam_ids={SC.recorded_ids()}  running={SC.home_running()}")
     out.append("urls: " + " ".join(SC.launch_urls()))
+    flag = os.path.exists(os.path.join(SC.steam_root(), steamcef.FLAG))
+    try:
+        pages = [p.get("title", "?") for p in steamcef.targets()][:4]
+    except (OSError, ValueError) as e:
+        pages = f"unreachable ({e.__class__.__name__})"
+    out.append(f"steam ui launch: flag={flag} pages={pages}")
     try:
         j = subprocess.run(["journalctl", "--user", "-b", "-o", "cat", "--no-pager", "-n", "6",
                             "-u", "stone-home-autostart", "-u", "stone-home-register"],

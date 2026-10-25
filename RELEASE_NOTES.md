@@ -1,8 +1,17 @@
-# STONE OS 0.1.0-rc3
+# STONE OS 0.1.0-rc4
 
-Tercera Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Cuarta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc3
+
+Con RC3 en la BC-250 (25-10-2026) el parpadeo y la transparencia desaparecieron. Quedaban dos cosas:
+
+- **Apertura automática:** el registro de Steam mostró `ExecuteSteamURL: "steam://rungameid/10954522819597172736"` en cada pedido, con el identificador correcto (el mismo con que Steam abre STONE a mano), y Steam nunca abrió el acceso directo: en el modo juego esa URL no abre accesos directos que no son de Steam. Ahora STONE le pide a la propia interfaz de Steam que lo abra (`SteamClient.Apps.RunGame`, como Decky Loader), por el protocolo de depuración que Steam abre en `127.0.0.1:8080` cuando existe `<Steam>/.cef-enable-remote-debugging` (lo crea el registro antes de que arranque Steam). La URL queda como respaldo. Se puede desactivar con `STONE_HOME_CEF=0` en las unidades. Ver SECURITY.md.
+- **Volumen:** los sonidos sólo se oían con la tele al 100 %. Se les suman 20 dB con un limitador: medido en Chromium, navegar pasa de −32,7 a −18,7 dBFS, confirmar de −27,5 a −7,7 dBFS, el inicio de −20,5 a −1,9 dBFS sin saturar.
+- La apertura automática espera hasta 5 minutos en vez de 3.
+- GitHub: el paso que publica la Release libera disco antes de descargar el instalador (falló en RC3 al descomprimir 7,9 GB).
 
 ## Cambios desde 0.1.0-rc2
 

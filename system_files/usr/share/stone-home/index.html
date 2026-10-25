@@ -540,7 +540,15 @@ function audio() {
   if (AC || !S.sound) return AC;
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = S.vol; master.connect(AC.destination);
+    /* The tones are written quiet (peaks around 0.03). On the board (RC3, TV at 30 %) they were
+       only heard with the TV at 100 %: +20 dB of make-up gain brings them to the level of Steam's
+       own interface sounds, and a limiter keeps the loudest (start-up, shutdown) from clipping. */
+    master = AC.createGain(); master.gain.value = S.vol;
+    const makeup = AC.createGain(); makeup.gain.value = 10;
+    const limiter = AC.createDynamicsCompressor();
+    limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20;
+    limiter.attack.value = .002; limiter.release.value = .12;
+    master.connect(makeup); makeup.connect(limiter); limiter.connect(AC.destination);
     verb = AC.createConvolver(); verb.buffer = impulse(2.4, 2.6);
     const wet = AC.createGain(); wet.gain.value = .55; verb.connect(wet); wet.connect(master);
     uiBus = AC.createGain(); uiBus.gain.value = 1; uiBus.connect(master);

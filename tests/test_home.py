@@ -208,6 +208,83 @@ def K09_launch_request_carries_steams_display():
 
 
 @test
+def K10_steam_ui_launch_runs_rungame_in_steams_page():
+    """steamcef against a fake Steam remote-debugging endpoint (HTTP /json + WebSocket)."""
+    import base64 as b64
+    import hashlib as hl
+    import socket
+    import struct
+    import threading
+    from stone_home import steamcef
+    got = []
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(4)
+    port = srv.getsockname()[1]
+
+    def recv_frame(c):
+        b0, b1 = c.recv(2)
+        n = b1 & 0x7F
+        if n == 126:
+            n = struct.unpack(">H", c.recv(2))[0]
+        mask = c.recv(4)
+        data = b""
+        while len(data) < n:
+            data += c.recv(n - len(data))
+        return bytes(x ^ mask[i % 4] for i, x in enumerate(data)).decode()
+
+    def send_frame(c, text):
+        d = text.encode()
+        c.sendall(bytes([0x81, 126]) + struct.pack(">H", len(d)) + d if len(d) >= 126 else bytes([0x81, len(d)]) + d)
+
+    def serve():
+        for _ in range(2):
+            c, _a = srv.accept()
+            req = b""
+            while b"\r\n\r\n" not in req:
+                req += c.recv(1024)
+            line = req.split(b"\r\n", 1)[0].decode()
+            if line.startswith("GET /json"):
+                body = json.dumps([
+                    {"title": "QuickAccess_uid2", "url": "https://steamloopback.host/x", "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}/devtools/page/QA"},
+                    {"title": "SharedJSContext", "url": "https://steamloopback.host/index.html", "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}/devtools/page/SJS"},
+                ]).encode()
+                c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+            else:
+                got.append(line)
+                key = [x.split(b": ", 1)[1] for x in req.split(b"\r\n") if x.lower().startswith(b"sec-websocket-key")][0]
+                acc = b64.b64encode(hl.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+                c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acc + b"\r\n\r\n")
+                msg = json.loads(recv_frame(c))
+                got.append(msg)
+                send_frame(c, json.dumps({"method": "Runtime.consoleAPICalled", "params": {}}))   # an event first
+                send_frame(c, json.dumps({"id": msg["id"], "result": {"result": {"type": "string", "value": "ok"}}}))
+            c.close()
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    st = steamcef.run_game(SC.game_id(), port=port)
+    t.join(5)
+    srv.close()
+    assert st == "cef[SharedJSContext]: ok", st
+    assert got[0].startswith("GET /devtools/page/SJS ")
+    expr = got[1]["params"]["expression"]
+    assert got[1]["method"] == "Runtime.evaluate" and f"RunGame('{SC.game_id()}','',-1,100)" in expr, expr
+    assert steamcef.run_game(1, port=1).startswith("cef unavailable")
+    try:
+        steamcef.evaluate("ws://192.0.2.1:8080/devtools/page/x", "1")
+        raise AssertionError("non-local debugger url accepted")
+    except ValueError:
+        pass
+    try:
+        steamcef.run_game_expression("1');alert('x")
+        raise AssertionError("non-numeric game id accepted")
+    except ValueError:
+        pass
+    with Tmp() as d:
+        assert steamcef.enable(d) and os.path.exists(os.path.join(d, steamcef.FLAG))
+
+
+@test
 def K03_register_never_writes_while_steam_runs_or_over_unreadable_file():
     with Tmp() as d:
         root = FX.build(os.path.join(d, "Steam"), with_stone_shortcut=False)
