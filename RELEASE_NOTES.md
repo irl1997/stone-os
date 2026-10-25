@@ -1,8 +1,13 @@
-# STONE OS 0.1.0-rc5
+# STONE OS 0.1.0-rc6
 
-Quinta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Sexta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc5
+
+- **Perfiles de rendimiento («permiso denegado»), la causa real:** `stoned` corre como el usuario `stoned`, no como root, y polkit sólo deja preguntar por los permisos de otro usuario a root o a un «propietario» de la acción. Cada consulta fallaba antes de llegar a las reglas, así que todo cambio se rechazaba (RC4 y RC5). La política declara ahora `org.freedesktop.policykit.owner = unix-user:stoned` en sus dos acciones, y `stoned` anota en el registro cualquier fallo de polkit. `scripts/validate.sh` lo comprueba. Las pruebas automáticas corren con polkit desactivado y no podían verlo.
+- **Ficha del juego:** un nombre largo (tres líneas) se montaba sobre JUGAR. El bloque del título se ancla encima de JUGAR y crece hacia arriba, y los nombres largos usan un tamaño menor (máximo tres líneas).
 
 ## Cambios desde 0.1.0-rc4
 

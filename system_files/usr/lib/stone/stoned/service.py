@@ -676,8 +676,10 @@ class Polkit:
                                                      action, {}, 0, "")),
                 GLib.VariantType("((bba{ss}))"), Gio.DBusCallFlags.NONE, 5000, None)
             return bool(r.unpack()[0][0])
-        except GLib.Error:
-            return False   # no polkit = no writes
+        except GLib.Error as e:
+            # no polkit, or polkit refused the question itself = no writes; said in the journal
+            log(f"stoned: polkit check for {action} failed: {e.message}")
+            return False
 
 
 def serve(bus_type=None):

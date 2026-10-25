@@ -181,6 +181,14 @@ def _diag():
         j = []
     out.append("-- autostart (this boot)")
     out += [x[:180] for x in j[-6:]] or ["(nothing)"]
+    try:
+        sj = subprocess.run(["journalctl", "-b", "-o", "cat", "--no-pager", "-n", "200", "-u", "stoned"],
+                            capture_output=True, text=True, timeout=20).stdout.strip().splitlines()
+    except (OSError, subprocess.SubprocessError):
+        sj = []
+    sj = [x for x in sj if "polkit" in x or "rror" in x or "denied" in x.lower()]
+    out.append("-- stoned (permissions, errors)")
+    out += [x[:180] for x in sj[-3:]] or ["(nothing)"]
     out.append("-- STONE Home log")
     out += [x[:180] for x in _tail(os.path.join(SC.state_dir(), "home.log"), 14,
                                     keep=("[stone]", "stone-home", "rror", "arn", "GStreamer", "Audio", "audio"))]

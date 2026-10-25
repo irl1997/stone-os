@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc5
+# Seguridad de STONE OS 0.1.0-rc6
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -65,3 +65,7 @@ Riesgo aceptado: mientras Steam corre, cualquier programa de la propia consola p
 ## Regla de polkit para el modo juego (desde 0.1.0-rc5)
 
 `/usr/share/polkit-1/rules.d/50-stone.rules` concede a los miembros de `wheel` (el administrador creado al instalar) las acciones `org.stonemachine.performance.change` y `.tune`, y `org.freedesktop.login1.power-off` y `.reboot`, sin preguntar contraseña. Motivo: en el modo juego STONE Home corre fuera de la sesión de logind y polkit no la considera activa. Es el mismo criterio que usa Bazzite para sus acciones del modo juego. `stoned` sigue validando cada valor (rango de fábrica, sin voltaje). `scripts/validate.sh` comprueba que la regla no concede nada más.
+
+## stoned como propietario de sus acciones de polkit (desde 0.1.0-rc6)
+
+`org.stonemachine.performance.policy` declara `org.freedesktop.policykit.owner = unix-user:stoned` en sus dos acciones. Sólo permite a `stoned` *preguntar* a polkit si quien llama está autorizado para esas acciones (polkit lo reserva a root o a los propietarios). No concede ningún permiso a nadie.

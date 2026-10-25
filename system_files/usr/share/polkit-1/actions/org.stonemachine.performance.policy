@@ -4,7 +4,12 @@
 <policyconfig>
   <vendor>STONE MACHINE</vendor>
   <!-- Game Mode has no password dialog, so the person at the console (active local
-       session) is allowed directly. Remote or inactive sessions are refused. -->
+       session) is allowed directly. Remote or inactive sessions are refused. In Game Mode
+       STONE Home runs outside the logind session; rules.d/50-stone.rules allows the console
+       administrator (wheel).
+       stoned (user "stoned", not root) asks polkit about another user's request: polkit only
+       allows that to root or to an owner of the action, so stoned is declared owner. Without
+       it every check failed and every change was refused (board, RC4 and RC5). -->
   <action id="org.stonemachine.performance.change">
     <description>Cambiar el perfil de rendimiento de STONE MACHINE</description>
     <message>Cambiar el perfil de rendimiento requiere estar frente a la consola</message>
@@ -13,6 +18,7 @@
       <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
+    <annotate key="org.freedesktop.policykit.owner">unix-user:stoned</annotate>
   </action>
   <action id="org.stonemachine.performance.tune">
     <description>Probar ajustes avanzados de GPU en STONE MACHINE</description>
@@ -22,5 +28,6 @@
       <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
+    <annotate key="org.freedesktop.policykit.owner">unix-user:stoned</annotate>
   </action>
 </policyconfig>

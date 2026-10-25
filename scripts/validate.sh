@@ -61,6 +61,10 @@ PY
 then ok "json and toml"; else bad "json/toml"; fi
 if have xmllint; then
     if xmllint --noout system_files/usr/share/polkit-1/actions/*.policy system_files/usr/share/dbus-1/system.d/*.conf; then ok "xml"; else bad "xml"; fi
+# stoned is not root: it may ask polkit about callers only as an owner of each action.
+n_act=$(grep -c '<action id=' system_files/usr/share/polkit-1/actions/org.stonemachine.performance.policy)
+n_own=$(grep -c 'org.freedesktop.policykit.owner">unix-user:stoned<' system_files/usr/share/polkit-1/actions/org.stonemachine.performance.policy)
+if [[ "$n_act" -gt 0 && "$n_act" == "$n_own" ]]; then ok "polkit actions owned by stoned"; else bad "every polkit action needs org.freedesktop.policykit.owner = unix-user:stoned"; fi
 # polkit rule: grants the STONE actions (and power) to wheel only, nothing else.
 if command -v node >/dev/null 2>&1; then
     if node -e "

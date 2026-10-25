@@ -11,13 +11,13 @@ Bazzite (Fedora Atomic, kernel, Mesa, Steam, Gamescope)
           = STONE OS
 ```
 
-**Versión:** `0.1.0-rc5` (Release Candidate 5) · **Hardware:** AMD BC-250 (BIOS P3.00) · **Base:** `ghcr.io/ublue-os/bazzite-deck:stable-44`, fijada por digest en cada build.
+**Versión:** `0.1.0-rc6` (Release Candidate 6) · **Hardware:** AMD BC-250 (BIOS P3.00) · **Base:** `ghcr.io/ublue-os/bazzite-deck:stable-44`, fijada por digest en cada build.
 
 ## Estado
 
 | | |
 | --- | --- |
-| Software | Completo para RC5. Todas las pruebas automáticas pasan (`scripts/test-all.sh`). |
+| Software | Completo para RC6. Todas las pruebas automáticas pasan (`scripts/test-all.sh`). |
 | GitHub Actions | Flujos creados y validados con actionlint. **Aún no ejecutados en GitHub**: la primera ejecución será en tu repositorio. |
 | Hardware | **NOT TESTED.** Nada se ha probado todavía en una BC-250 real. Plan completo en [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md). |
 
@@ -61,7 +61,7 @@ Safe Mode, valores de fábrica, fallo de `stoned` o de STONE Home y vuelta a la 
 | [INSTALL.md](INSTALL.md) | Instalar en la BC-250 |
 | [RECOVERY.md](RECOVERY.md) | Recuperación |
 | [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) | Pruebas en la placa (todas NOT TESTED) |
-| [RELEASE_NOTES.md](RELEASE_NOTES.md) | Qué trae 0.1.0-rc5 y sus limitaciones |
+| [RELEASE_NOTES.md](RELEASE_NOTES.md) | Qué trae 0.1.0-rc6 y sus limitaciones |
 | [DEPENDENCIES.md](DEPENDENCIES.md) | Dependencias, versiones y cómo se actualizan |
 | [SECURITY.md](SECURITY.md) | Modelo de seguridad y privilegios |
 | [docs/STONED.md](docs/STONED.md) | El servicio `stoned` y su API D-Bus |
