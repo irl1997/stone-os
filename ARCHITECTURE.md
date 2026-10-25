@@ -1,4 +1,4 @@
-# Arquitectura de STONE OS 0.1.0-rc6
+# Arquitectura de STONE OS 0.1.0-rc7
 
 ```
 STONE OS UI (STONE Home)          GTK 4 + WebKitGTK 6, usuario de la consola, dentro de Steam Game Mode

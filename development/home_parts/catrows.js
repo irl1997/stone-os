@@ -1,10 +1,61 @@
 /* Steam's own settings section for each STONE category (opened in Steam's interface). */
 const STEAM_SEC = { 'Sistema': 'System', 'Pantalla': 'Display', 'Audio': 'Audio', 'Mandos': 'Controller', 'Red': 'Internet',
   'Bluetooth': 'Bluetooth', 'Almacenamiento': 'Storage', 'Energía': 'Power', 'Actualizaciones': 'System', 'Accesibilidad': 'Accessibility' };
-const RENDER = ['Estable', 'Ligero', 'Fluido'];
-const RENDER_TXT = ['Sin GPU, resolución completa. Sin parpadeo; animaciones más lentas',
-  'Sin GPU, a 1280 × 720 escalado. Animaciones más fluidas, texto algo más suave',
-  'Con GPU. Lo más fluido y lo que menos carga la consola; confírmalo en tu televisor'];
+/* Drawing inside Game Mode (read at start by /usr/libexec/stone-home). Always full resolution:
+   the GPU modes are different ways GTK and WebKit hand frames to Gamescope, to find on the board
+   the one that is smooth and does not flicker; "Medir fluidez" gives the numbers. */
+const RENDER = ['Estable', 'GPU · GL', 'GPU · GL + DMA-BUF', 'GPU · Vulkan'];
+const RENDER_TXT = ['Sin GPU: sin parpadeo, animaciones más lentas',
+  'GPU con OpenGL, redibujando cada cuadro completo',
+  'GPU con OpenGL y entrega directa de cuadros de WebKit (DMA-BUF)',
+  'GPU con Vulkan, sin la capa de Gamescope para Vulkan'];
+/* Emulators: fixed catalog in the host (stone_home/emulators.py), installed from Flathub. */
+const EMU_STATE = {};
+function loadEmulators() {
+  S.emuLoading = true;
+  Sys.emulators().then(r => { S.emu = r; }, () => { S.emu = []; }).then(() => {
+    S.emuLoading = false;
+    if (S.screen === 'settings' && CATS[cat] === 'Emuladores') enterSettings({ pane: !!NAV.pane, ri: NAV.pane ? NAV.c : 0 });
+  });
+}
+Bridge.on('emulator', d => {
+  EMU_STATE[d.key] = d;
+  toast(d.text, false);
+  if (d.state === 'done') { loadEmulators(); loadLibrary(); }
+  else if (S.screen === 'settings' && CATS[cat] === 'Emuladores') enterSettings({ pane: !!NAV.pane, ri: NAV.pane ? NAV.c : 0 });
+});
+function emuA(r) {
+  const e = r.emu;
+  if (e.installed) { play('select'); return toast(`${e.name} está en tu biblioteca, como acceso directo`, false); }
+  if (EMU_STATE[e.key] && EMU_STATE[e.key].state === 'installing') { play('error'); return toast(`${e.name} se está instalando`, false); }
+  play('select');
+  EMU_STATE[e.key] = { state: 'installing', text: `Instalando ${e.name}…` };
+  enterSettings({ pane: true, ri: NAV.c });
+  return sys('emuInstall', e.key);
+}
+/* Smoothness, measured on the console: STONE moves through Home by itself for a few seconds and
+   records the time between frames (requestAnimationFrame). Logged to home.log for diagnosis. */
+function measureSmoothness() {
+  if (S.measuring) return;
+  S.measuring = true;
+  const ri = NAV.c, d = [];
+  let last = performance.now(), run = true;
+  const tick = t => { d.push(t - last); last = t; if (run) requestAnimationFrame(tick); };
+  toast('Midiendo la fluidez: STONE se mueve sola unos segundos', false);
+  enterHome({ r: 0, c: 0 });
+  requestAnimationFrame(t => { last = t; requestAnimationFrame(tick); });
+  const steps = ['right', 'right', 'right', 'left', 'left', 'left', 'right', 'right', 'left', 'left', 'right', 'left'];
+  let k = 0;
+  const iv = setInterval(() => {
+    if (k < steps.length) { act(steps[k++]); return; }
+    clearInterval(iv); run = false; S.measuring = false;
+    const s = [...d].sort((a, b) => a - b), avg = d.reduce((a, b) => a + b, 0) / Math.max(1, d.length);
+    S.smooth = { fps: Math.round(1000 / avg), p99: Math.round(s[Math.floor(s.length * .99)] || 0), slow: d.filter(x => x > 25).length, n: d.length, mode: S.render };
+    console.info(`[stone] smoothness mode=${RENDER[S.render]} fps=${S.smooth.fps} p99=${S.smooth.p99}ms slow=${S.smooth.slow}/${S.smooth.n}`);
+    cat = CATS.indexOf('Pantalla'); enterSettings({ pane: true, ri });
+    toast(`${RENDER[S.render]}: ${S.smooth.fps} cuadros por segundo de media; el más lento, ${S.smooth.p99} ms`, false);
+  }, 450);
+}
 /* Opens the matching section of Steam's settings over STONE; if Steam cannot be reached, says where it is. */
 function openSteamSettings(r) {
   if (!r.sec) return toast(r.where, false);
@@ -30,11 +81,19 @@ function catRows() {
       steam('Resolución y frecuencia', 'Las fija Steam para todo el sistema', 'Botón STEAM → Ajustes → Pantalla'),
       steam('HDR', 'Según el televisor y el juego', 'Botón STEAM → Ajustes → Pantalla'),
       { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' },
-      { l: 'Modo de imagen', s: RENDER_TXT[S.render], v: RENDER[S.render], key: 'render' }] };
+      { l: 'Modo de imagen', s: RENDER_TXT[S.render], v: RENDER[S.render], key: 'render' },
+      { l: 'Medir fluidez', s: S.smooth ? `Última medida, ${RENDER[S.smooth.mode]}: ${S.smooth.fps} FPS · cuadro más lento ${S.smooth.p99} ms · ${S.smooth.slow} de ${S.smooth.n} cuadros lentos`
+        : 'STONE recorre el inicio unos segundos y mide los cuadros por segundo del modo actual', v: 'Medir', act: 'measure' }] };
     case 'Audio': return { d: 'Sonidos del sistema y volumen de la interfaz.', rows: [
       { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
       { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },
       steam('Salida de audio', 'Altavoces, auriculares, HDMI o DisplayPort', 'Botón ··· → Audio, o botón STEAM → Ajustes → Audio')] };
+    case 'Emuladores': {
+      if (!S.emu) { if (!S.emuLoading) loadEmulators(); return { d: 'Emuladores de otras consolas, desde Flathub.', rows: [{ l: 'Leyendo…', s: 'Buscando qué emuladores están instalados', v: '', ro: true }] }; }
+      return { d: 'Se instalan desde Flathub y aparecen en tu biblioteca como accesos directos. Los juegos y BIOS los pones tú. RetroDECK reúne la mayoría de consolas en una sola app.',
+        rows: S.emu.map(e => { const st = EMU_STATE[e.key]; const busy = st && st.state === 'installing';
+          return { l: e.name, s: busy ? st.text : e.plays, v: e.installed ? 'Instalado' : busy ? 'Instalando…' : 'Instalar', act: 'emu', emu: e }; }) };
+    }
     case 'Rendimiento': return { d: `Perfil activo: ${profOf(S.prof).n}. Elige entre silencio y rendimiento, o ajusta tu propio perfil.`, rows: [
       { l: 'Performance Center', s: 'SILENT, BALANCED, PERFORMANCE y CUSTOM', v: 'Abrir', act: 'perf' },
       { l: 'Modo técnico', s: 'Temperaturas, frecuencia y consumo en el menú de STONE durante el juego', v: S.tech ? 'Activado' : 'Desactivado', key: 'tech' },

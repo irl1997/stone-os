@@ -52,7 +52,7 @@ try {
   // 3. Settings -> Rendimiento -> Performance Center -> PERFORMANCE, shown from the governor's answer
   await key('ArrowDown'); await focusTo(/^Ajustes$/); await key('Enter');
   await page.waitForSelector('#settings.on');
-  await key('ArrowDown', 6);
+  await key('ArrowDown', 7);   // Sistema … Almacenamiento, Emuladores, Rendimiento
   await waitText('#settings .cats .cur', /^Rendimiento$/);
   await key('ArrowRight'); await key('Enter');
   await page.waitForSelector('#perf.on');
@@ -89,6 +89,23 @@ try {
   dbus('GameEnded', 'string:1001', 'boolean:false');
   await page.waitForSelector('#home.on', { timeout: 15000 });
   log('PASS  game end returns to Home');
+
+  // 6b. Ajustes: emulator catalog and the drawing-mode rows are there
+  await key('ArrowDown'); await focusTo(/^Ajustes$/); await key('Enter');
+  await page.waitForSelector('#settings.on');
+  await key('ArrowUp', 13);                 // Ajustes remembers the last category: back to Sistema
+  await key('ArrowDown', 7);
+  await waitText('#settings .cats .cur', /^Emuladores$/);
+  await waitText('#settings .rows', /RetroDECK[\s\S]*Dolphin[\s\S]*PCSX2/, 15000);
+  await key('ArrowRight'); await key('ArrowDown', 11); await page.waitForTimeout(700); await shot('emulator-list');
+  await key('ArrowLeft');
+  await key('ArrowUp', 6);
+  await waitText('#settings .cats .cur', /^Pantalla$/);
+  await waitText('#settings .rows', /Modo de imagen[\s\S]*Estable[\s\S]*Medir fluidez/);
+  await shot('settings-emulators');
+  await key('h');
+  await page.waitForSelector('#home.on');
+  log('PASS  Ajustes lists emulators and the drawing modes');
 
   // 7. Power off goes to logind (recorded by the dev server)
   await key('ArrowDown'); await focusTo(/^Apagar$/); await key('Enter');

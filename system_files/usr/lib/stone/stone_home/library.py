@@ -195,3 +195,18 @@ def launch_url(g):
     if g["source"] == "shortcut":
         return f"steam://rungameid/{SC.game_id(int(g['appid']))}"
     return f"steam://rungameid/{g['appid']}"
+
+
+def not_installed(root, owned, have):
+    """Library entries for games in the account that are not installed (from Steam's interface:
+    steamcef.owned_games). They can be opened in Steam's install dialog, not played."""
+    out = []
+    for appid, name, installed, minutes, last, size in owned or []:
+        a = str(appid)
+        if a in have or installed or not name.strip():
+            continue
+        out.append({"appid": a, "name": name, "source": "steam", "installed": False, "updating": False,
+                    "playtime_min": minutes, "last_played": last, "size_bytes": size, "launch": None,
+                    "art": {k: art_path(root, a, k) is not None for k in ("capsule", "hero")}})
+    out.sort(key=lambda g: (-g["last_played"], g["name"].lower()))
+    return out[:MAX_ITEMS]

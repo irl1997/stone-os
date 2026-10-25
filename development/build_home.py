@@ -87,14 +87,16 @@ def build(src):
     t = replace_span(t, "function libCard(g, row, col) {", "function libraryA(el) {", part("libcard.js") + "\n", "libCard")
     t = replace_span(t, "/* ---------- DETAIL ---------- */", "/* ---------- QUICK MENU ---------- */", part("detail_game.js") + "\n\n", "detail+game")
     t = replace_span(t, "function openQuick() {", "/* Quick Menu: this game session only", part("quick.js") + "\n", "quick")
+    t = replace_once(t, "const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Rendimiento',",
+                     "const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Emuladores', 'Rendimiento',", "CATS emulators")
     t = replace_span(t, "function catRows() {", "function enterSettings(", part("catrows.js") + "\n", "catRows")
     t = replace_once(t, "  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);\n  $('#bSound').textContent = `Sonido: ${S.sound ? 'activado' : 'desactivado'}`;\n",
                      "  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);\n", "applyPrefs bar")
     t = replace_once(t, "  else if (key === 'tech') { S.tech = !S.tech; }\n",
-                     "  else if (key === 'tech') { S.tech = !S.tech; }\n  else if (key === 'render') { S.render = (S.render + d + 3) % 3; play('select'); return applyRender(); }\n", "adjust render")
+                     "  else if (key === 'tech') { S.tech = !S.tech; }\n  else if (key === 'render') { S.render = (S.render + d + RENDER.length) % RENDER.length; play('select'); return applyRender(); }\n", "adjust render")
     t = replace_once(t, "  applyPrefs(); play('nav'); enterSettings({ pane: true, ri });\n}", "  applyPrefs(); savePrefs(); armIdleOff(); play('nav'); enterSettings({ pane: true, ri });\n}", "adjust save")
     t = replace_span(t, "  if (r.act === 'steam') { play('select'); return toast('Se abre el panel de Steam con el tema de STONE (fuera del prototipo)', false); }\n  if (r.act === 'desk') { play('error'); return toast('El modo escritorio queda oculto en el producto final', false); }\n",
-                     "  if (r.act === 'perf')", "  if (r.act === 'info') { play('select'); return toast(r.where, false); }\n  if (r.act === 'steam') { play('select'); return openSteamSettings(r); }\n", "settingsA steam")
+                     "  if (r.act === 'perf')", "  if (r.act === 'info') { play('select'); return toast(r.where, false); }\n  if (r.act === 'steam') { play('select'); return openSteamSettings(r); }\n  if (r.act === 'emu') return emuA(r);\n  if (r.act === 'measure') { play('select'); return measureSmoothness(); }\n", "settingsA steam")
     t = replace_once(t, " · ${real} · regulador simulado en el prototipo`;", " · ${real}`;", "statusLine")
     t = replace_once(t, "  const m = sim(S.prof, .35), rpm = 1300 + Math.round((m.temp - 55) * 35), mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);",
                      "  const mr = capRange('max_range', [1500, 2000]), nr = capRange('min_range', [1000, 1500]), tr = capRange('temp_range', [65, 85]);", "tuningRows sim")

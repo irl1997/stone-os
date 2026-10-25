@@ -60,10 +60,10 @@ PREFS = {
     "ts": (_intr(0, 2), 0), "safe": (_intr(0, 8), 5), "idle": (_intr(0, 3), 2), "tech": (_bool, False),
     "adv_ack": (_bool, False), "favorites": (_favs, []),
     # Drawing inside Game Mode (read by /usr/libexec/stone-home before GTK starts):
-    # 0 stable (software, full resolution), 1 light (software, 1280x720 scaled up by Gamescope),
-    # 2 fluid (GPU: GTK GL with full redraws). Software is the default: the GPU paths
-    # flickered on the board (RC2); 2 is offered to be confirmed there.
-    "render": (_intr(0, 2), 0),
+    # 0 stable (software), 1 GPU GL full redraw, 2 GPU GL + WebKit DMA-BUF, 3 GPU Vulkan
+    # without Gamescope's Vulkan layer. Software is the default: the GPU paths flickered on
+    # the board (RC2); 1-3 are measured there (Ajustes -> Pantalla -> Medir fluidez).
+    "render": (_intr(0, 3), 0),
 }
 
 

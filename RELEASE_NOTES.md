@@ -1,8 +1,15 @@
-# STONE OS 0.1.0-rc6
+# STONE OS 0.1.0-rc7
 
-Sexta Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Séptima Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc6
+
+- **Instalar juegos de Steam:** la biblioteca muestra también los juegos de la cuenta que no están instalados (de la interfaz de Steam: `collectionStore.allGamesCollection`). En su ficha el botón es INSTALAR: abre la página del juego en Steam y el diálogo de instalación de Steam (`SteamClient.Installs.OpenInstallWizard`), donde se elige el disco. Sin la interfaz de Steam, la biblioteca sigue mostrando lo instalado.
+- **Emuladores:** nueva categoría **Ajustes → Emuladores** con un catálogo fijo de Flathub (RetroDECK, RetroArch, Dolphin, PCSX2, PPSSPP, RPCS3, Cemu, Azahar, melonDS, mGBA, Flycast, xemu). Se instalan para el usuario (`flatpak install --user`, sin contraseña) y se añaden a Steam como accesos directos (`SteamClient.Apps.AddShortcut`; si Steam no responde, el registro los escribe antes del siguiente arranque de Steam). La página sólo envía una clave del catálogo. Juegos y BIOS los aporta la persona.
+- **Modo de imagen, sin bajar resolución:** se retira «Ligero». Los modos son Estable (sin GPU) y tres caminos por GPU a resolución completa: GL con redibujado completo, GL con entrega DMA-BUF de WebKit, y Vulkan sin la capa de Gamescope. Nueva fila **Medir fluidez**: STONE recorre el inicio sola unos segundos y mide los cuadros (media, cuadro más lento, cuadros lentos); queda también en `home.log`. Las animaciones de STONE ya sólo animan `transform` y `opacity`; con composición por GPU son baratas, sin ella cada cuadro se pinta entero en la CPU, que es lo que se ve lento en Estable.
+- **Listas largas en Ajustes** se desplazan dentro del panel.
 
 ## Cambios desde 0.1.0-rc5
 

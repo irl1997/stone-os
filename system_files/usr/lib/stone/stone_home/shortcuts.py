@@ -313,7 +313,49 @@ def register(root=None, proc="/proc"):
             out["accounts"][os.path.basename(a)] = register_account(a)
         except OSError as e:
             out["accounts"][os.path.basename(a)] = f"skipped: {e}"
+    # Emulators installed while Steam was running and Steam's interface could not add them.
+    from . import emulators
+    extra = emulators.pending_entries()
+    if extra:
+        added = []
+        for a in accts:
+            try:
+                added += add_extra_shortcuts(a, extra)
+            except (OSError, vdf.VDFError):
+                pass
+        out["emulators_added"] = sorted(set(added))
     return out
+
+
+def add_extra_shortcuts(acct, entries):
+    """Non-Steam shortcuts for installed emulators ({name, exe, start, options}); an entry with
+    the same Exe and launch options already present is left alone. Steam must be closed."""
+    path = os.path.join(acct, "config", "shortcuts.vdf")
+    data = {"shortcuts": {}}
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = vdf.binary_loads(f.read())
+        if not isinstance(data.get("shortcuts"), dict):
+            return []
+    items = data["shortcuts"]
+    have = {(str(vdf.get_ci(v, "Exe") or ""), str(vdf.get_ci(v, "LaunchOptions") or ""))
+            for v in items.values() if isinstance(v, dict)}
+    added = []
+    for e in entries:
+        if (e["exe"], e["options"]) in have:
+            continue
+        appid = (binascii.crc32((e["exe"] + e["name"]).encode("utf-8")) & 0xFFFFFFFF) | 0x80000000
+        ent = entry(appid)
+        ent.update({"AppName": e["name"], "Exe": e["exe"], "StartDir": e["start"], "icon": "", "LaunchOptions": e["options"]})
+        idx = max([int(k) for k in items if k.isdigit()] + [-1]) + 1
+        items[str(idx)] = ent
+        added.append(e["name"])
+    if added:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and not os.path.exists(path + ".stone-backup"):
+            shutil.copy2(path, path + ".stone-backup")
+        _write_atomic(path, vdf.binary_dumps(data))
+    return added
 
 
 def is_registered(root=None):

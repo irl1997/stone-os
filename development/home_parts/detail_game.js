@@ -3,14 +3,15 @@ let curG = 0;
 function enterDetail(i, opts = {}) {
   curG = i; const g = G[i], running = S.running === i;
   S.screen = 'detail';
-  const prim = running ? 'REANUDAR' : 'JUGAR';
+  const canPlay = g.inst || g.src === 'shortcut';
+  const prim = running ? 'REANUDAR' : canPlay ? 'JUGAR' : 'INSTALAR';
   const sec = [[g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf'], ['Propiedades', 'opt']];
   $('#detail').innerHTML = `
     <div class="col"><div class="origin">${esc(g.o)}</div><h1${g.n.length > 22 ? ' class="long"' : ''}>${esc(g.n.toUpperCase())}</h1>
       <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div></div>
     <div class="primary txt-f" data-f data-act="primary" id="dprim">${prim}</div>
     <div class="second">${sec.map(([s, a]) => `<span class="txt-f" data-f data-act="${a}">${s}</span>`).join('')}</div>
-    <div class="info"><div><span>Tamaño</span><b>${g.sz}</b></div><div><span>Origen</span><b>${esc(g.o)}</b></div><div><span>Estado</span><b>${g.upd ? 'Actualizando en Steam' : g.inst ? 'Instalado' : 'Pendiente en Steam'}</b></div><div><span>Al iniciarse</span><b>${g.perf ? profOf(g.perf).n : 'Perfil global'}${S.safeMode && g.perf ? ' (en pausa: Safe Mode)' : ''}</b></div></div>`;
+    <div class="info"><div><span>Tamaño</span><b>${g.sz}</b></div><div><span>Origen</span><b>${esc(g.o)}</b></div><div><span>Estado</span><b>${g.upd ? 'Actualizando en Steam' : g.inst ? 'Instalado' : 'No instalado'}</b></div><div><span>Al iniciarse</span><b>${g.perf ? profOf(g.perf).n : 'Perfil global'}${S.safeMode && g.perf ? ' (en pausa: Safe Mode)' : ''}</b></div></div>`;
   showScreen('detail'); chrome(true, false);
   bgGame(g, true, 'side');
   const d = $('#detail');
@@ -24,7 +25,12 @@ function enterDetail(i, opts = {}) {
 }
 function detailA(el) {
   const g = G[curG], a = el.dataset.act;
-  if (a === 'primary') { play('select'); return S.running === g.i ? resumeGame() : launch(g); }
+  if (a === 'primary') {
+    play('select');
+    if (S.running === g.i) return resumeGame();
+    if (!g.inst && g.src !== 'shortcut') return sys('install', g.appid).then(r => { if (r) toast(`${g.n}: elige dónde instalarlo en Steam. Al terminar aparece aquí listo para jugar`, false); });
+    return launch(g);
+  }
   if (a === 'opt') { play('select'); return toast('Propiedades, logros y compatibilidad: en la ficha del juego en Steam', false); }
   if (a === 'fav') {
     play('select'); g.fav = !g.fav; if (g.fav) favs.add(g.appid); else favs.delete(g.appid); savePrefs();

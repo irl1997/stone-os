@@ -21,12 +21,21 @@ if (os.environ.get("XDG_CURRENT_DESKTOP") == "gamescope" or os.environ.get("GAME
             render = json.load(f).get("render", 0)
     except (OSError, ValueError, AttributeError):
         render = 0
-    if render == 1:                       # light: software, 1280x720, Gamescope scales it up
-        os.environ["STONE_HOME_SIZE"] = "1280x720"
-    elif render == 2:                     # fluid: GPU, full redraw on every frame
+    render = render if render in (0, 1, 2, 3) else 0
+    # Full resolution in every mode. The GPU modes differ in how GTK and WebKit hand frames
+    # to Gamescope, to find on the board the smooth one that does not flicker (RC2 flickered
+    # with GTK's default Vulkan renderer through Gamescope's Vulkan layer).
+    if render in (1, 2, 3):
+        os.environ.pop("WEBKIT_DISABLE_COMPOSITING_MODE", None)      # WebKit composites on the GPU
+    if render in (1, 2):                  # GTK on OpenGL, every frame redrawn whole
         os.environ["GSK_RENDERER"] = "gl"
         os.environ["GSK_DEBUG"] = "full-redraw"
-        os.environ.pop("WEBKIT_DISABLE_COMPOSITING_MODE", None)
+    if render == 2:                       # + WebKit hands its frames over as DMA-BUF
+        os.environ.pop("WEBKIT_DISABLE_DMABUF_RENDERER", None)
+    if render == 3:                       # GTK on Vulkan without Gamescope's Vulkan layer
+        os.environ["GSK_RENDERER"] = "vulkan"
+        os.environ["ENABLE_GAMESCOPE_WSI"] = "0"
+        os.environ["vk_xwayland_wait_ready"] = "true"
     os.environ["STONE_HOME_RENDER"] = str(render)
 
 sys.path.insert(0, "/usr/lib/stone")

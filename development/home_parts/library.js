@@ -1,5 +1,6 @@
-/* ---------- Library: Steam's installed games and shortcuts, read by the host ----------
-   The host sorts by last played. Artwork comes from Steam's own cache through stone://art. */
+/* ---------- Library: Steam's games (installed, and the rest of the account through Steam's
+   interface) and shortcuts, read by the host ----------
+   The host sorts by last played, installed first. Artwork comes from Steam's own cache through stone://art. */
 let G = [], recent = [];
 const favs = new Set();
 const SRC = { steam: 'Steam', shortcut: 'Acceso directo' };
@@ -23,7 +24,7 @@ async function loadLibrary() {
   G = list.map((x, i) => ({ i, appid: x.appid, n: x.name, o: SRC[x.source] || 'Steam', src: x.source, min: x.playtime_min,
     h: Math.round(x.playtime_min / 60), lastT: x.last_played, last: ago(x.last_played), sz: sizeText(x.size_bytes),
     inst: x.installed, upd: x.updating, art: x.art || {}, fav: favs.has(x.appid), perf: null }));
-  recent = G.slice(0, 6).map(g => g.i);
+  recent = G.filter(g => g.inst || g.src === 'shortcut').slice(0, 6).map(g => g.i);
   S.libReady = true; S.libFound = r ? r.root_found : false;
   if (S.st) adopt(S.st);
 }

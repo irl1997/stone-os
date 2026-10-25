@@ -513,6 +513,9 @@ class FakeSteamUI:
     def open_page(self, page):
         return self._r(("page", page))
 
+    def owned_games(self):
+        return None                                        # Steam's interface not asked in these tests
+
 
 @test
 def H04_steam_ui_first_for_games_and_steam_settings_only_known_sections():
@@ -539,6 +542,90 @@ def H04_steam_ui_first_for_games_and_steam_settings_only_known_sections():
         except ValueError:
             pass
     assert system.clean_prefs({"render": 2})["render"] == 2 and system.clean_prefs({"render": 7})["render"] == 0
+
+
+@test
+def H05_library_lists_account_games_not_installed_and_installs_through_steam():
+    with Tmp() as d:
+        root = FX.build(os.path.join(d, "Steam"))
+        h = host_mod.Host(lambda *a: None, stoned=FakeStoned(), sysapi=system.System(spawn=lambda u: None), steam_root=root)
+        ui = h.steam_ui = FakeSteamUI(ok=True)
+        ui.owned_games = lambda: [(1001, "Ya instalado", True, 5, 10, 1), (35140, "Batman: Arkham Asylum GOTY Edition", False, 48, 99, 0),
+                                  (77, "", False, 0, 0, 0)]
+        ui.install = lambda appid: ui._r(("install", appid))
+        lib, code = run_host(h, {"method": "library", "args": []})
+        names = [g["name"] for g in lib["games"]]
+        assert code is None and lib["owned_known"] and "Batman: Arkham Asylum GOTY Edition" in names and "Ya instalado" not in names
+        batman = [g for g in lib["games"] if g["appid"] == "35140"][0]
+        assert batman["installed"] is False and batman["launch"] is None and batman["playtime_min"] == 48
+        assert run_host(h, {"method": "launch", "args": ["35140"]})[1] == "InvalidValue"      # not installed: no launch
+        assert run_host(h, {"method": "install", "args": ["35140"]}) == ({"ok": True, "via": "steam-ui"}, None)
+        assert run_host(h, {"method": "install", "args": ["1001"]})[1] == "InvalidValue"     # installed: nothing to install
+        assert ("install", 35140) in ui.calls
+    from stone_home import steamcef
+    assert "OpenInstallWizard([35140])" in steamcef.install_expression(35140)
+    for bad in (0, -1, 0x80000000):
+        try:
+            steamcef.install_expression(bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+
+
+@test
+def E01_emulators_fixed_catalog_install_and_shortcut_now_or_at_next_start():
+    from stone_home import emulators
+    with Tmp() as d:
+        os.environ["STONE_HOME_STATE"] = os.path.join(d, "state")
+        try:
+            calls, events = [], []
+            have = set()
+
+            class R:
+                def __init__(self, out="", rc=0):
+                    self.stdout, self.stderr, self.returncode = out, "", rc
+
+            def run(args, timeout):
+                calls.append(args)
+                if args[1] == "list":
+                    return R("\n".join(sorted(have)) if args[2] == "--user" else "")
+                if args[1] == "install":
+                    have.add(args[-1])
+                return R()
+
+            class UI:
+                def __init__(self, ok):
+                    self.ok, self.added = ok, []
+
+                def add_shortcut(self, *a):
+                    self.added.append(a)
+                    return 3000000001 if self.ok else None
+            ui = UI(True)
+            assert emulators.install("dolphin", lambda st, t: events.append(st), run=run, steam_ui=ui)
+            assert ["/usr/bin/flatpak", "install", "--user", "-y", "--noninteractive", "flathub", "org.DolphinEmu.dolphin-emu"] in calls
+            assert ui.added == [("Dolphin", "/usr/bin/flatpak", "/", "run org.DolphinEmu.dolphin-emu")] and events == ["installing", "done"]
+            rows = {r["key"]: r for r in emulators.catalog(run=run)}
+            assert rows["dolphin"]["installed"] and not rows["pcsx2"]["installed"]
+            assert not emulators.install("rm -rf /", lambda st, t: events.append(st), run=run)
+            # Steam's interface not reachable: queued, written by register before Steam starts
+            assert emulators.install("pcsx2", lambda st, t: None, run=run, steam_ui=UI(False))
+            root = FX.build(os.path.join(d, "Steam"), with_stone_shortcut=False)
+            proc = os.path.join(d, "proc")
+            os.makedirs(proc)
+            out = SC.register(root, proc=proc)
+            assert out["emulators_added"] == ["PCSX2"], out
+            items = vdf.binary_loads(open(os.path.join(root, "userdata", FX.ACCOUNT, "config", "shortcuts.vdf"), "rb").read())["shortcuts"]
+            pc = [v for v in items.values() if v.get("AppName") == "PCSX2"][0]
+            assert pc["Exe"] == '"/usr/bin/flatpak"' and pc["LaunchOptions"] == "run net.pcsx2.PCSX2" and pc["appid"] & 0x80000000
+            assert "emulators_added" not in SC.register(root, proc=proc)          # queue emptied, nothing twice
+        finally:
+            del os.environ["STONE_HOME_STATE"]
+    from stone_home import steamcef
+    try:
+        steamcef.add_shortcut_expression("x'); evil('", "/usr/bin/flatpak", "/", "run a")
+        raise AssertionError("unsafe shortcut accepted")
+    except ValueError:
+        pass
 
 
 @test

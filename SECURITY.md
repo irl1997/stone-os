@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc6
+# Seguridad de STONE OS 0.1.0-rc7
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -69,3 +69,7 @@ Riesgo aceptado: mientras Steam corre, cualquier programa de la propia consola p
 ## stoned como propietario de sus acciones de polkit (desde 0.1.0-rc6)
 
 `org.stonemachine.performance.policy` declara `org.freedesktop.policykit.owner = unix-user:stoned` en sus dos acciones. Sólo permite a `stoned` *preguntar* a polkit si quien llama está autorizado para esas acciones (polkit lo reserva a root o a los propietarios). No concede ningún permiso a nadie.
+
+## Instalación de emuladores (desde 0.1.0-rc7)
+
+STONE Home sólo instala los identificadores de Flathub de su catálogo fijo (`stone_home/emulators.py`); la página envía una clave del catálogo, nunca un nombre de paquete ni un comando. La instalación es del usuario (`flatpak install --user` desde Flathub), sin root. Los accesos directos que se añaden a Steam ejecutan `/usr/bin/flatpak run <id del catálogo>`.

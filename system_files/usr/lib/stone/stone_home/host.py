@@ -10,6 +10,7 @@ import threading
 from gi.repository import GLib
 
 from . import bridge
+from . import emulators
 from . import library
 from . import shortcuts
 from . import steamcef
@@ -23,6 +24,8 @@ class Host:
         self.sys = sysapi or system.System()
         self.steam_root = steam_root
         self.games = {}                                       # appid -> launch URL, from the last scan
+        self.owned = set()                                    # not installed, in the account: may be installed
+        self.emu_busy = set()                                 # catalog keys being installed
         self.selftest = None                                  # set by app.py --selftest
         self.restart = None                                   # set by app.py: restart STONE Home
         self.steam_ui = steamcef                              # Steam's interface (replaced in tests)
@@ -55,12 +58,52 @@ class Host:
                 res = library.scan(root)
             except Exception as e:  # damaged Steam files: show an empty library, say why
                 res = {"root_found": False, "games": [], "error": repr(e)}
+            # Games in the account that are not installed come from Steam's interface (the
+            # files on disk only list installed ones). Without it, the library is what is installed.
+            owned = self.steam_ui.owned_games() if not res.get("error") else None
+            res["games"] += library.not_installed(root, owned, {g["appid"] for g in res["games"]})
+            res["owned_known"] = owned is not None
             GLib.idle_add(lambda: (self._scanned(res, done), False)[1])
         threading.Thread(target=work, daemon=True).start()
 
     def _scanned(self, res, done):
-        self.games = {g["appid"]: g["launch"] for g in res["games"]}
+        self.games = {g["appid"]: g["launch"] for g in res["games"] if g.get("launch")}
+        self.owned = {g["appid"] for g in res["games"] if not g.get("installed") and g.get("source") == "steam"}
         done(res)
+
+    def m_install(self, args, done):
+        """Opens Steam's own install dialog for a game of the account that is not installed."""
+        if len(args) != 1 or args[0] not in self.owned or not args[0].isdigit():
+            return done(None, "InvalidValue", "unknown game")
+        appid = int(args[0])
+        self._in_steam_ui(lambda: self.steam_ui.install(appid), None, done)
+
+    def m_emulators(self, args, done):
+        def work():
+            rows = emulators.catalog()
+            for r in rows:
+                r["busy"] = r["key"] in self.emu_busy
+            GLib.idle_add(lambda: (done(rows), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
+    def m_emuInstall(self, args, done):
+        if len(args) != 1 or args[0] not in emulators.CATALOG:
+            return done(None, "InvalidValue", "unknown emulator")
+        key = args[0]
+        if key in self.emu_busy:
+            return done({"ok": True, "already": True})
+        self.emu_busy.add(key)
+
+        def progress(state, text):
+            GLib.idle_add(lambda: (self.emit("emulator", {"key": key, "state": state, "text": text}), False)[1])
+
+        def work():
+            try:
+                emulators.install(key, progress, steam_ui=self.steam_ui)
+            finally:
+                self.emu_busy.discard(key)
+        threading.Thread(target=work, daemon=True).start()
+        done({"ok": True})
 
     def _in_steam_ui(self, call, fallback, done):
         """Ask Steam's interface first (in Game Mode steam:// URLs are received and ignored for

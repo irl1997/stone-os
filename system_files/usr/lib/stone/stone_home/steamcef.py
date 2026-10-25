@@ -203,3 +203,76 @@ def open_settings(section, port=PORT):
 
 def open_page(page, port=PORT):
     return ui_eval(open_page_expression(page), port)
+
+
+def ui_value(expression, port=PORT):
+    """Like ui_eval, but returns the value itself; None if Steam's interface is not reachable."""
+    try:
+        page = pick(targets(port))
+        if not page:
+            return None
+        return evaluate(page["webSocketDebuggerUrl"], expression, timeout=10.0)
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
+# Every game in the Steam account, installed or not (the library on disk only has installed
+# ones). Fields: appid, name, installed, minutes played, last played (unix), size on disk.
+OWNED_EXPRESSION = (
+    "(async()=>{const cs=window.collectionStore;if(!cs||!cs.allGamesCollection)return null;const o=[];"
+    "for(const a of cs.allGamesCollection.allApps){if(!a||(a.BIsModOrShortcut&&a.BIsModOrShortcut()))continue;"
+    "const lp=a.local_per_client_data||{};"
+    "o.push([a.appid,String(a.display_name||''),!!(a.installed!==undefined?a.installed:lp.installed),"
+    "a.minutes_playtime_forever||0,a.rt_last_time_played||0,Number(a.size_on_disk||lp.bytes_downloaded||0)]);}"
+    "return JSON.stringify(o);})()")
+
+
+def owned_games(port=PORT):
+    """[(appid, name, installed, minutes, last_played, size)] or None if Steam does not answer."""
+    raw = ui_value(OWNED_EXPRESSION, port)
+    if not isinstance(raw, str):
+        return None
+    try:
+        rows = json.loads(raw)
+    except ValueError:
+        return None
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        if (isinstance(r, list) and len(r) == 6 and isinstance(r[0], int) and 0 < r[0] < 0x80000000
+                and isinstance(r[1], str)):
+            out.append((r[0], r[1][:200], bool(r[2]), int(r[3] or 0), int(r[4] or 0), int(r[5] or 0)))
+    return out
+
+
+def install_expression(appid):
+    a = int(appid)
+    if not 0 < a < 0x80000000:
+        raise ValueError("not a Steam app id")
+    # The game's page in Steam comes over STONE and Steam's own install dialog opens on it
+    # (choice of drive, size, download): STONE does not pick for the person.
+    return ("(async()=>{" + _NAV + f"if(n.App)n.App({a});"
+            "await new Promise(r=>setTimeout(r,300));try{m&&m.CloseSideMenus&&m.CloseSideMenus();}catch(e){}"
+            f"if(window.SteamClient&&SteamClient.Installs&&SteamClient.Installs.OpenInstallWizard)"
+            f"SteamClient.Installs.OpenInstallWizard([{a}]);return 'ok';}})()")
+
+
+def install(appid, port=PORT):
+    return ui_eval(install_expression(appid), port)
+
+
+def add_shortcut_expression(name, exe, start_dir, launch_options):
+    for v in (name, exe, start_dir, launch_options):
+        if not isinstance(v, str) or any(c in v for c in "'\\\n\r\"`$"):
+            raise ValueError("unsafe shortcut field")
+    return ("(async()=>{if(!window.SteamClient||!SteamClient.Apps||!SteamClient.Apps.AddShortcut)return 'no SteamClient';"
+            f"const id=await SteamClient.Apps.AddShortcut('{name}','{exe}','{start_dir}','{launch_options}');"
+            f"try{{SteamClient.Apps.SetShortcutName(id,'{name}');}}catch(e){{}}"
+            "return 'ok '+id;})()")
+
+
+def add_shortcut(name, exe, start_dir, launch_options, port=PORT):
+    """Adds a non-Steam shortcut while Steam runs. Returns its app id, or None."""
+    v = ui_value(add_shortcut_expression(name, exe, start_dir, launch_options), port)
+    if isinstance(v, str) and v.startswith("ok ") and v[3:].isdigit():
+        return int(v[3:])
+    return None

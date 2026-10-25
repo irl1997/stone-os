@@ -163,7 +163,8 @@ body{font-family:var(--f-text);overflow:hidden}
 #settings .vr{position:absolute;left:640px;top:236px;width:1px;height:700px;background:var(--shale)}
 #settings .pane{position:absolute;left:704px;top:236px;width:1120px;display:flex;flex-direction:column;gap:28px}
 #settings .desc{font-size:24px;line-height:34px;color:var(--text-2)}
-#settings .rows{display:flex;flex-direction:column}
+/* Long lists (Emuladores) scroll inside the pane, above the button hints. */
+#settings .rows{display:flex;flex-direction:column;position:relative;max-height:600px;overflow:hidden}
 .srow{display:flex;justify-content:space-between;align-items:center;gap:32px;padding:22px 0;border-bottom:1px solid var(--shale)}
 .srow:last-child{border-bottom:none}
 .srow .l{display:flex;flex-direction:column;gap:6px}
@@ -1504,6 +1505,11 @@ function enterSettings(opts = {}) {
   const left = [...s.querySelectorAll('.cats [data-f]')], right = [...s.querySelectorAll('.srow')];
   /* two columns: the nav grid is column-major (rows = list items, col 0 = categories, col 1 = options) */
   NAV = mkNav([left], { r: 0, c: cat, place: (el, b) => el.classList.contains('srow') ? { x: b.x, y: b.y + b.h - 1, w: b.w } : { x: b.x, y: b.y + b.h + 6, w: b.w } });
+  NAV.scroll = el => {
+    if (!el.classList.contains('srow')) return;
+    const box = el.parentNode, top = el.offsetTop, bot = top + el.offsetHeight;
+    if (top < box.scrollTop) box.scrollTop = top; else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
+  };
   NAV.id = 'settings'; NAV.pane = opts.pane ? 1 : 0; NAV.right = right; NAV.ri = opts.ri || 0;
   if (NAV.pane && right.length) NAV.rows = [right], NAV.c = Math.min(NAV.ri, right.length - 1);
   requestAnimationFrame(() => applyFocus());
