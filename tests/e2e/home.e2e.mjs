@@ -39,7 +39,7 @@ try {
   await page.waitForSelector('#home.on .card.hero', { timeout: 20000 });
   await waitText('#ht', /^Marea Lenta$/);
   const heroBg = await page.$eval('#home .card.hero', e => e.style.backgroundImage);
-  if (!heroBg.includes('/art/1001/hero')) fail(`hero art not from the library: ${heroBg}`);
+  if (!heroBg.includes('art/1001/hero')) fail(`hero art not from the library: ${heroBg}`);
   await page.waitForTimeout(1200); await shot('home');
   log('PASS  boot -> Home, library from Steam files, artwork');
 
@@ -76,6 +76,17 @@ try {
   await waitText('#game .tag', /Marea Lenta · en curso/);
   log('PASS  JUGAR asks Steam to start the game; the game screen follows');
 
+  // 4b. The game takes focus (Gamescope): STONE sleeps, no frames, no controller loop; focus back wakes it
+  await page.evaluate(() => { window.__focus = false; document.hasFocus = () => window.__focus; window.dispatchEvent(new Event('blur')); });
+  await page.waitForFunction(() => document.body.classList.contains('dormant'));
+  const frames = await page.evaluate(() => new Promise(r => { let n = 0; const f = () => { n++; }; const t0 = performance.now();
+    const obs = new MutationObserver(f); obs.observe(document.getElementById('stage'), { attributes: true, childList: true, subtree: true });
+    setTimeout(() => { obs.disconnect(); r({ n, ms: performance.now() - t0 }); }, 1500); }));
+  if (frames.n > 2) fail(`STONE changed the page ${frames.n} times while asleep`);
+  await page.evaluate(() => { window.__focus = true; window.dispatchEvent(new Event('focus')); });
+  await page.waitForFunction(() => !document.body.classList.contains('dormant'));
+  log('PASS  asleep while the game has focus (no page changes), awake when focus returns');
+
   // 5. stoned saw the game (fake Steam announced it): quick menu shows the per-game profile
   await page.waitForTimeout(800);
   await key('Tab');
@@ -101,7 +112,7 @@ try {
   await key('ArrowLeft');
   await key('ArrowUp', 6);
   await waitText('#settings .cats .cur', /^Pantalla$/);
-  await waitText('#settings .rows', /Modo de imagen[\s\S]*Estable[\s\S]*Medir fluidez/);
+  await waitText('#settings .rows', /Modo de imagen[\s\S]*GPU[\s\S]*Resolución de STONE[\s\S]*Medir fluidez/);
   await shot('settings-emulators');
   await key('h');
   await page.waitForSelector('#home.on');

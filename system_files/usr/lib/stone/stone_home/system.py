@@ -59,11 +59,10 @@ PREFS = {
     "sound": (_bool, True), "vol": (_vol, 0.7), "hc": (_bool, False), "rm": (_bool, False),
     "ts": (_intr(0, 2), 0), "safe": (_intr(0, 8), 5), "idle": (_intr(0, 3), 2), "tech": (_bool, False),
     "adv_ack": (_bool, False), "favorites": (_favs, []),
-    # Drawing inside Game Mode (read by /usr/libexec/stone-home before GTK starts):
-    # 0 stable (software), 1 GPU GL full redraw, 2 GPU GL + WebKit DMA-BUF, 3 GPU Vulkan
-    # without Gamescope's Vulkan layer. Software is the default: the GPU paths flickered on
-    # the board (RC2); 1-3 are measured there (Ajustes -> Pantalla -> Medir fluidez).
-    "render": (_intr(0, 3), 0),
+    # How STONE Home draws inside Game Mode (read by /usr/libexec/stone-home at start):
+    # 0 GPU (Chromium, at the screen's resolution), 1 no GPU (WebKit shell in software, the
+    # fallback). Replaces RC7's "render" (WebKit GPU experiments), which is dropped.
+    "engine": (_intr(0, 1), 0),
 }
 
 

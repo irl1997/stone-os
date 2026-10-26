@@ -1,8 +1,22 @@
-# STONE OS 0.1.0-rc8
+# STONE OS 0.1.0-rc9
 
-Octava Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Novena Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
 **El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+
+## Cambios desde 0.1.0-rc8
+
+- **STONE Home se dibuja con la GPU, a 4K.** La interfaz pasa a Chromium, el mismo motor con el que Steam dibuja su propio modo juego dentro del mismo Gamescope. Con GTK 4 + WebKitGTK, los caminos por GPU parpadeaban y se veían transparentes en la placa (RC2), así que hasta RC8 la interfaz se dibujaba sin GPU, en la CPU, y a 4K eso no puede ser fluido.
+- **Resolución:** la página sigue diseñada a 1920 × 1080 y Chromium la dibuja a la resolución real de la ventana (factor 2 en un televisor 4K). Es nítida a 3840 × 2160 y no se escala como imagen. **Ajustes → Pantalla → Resolución de STONE** muestra la resolución real; si Steam le da a STONE menos que la del televisor, ahí se explica cómo poner «Resolución del juego: Nativa».
+- **No resta rendimiento a los juegos:** mientras un juego tiene el foco, STONE se duerme: animaciones y transiciones en pausa, no lee el mando, sonido suspendido, sin lecturas en vivo. Chromium no dibuja ningún cuadro hasta que STONE vuelve al frente. Sigue con prioridad de CPU baja (`nice 5`).
+- **Seguridad del transporte:** la página habla con su proceso por HTTP sólo en 127.0.0.1, bajo una ruta secreta nueva en cada arranque, comprobando `Host` y `Origin` (`stone_home/server.py`, el mismo del servidor de desarrollo). Chromium arranca con perfil propio, sin extensiones, sin sincronización y con un proxy inexistente para todo lo que no sea 127.0.0.1.
+- **Respaldo:** si Chromium falta o se cae tres veces al arrancar, STONE abre la interfaz WebKit sin GPU. También se puede elegir en **Modo de imagen: Sin GPU**. Los modos experimentales de RC7 (WebKit con GL, DMA-BUF y Vulkan) se retiran.
+- `home.log` anota al arrancar el motor, la resolución, el factor de escala y la GPU que dibuja (`[stone] draw: 3840x2160 dpr=2 gpu=…`). Si dice SwiftShader o llvmpipe, no está usando la GPU. También anota cuándo STONE se duerme y despierta.
+- Pruebas nuevas:
+  - la interfaz real en Chromium a 3840 × 2160 contra `stoned`;
+  - el transporte (ruta secreta, otro sitio, DNS rebinding, tamaño);
+  - el sueño durante el juego (ningún cambio en la página mientras duerme).
+- Incluye todo lo de RC8 (40 CU opcional) por si RC8 no se publicó.
 
 ## Cambios desde 0.1.0-rc7
 

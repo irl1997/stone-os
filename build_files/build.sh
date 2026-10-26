@@ -74,6 +74,14 @@ test -x /usr/bin/steam || { echo "ERROR: /usr/bin/steam missing; STONE Home laun
 ## The Game Mode session STONE Home rides along with (gamescope-session-plus, user unit).
 test -e /usr/lib/systemd/user/gamescope-session-plus@.service \
     || { echo "ERROR: gamescope-session-plus@.service not found; STONE Home would never start"; exit 1; }
+## Chromium draws STONE Home on the GPU at the screen's resolution (stone_home/chromium.py), the
+## engine Steam's own Game Mode interface uses inside the same Gamescope. Fedora's package.
+## Without it STONE Home would fall back to the WebKit shell in software (slow at 4K): the build fails.
+dnf5 -y install chromium
+CHROMIUM_BIN=""
+for c in /usr/bin/chromium-browser /usr/bin/chromium; do [ -x "$c" ] && CHROMIUM_BIN="$c" && break; done
+test -n "${CHROMIUM_BIN}" || { echo "ERROR: chromium not installed; STONE Home would have no GPU drawing"; exit 1; }
+"${CHROMIUM_BIN}" --version || echo "WARNING: ${CHROMIUM_BIN} --version failed in the build container (root, no display)"
 for f in index.html icon.png fonts/jost-latin-300-normal.woff2 grid/capsule.png boot/stone-startup.webm; do
     test -s "/usr/share/stone-home/${f}" || { echo "ERROR: STONE Home file missing: ${f}"; exit 1; }
 done
@@ -149,6 +157,7 @@ rpmfile() { local v; v="$(rpm -qf --qf '%{NAME} %{VERSION}-%{RELEASE}\n' "$1" 2>
     echo "STONE_MESA=\"$(rpmver mesa-vulkan-drivers)\""
     echo "STONE_GAMESCOPE=\"$(rpmfile /usr/bin/gamescope)\""
     echo "STONE_WEBKITGTK=\"$(rpmver webkitgtk6.0)\""
+    echo "STONE_CHROMIUM=\"$(rpmver chromium)\""
     echo "STONE_CU40=\"${CU40_STATUS}\""
     echo "STONE_CU40_SOURCE=\"${CU40_SOURCE}\""
     echo "STONE_GOVERNOR_VERSION=\"$(rpmver cyan-skillfish-governor-smu)\""

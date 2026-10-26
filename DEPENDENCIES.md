@@ -1,4 +1,4 @@
-# Dependencias de STONE OS 0.1.0-rc8
+# Dependencias de STONE OS 0.1.0-rc9
 
 Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/stone-release` y en `build-metadata.json` (artefacto del build y archivo de cada release). Esta tabla dice de dónde sale cada pieza y cómo se actualiza.
 
@@ -13,7 +13,8 @@ Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/sto
 | `cyan-skillfish-governor-smu` | Última del COPR (`STONE_GOVERNOR_VERSION`); fijable con `GOVERNOR_VERSION` | COPR `filippor/bazzite` (indicado por la guía de Bazzite para la BC-250) | Regulador de frecuencia de la GPU; su D-Bus es la única vía de `stoned` al hardware | Se reinstala en cada build. **Cuando una versión pase HARDWARE_VALIDATION, fijarla** (`GOVERNOR_VERSION`). `governor-config.py` hace fallar el build si la nueva versión no trae D-Bus o sus valores salen del rango estable |
 | `vkmark` | La de Fedora 44 | Repositorios de Fedora | Carga de la prueba de estabilidad | Con cada build. Si falta, el build avisa y STONE TUNING no ofrece pruebas |
 | `python3-gobject` | La de Fedora 44 | Repositorios de Fedora | `stoned` y STONE Home (GLib, Gio, GTK, WebKit) | Con cada build; el build falla si no se puede importar |
-| `webkitgtk6.0`, `gtk4` | Las de Fedora 44 (`STONE_WEBKITGTK`) | Repositorios de Fedora | Ventana y motor de STONE Home | Con cada build; el build falla si no se pueden importar |
+| `chromium` | La de Fedora 44 (`STONE_CHROMIUM`) | Repositorios de Fedora | Motor de STONE Home con GPU (el mismo que usa la interfaz de Steam) | Con cada build; el build falla si falta |
+| `webkitgtk6.0`, `gtk4` | Las de Fedora 44 (`STONE_WEBKITGTK`) | Repositorios de Fedora | Respaldo sin GPU de STONE Home; GTK también da el tamaño de pantalla al arrancar | Con cada build; el build falla si no se pueden importar |
 | `amdgpu` con opción 40 CU | Kernel de la base, tag `v<versión>-ogc<n>` (`STONE_CU40_SOURCE`) | Fuente: `github.com/OpenGamingCollective/linux` (kernel de Bazzite); cambio: duggasco/bc250-40cu-unlock (GPL-2.0), aplicado por `build_files/cu40/patch-gfx10.py` | Desbloqueo opcional de 40 CU (`stone-cu40`) | En cada build, para el kernel de la base. Si el tag no existe, el cambio no encaja o el módulo no coincide con el kernel, la imagen sale con el `amdgpu` de Bazzite (`STONE_CU40` dice por qué) |
 | Imagen `fedora:44` (etapa `cu40`) | `registry.fedoraproject.org/fedora:44` | Fedora | Compilar `amdgpu.ko` y `stone-cu-verify` (gcc, glslang, Vulkan) | Con cada build; no queda en la imagen |
 | Plymouth | El de la base | Bazzite | Arranque con el tema `stone` | Con la base |

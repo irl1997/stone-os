@@ -334,6 +334,14 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 7. `sudo stone-cu40 disable`, reiniciar → 24 CU.
 8. Recuperación: con 40 CU activado, en el menú de arranque pulsar `e`, añadir `amdgpu.bc250_cc_write_mode=0` al final de la línea `linux`, Ctrl+X → arranca con 24 CU.
 
+## 26. STONE HOME CON GPU A 4K (Chromium)
+
+1. Ajustes → Pantalla → Resolución de STONE: `3840 × 2160` con un televisor 4K (si no, seguir «Cómo» y reiniciar STONE).
+2. `grep '\[stone\] draw' ~/.local/state/stone/home.log` → `3840x2160 dpr=2 gpu=` con la GPU AMD (no SwiftShader ni llvmpipe).
+3. Medir fluidez → ≥ 55 FPS de media y cuadro más lento ≤ 33 ms; recorrer la Biblioteca sin saltos visibles; sin parpadeo ni transparencia.
+4. Con un juego abierto: `grep 'asleep\|awake' ~/.local/state/stone/home.log` muestra «asleep» al entrar al juego. `top`: los procesos de Chromium cerca de 0 % de CPU durante el juego.
+5. FPS del mismo juego con STONE abierto detrás y cerrado (Alt+F4 en STONE): diferencia dentro del ruido (±2 %).
+
 
 ## Matriz de resultados
 
@@ -364,4 +372,5 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 | 22 ROLLBACK | Arranca la versión anterior | | NOT TESTED |
 | 23 AUTOARRANQUE QUE FALLA | Game Mode normal, STONE a mano | | NOT TESTED |
 | 24 SIN BC-250 | Todo «no disponible», nada se aplica | | NOT TESTED |
+| 26 STONE HOME GPU 4K | 3840 × 2160 con GPU AMD, ≥ 55 FPS, dormido en juego, sin coste en FPS | | NOT TESTED |
 | 25 40 CU (opcional) | 40 CU contados, prueba aprobada, ≤ 1500 MHz, sin errores; vuelta a 24 CU | | NOT TESTED |

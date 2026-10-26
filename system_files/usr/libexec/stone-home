@@ -1,43 +1,47 @@
 #!/usr/bin/python3 -I
 # STONE Home process (see /usr/bin/stone-home, which starts it with a clean environment).
+#
+# Two ways to draw, chosen in Ajustes -> Pantalla -> Modo de imagen (prefs "engine"):
+#   0 GPU      Chromium on the GPU at the screen's resolution (stone_home/chromium.py). Default.
+#   1 Sin GPU  the WebKit shell drawing in software (stone_home/app.py): the fallback, slow at 4K.
+# If Chromium cannot run (not installed, or it crashes at start three times) the WebKit shell
+# starts instead, so the console always has its interface. STONE_HOME_ENGINE=webkit|chromium
+# (~/.config/stone/home.env) overrides the choice.
 import json
 import os
 import sys
 
 # STONE Home is the console's menu: games come first. A lower CPU priority, inherited by
-# WebKit's processes, keeps it from taking time from a running game.
+# Chromium's and WebKit's processes, keeps it from taking time from a running game.
 try:
     os.nice(5)
 except OSError:
     pass
 
-# Drawing mode inside Game Mode, chosen in Ajustes -> Pantalla (prefs "render"), applied here
-# because GTK and WebKit read it only at start. ~/.config/stone/home.env, when present, wins.
-if (os.environ.get("XDG_CURRENT_DESKTOP") == "gamescope" or os.environ.get("GAMESCOPE_WAYLAND_DISPLAY")) \
-        and os.environ.get("STONE_HOME_ENV_FILE") != "1":
+sys.path.insert(0, "/usr/lib/stone")
+
+
+def chosen_engine():
+    forced = os.environ.get("STONE_HOME_ENGINE")
+    if forced in ("chromium", "webkit"):
+        return forced
     try:
         cfg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
         with open(os.path.join(cfg, "stone", "home.json")) as f:
-            render = json.load(f).get("render", 0)
+            return "webkit" if json.load(f).get("engine") == 1 else "chromium"
     except (OSError, ValueError, AttributeError):
-        render = 0
-    render = render if render in (0, 1, 2, 3) else 0
-    # Full resolution in every mode. The GPU modes differ in how GTK and WebKit hand frames
-    # to Gamescope, to find on the board the smooth one that does not flicker (RC2 flickered
-    # with GTK's default Vulkan renderer through Gamescope's Vulkan layer).
-    if render in (1, 2, 3):
-        os.environ.pop("WEBKIT_DISABLE_COMPOSITING_MODE", None)      # WebKit composites on the GPU
-    if render in (1, 2):                  # GTK on OpenGL, every frame redrawn whole
-        os.environ["GSK_RENDERER"] = "gl"
-        os.environ["GSK_DEBUG"] = "full-redraw"
-    if render == 2:                       # + WebKit hands its frames over as DMA-BUF
-        os.environ.pop("WEBKIT_DISABLE_DMABUF_RENDERER", None)
-    if render == 3:                       # GTK on Vulkan without Gamescope's Vulkan layer
-        os.environ["GSK_RENDERER"] = "vulkan"
-        os.environ["ENABLE_GAMESCOPE_WSI"] = "0"
-        os.environ["vk_xwayland_wait_ready"] = "true"
-    os.environ["STONE_HOME_RENDER"] = str(render)
+        return "chromium"
 
-sys.path.insert(0, "/usr/lib/stone")
+
+engine = chosen_engine()
+if engine == "chromium" and "--selftest" not in sys.argv:
+    from stone_home import chromium
+    code = chromium.main(sys.argv)
+    if code != chromium.UNUSABLE:
+        sys.exit(code)
+    print("[stone] chromium could not run; starting the WebKit shell without GPU", file=sys.stderr, flush=True)
+    engine = "webkit-fallback"
+
+os.environ["STONE_HOME_RENDER"] = engine
 from stone_home.app import main  # noqa: E402
 sys.exit(main(sys.argv))

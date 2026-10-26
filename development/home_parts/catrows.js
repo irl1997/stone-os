@@ -1,14 +1,14 @@
 /* Steam's own settings section for each STONE category (opened in Steam's interface). */
 const STEAM_SEC = { 'Sistema': 'System', 'Pantalla': 'Display', 'Audio': 'Audio', 'Mandos': 'Controller', 'Red': 'Internet',
   'Bluetooth': 'Bluetooth', 'Almacenamiento': 'Storage', 'Energía': 'Power', 'Actualizaciones': 'System', 'Accesibilidad': 'Accessibility' };
-/* Drawing inside Game Mode (read at start by /usr/libexec/stone-home). Always full resolution:
-   the GPU modes are different ways GTK and WebKit hand frames to Gamescope, to find on the board
-   the one that is smooth and does not flicker; "Medir fluidez" gives the numbers. */
-const RENDER = ['Estable', 'GPU · GL', 'GPU · GL + DMA-BUF', 'GPU · Vulkan'];
-const RENDER_TXT = ['Sin GPU: sin parpadeo, animaciones más lentas',
-  'GPU con OpenGL, redibujando cada cuadro completo',
-  'GPU con OpenGL y entrega directa de cuadros de WebKit (DMA-BUF)',
-  'GPU con Vulkan, sin la capa de Gamescope para Vulkan'];
+/* How STONE draws inside Game Mode (read at start by /usr/libexec/stone-home). GPU: Chromium,
+   at the screen's own resolution (4K on a 4K TV), the same engine as Steam's interface. Sin GPU:
+   the WebKit shell drawing in software, the fallback (smooth only at low resolutions). */
+const RENDER = ['GPU', 'Sin GPU'];
+const RENDER_TXT = ['Chromium con la GPU, a la resolución del televisor. Recomendado',
+  'Respaldo sin GPU (WebKit). Úsalo sólo si GPU falla: a 4K va lento'];
+/* The resolution STONE is drawn at, in real pixels. */
+const drawRes = () => `${Math.round(innerWidth * devicePixelRatio)} × ${Math.round(innerHeight * devicePixelRatio)}`;
 /* Emulators: fixed catalog in the host (stone_home/emulators.py), installed from Flathub. */
 const EMU_STATE = {};
 function loadEmulators() {
@@ -50,8 +50,8 @@ function measureSmoothness() {
     if (k < steps.length) { act(steps[k++]); return; }
     clearInterval(iv); run = false; S.measuring = false;
     const s = [...d].sort((a, b) => a - b), avg = d.reduce((a, b) => a + b, 0) / Math.max(1, d.length);
-    S.smooth = { fps: Math.round(1000 / avg), p99: Math.round(s[Math.floor(s.length * .99)] || 0), slow: d.filter(x => x > 25).length, n: d.length, mode: S.render };
-    console.info(`[stone] smoothness mode=${RENDER[S.render]} fps=${S.smooth.fps} p99=${S.smooth.p99}ms slow=${S.smooth.slow}/${S.smooth.n}`);
+    S.smooth = { fps: Math.round(1000 / avg), p99: Math.round(s[Math.floor(s.length * .99)] || 0), slow: d.filter(x => x > 25).length, n: d.length, mode: S.render, res: drawRes() };
+    console.info(`[stone] smoothness mode=${RENDER[S.render]} res=${S.smooth.res} fps=${S.smooth.fps} p99=${S.smooth.p99}ms slow=${S.smooth.slow}/${S.smooth.n}`);
     cat = CATS.indexOf('Pantalla'); enterSettings({ pane: true, ri });
     toast(`${RENDER[S.render]}: ${S.smooth.fps} cuadros por segundo de media; el más lento, ${S.smooth.p99} ms`, false);
   }, 450);
@@ -66,7 +66,7 @@ function applyRender() {
   clearTimeout(saveT);
   toast(`Modo de imagen: ${RENDER[S.render]}. STONE se reinicia…`, false);
   Sys.prefsSet({ sound: S.sound, vol: S.vol, hc: S.hc, rm: S.rm, ts: S.ts, safe: S.safe, idle: S.idle, tech: S.tech,
-    adv_ack: S.advAck, render: S.render, favorites: [...favs] })
+    adv_ack: S.advAck, engine: S.render, favorites: [...favs] })
     .then(() => setTimeout(() => Sys.restart().catch(() => toast('Se aplica la próxima vez que abras STONE', false)), 900))
     .catch(() => toast('No se pudo guardar el modo de imagen', false));
   enterSettings({ pane: true, ri: NAV.c });
@@ -82,7 +82,10 @@ function catRows() {
       steam('HDR', 'Según el televisor y el juego', 'Botón STEAM → Ajustes → Pantalla'),
       { l: 'Tamaño del texto', s: 'Se aplica a STONE Home', v: SIZES[S.ts], key: 'ts' },
       { l: 'Modo de imagen', s: RENDER_TXT[S.render], v: RENDER[S.render], key: 'render' },
-      { l: 'Medir fluidez', s: S.smooth ? `Última medida, ${RENDER[S.smooth.mode]}: ${S.smooth.fps} FPS · cuadro más lento ${S.smooth.p99} ms · ${S.smooth.slow} de ${S.smooth.n} cuadros lentos`
+      { l: 'Resolución de STONE', s: devicePixelRatio > 1.5 || innerWidth * devicePixelRatio >= 3800 ? 'Dibujada a la resolución del televisor'
+        : 'Si tu televisor es 4K y aquí no dice 3840 × 2160, mira «Cómo»', v: drawRes(), act: 'info',
+        where: 'Steam decide el tamaño de cada app. Botón STEAM → Biblioteca → STONE → ⚙ → Propiedades → General → Resolución del juego: Nativa. Luego reinicia STONE' },
+      { l: 'Medir fluidez', s: S.smooth ? `Última medida, ${RENDER[S.smooth.mode]} a ${S.smooth.res}: ${S.smooth.fps} FPS · cuadro más lento ${S.smooth.p99} ms · ${S.smooth.slow} de ${S.smooth.n} cuadros lentos`
         : 'STONE recorre el inicio unos segundos y mide los cuadros por segundo del modo actual', v: 'Medir', act: 'measure' }] };
     case 'Audio': return { d: 'Sonidos del sistema y volumen de la interfaz.', rows: [
       { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },

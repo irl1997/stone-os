@@ -119,6 +119,10 @@ def build(src):
     t = replace_once(t, "    if (a === 'b') { play('back'); clearInterval(installT); installT = 0; line.classList.remove('load'); return S.from === 'library'",
                      "    if (a === 'b') { play('back'); return S.from === 'library'", "detail back")
     t = replace_once(t, "function touched() {\n  if (S.deep)", "function touched() {\n  armIdleOff();\n  if (S.deep)", "touched idle")
+    # Asleep while a game is in front: no frames, no controller loop (home_parts/dormant.js).
+    t = replace_once(t, "/* Gamepad (standard mapping) */\n", part("dormant.js") + "\n/* Gamepad (standard mapping) */\n", "dormant")
+    t = replace_once(t, "function ensureLoop() {\n  if (loopH) return;", "function ensureLoop() {\n  if (loopH || S.dormant) return;", "loop asleep")
+    t = replace_once(t, "#game .tag.gone{opacity:0}\n", "#game .tag.gone{opacity:0}\nbody.dormant *,body.dormant *::before,body.dormant *::after{animation-play-state:paused!important;transition:none!important}\n", "dormant css")
     t = replace_once(t, "  if (S.screen === 'off' || S.screen === 'asleep') return act('a');\n", "", "click off")
     t = replace_span(t, "/* Bar buttons */", "})();\n</script>", part("start.js") + "\n})();\n</script>", "start", inclusive_end=True)
     for bad in ("SimStoned", "PerfAPI.sim", "Math.random() * 8", "simulad", "prototipo", "fonts.googleapis", "bCrash", "bFault"):

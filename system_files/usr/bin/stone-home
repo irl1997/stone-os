@@ -6,11 +6,12 @@
 # Gamescope finds the window's app id through the Steam reaper above this process.
 unset LD_LIBRARY_PATH LD_PRELOAD
 
-# Inside Steam Game Mode (Gamescope) the GPU drawing paths of GTK 4 and WebKitGTK flickered
-# and came out see-through on the BC-250 (RC2, 24-10-2026), also with GSK_RENDERER=gl and
-# WEBKIT_DISABLE_DMABUF_RENDERER=1. There STONE Home draws in software, which Gamescope shows
-# as a plain opaque X11 window. Set here, not taken from Steam's launch options, so a leftover
-# option cannot undo it; ~/.config/stone/home.env (below) can.
+# STONE Home draws with Chromium on the GPU (stone_home/chromium.py). The WebKit shell is the
+# fallback: inside Steam Game Mode (Gamescope) the GPU paths of GTK 4 and WebKitGTK flickered
+# and came out see-through on the BC-250 (RC2, 24-10-2026), so when it runs it draws in
+# software, which Gamescope shows as a plain opaque X11 window. Chromium ignores these. Set
+# here, not taken from Steam's launch options, so a leftover option cannot undo it;
+# ~/.config/stone/home.env (below) can.
 if [ "${XDG_CURRENT_DESKTOP:-}" = gamescope ] || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
     GDK_BACKEND=x11
     GSK_RENDERER=cairo
@@ -26,7 +27,7 @@ if [ -f "$conf" ]; then
     while IFS='=' read -r key value; do
         case "$key" in
             GDK_BACKEND|GSK_RENDERER|GSK_DEBUG|WEBKIT_DISABLE_COMPOSITING_MODE|WEBKIT_DISABLE_DMABUF_RENDERER|STONE_HOME_SIZE|\
-            ENABLE_GAMESCOPE_WSI|STONE_HOME_DEVTOOLS) ;;
+            ENABLE_GAMESCOPE_WSI|STONE_HOME_DEVTOOLS|STONE_HOME_ENGINE) ;;
             *) continue ;;
         esac
         case "$value" in

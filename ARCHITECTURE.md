@@ -1,8 +1,8 @@
-# Arquitectura de STONE OS 0.1.0-rc8
+# Arquitectura de STONE OS 0.1.0-rc9
 
 ```
-STONE OS UI (STONE Home)          GTK 4 + WebKitGTK 6, usuario de la consola, dentro de Steam Game Mode
-        ↓  mensajes WebKit (tabla fija de métodos)
+STONE OS UI (STONE Home)          Chromium con GPU (respaldo: GTK 4 + WebKitGTK 6 sin GPU), usuario de la consola, en Steam Game Mode
+        ↓  HTTP local con ruta secreta (o mensajes WebKit en el respaldo), tabla fija de métodos
 STONE Home host                    stone_home/host.py · bridge.py · library.py · system.py
         ↓  D-Bus de sistema (org.stonemachine.Performance1, polkit)
 STONE System Service (stoned)      usuario `stoned`, sin privilegios, systemd con aislamiento
@@ -44,7 +44,7 @@ No queda ninguna capa crítica sólo conceptual. Lo que depende del comportamien
 
 **3. STONE Home dentro de Steam Game Mode, como acceso directo de Steam.** Decisión 2 del documento de arquitectura (fase 1): Steam sigue siendo el motor de la sesión y la red de seguridad (entrada, overlay, actualizaciones del sistema); STONE Home se lanza como una aplicación más. Es el mismo modelo que usan los frontends de emulación en Game Mode. Si STONE Home falla, Steam sigue funcionando.
 
-**4. STONE Home = GTK 4 + WebKitGTK 6 (Python), no Electron ni Tauri.** WebKitGTK 6 y GTK 4 están en los repositorios de Fedora (sin runtime propio que mantener), PyGObject ya lo usa `stoned`, y la interfaz es la misma página del prototipo (HTML/CSS/JS). La página no tiene acceso a red, archivos ni procesos: sólo a un esquema propio `stone://` y a una tabla fija de métodos.
+**4. STONE Home = Chromium del sistema + proceso Python (desde RC9; antes GTK 4 + WebKitGTK 6, que queda como respaldo sin GPU).** Dentro de Gamescope, WebKitGTK por GPU parpadeaba y se veía transparente; Chromium es el motor con el que Steam dibuja su modo juego en el mismo Gamescope. Texto anterior: WebKitGTK 6 y GTK 4 están en los repositorios de Fedora (sin runtime propio que mantener), PyGObject ya lo usa `stoned`, y la interfaz es la misma página del prototipo (HTML/CSS/JS). La página no tiene acceso a red, archivos ni procesos: sólo a un esquema propio `stone://` y a una tabla fija de métodos.
 
 **5. IPC: D-Bus de sistema entre STONE Home y `stoned`.** Es el mecanismo estándar de Fedora para servicios de sistema (polkit decide por llamada, systemd activa y supervisa), y el regulador ya expone D-Bus. Dentro de STONE Home, la página habla con su proceso por el manejador de mensajes de WebKit (sin sockets ni puertos).
 

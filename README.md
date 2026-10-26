@@ -11,7 +11,7 @@ Bazzite (Fedora Atomic, kernel, Mesa, Steam, Gamescope)
           = STONE OS
 ```
 
-**Versión:** `0.1.0-rc8` (Release Candidate 8) · **Hardware:** AMD BC-250 (BIOS P3.00) · **Base:** `ghcr.io/ublue-os/bazzite-deck:stable-44`, fijada por digest en cada build.
+**Versión:** `0.1.0-rc9` (Release Candidate 9) · **Hardware:** AMD BC-250 (BIOS P3.00) · **Base:** `ghcr.io/ublue-os/bazzite-deck:stable-44`, fijada por digest en cada build.
 
 ## Estado
 

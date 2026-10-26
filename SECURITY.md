@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc8
+# Seguridad de STONE OS 0.1.0-rc9
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -79,3 +79,13 @@ STONE Home sólo instala los identificadores de Flathub de su catálogo fijo (`s
 - El `amdgpu` de la imagen trae el desbloqueo de 40 CU, inactivo salvo que el kernel arranque con `amdgpu.bc250_cc_write_mode=3`, y sólo en la GPU 0x13FE. Se compila en el build desde la fuente del kernel de Bazzite (tag exacto de OpenGamingCollective/linux) y se comprueba que su `vermagic` sea el del kernel de la imagen. El módulo no va firmado: igual que con el resto de módulos que STONE no toca, arranque seguro (Secure Boot) con una clave que no lo reconozca impediría cargarlo. Antes de actualizar, `mokutil --sb-state` debe decir «SecureBoot disabled» (es lo habitual en la BC-250); si no, se vuelve con la entrada anterior del menú de arranque.
 - Nada lo activa solo. `stone-cu40 enable` exige root (`sudo`), una persona en la consola que escriba ACTIVAR y una GPU fría. La única acción automática (`stone-cu40-guard` al arrancar y `stone-cu40 test` al fallar) es apagarlo.
 - Con 40 CU en uso, `stoned` no deja que la GPU pase de 1500 MHz por ninguna vía (perfiles, CUSTOM, valores de fábrica del regulador tras un reinicio del regulador).
+
+## Interfaz en Chromium (desde 0.1.0-rc9)
+
+- STONE Home corre como el usuario de la consola, nunca como root. Su proceso escucha sólo en `127.0.0.1`, en un puerto libre, y sirve únicamente bajo `/s/<token>/`. El token es aleatorio (24 bytes) y nuevo en cada arranque, y sólo lo conoce el Chromium que ese proceso lanza.
+- Sin el token no hay página ni API. Una petición con otro `Host` (DNS rebinding) u otro `Origin` (otra web en otro navegador) se rechaza antes de llegar a la tabla de métodos.
+- Sólo se sirven `index.html`, `fonts/` y carátulas validadas, como con `stone://`. La tabla de métodos (`host.py`) es la misma que con WebKit.
+- Chromium:
+  - corre con perfil propio (`~/.local/state/stone/chromium`), sin extensiones, sin sincronización ni componentes descargables, y en modo kiosco (sin barra de direcciones);
+  - todo destino que no sea 127.0.0.1 va a un proxy que no existe, así que la página no puede cargar nada de internet;
+  - en la consola usa su propio sandbox; `--no-sandbox` sólo se usa en las pruebas, como root y sin GPU.

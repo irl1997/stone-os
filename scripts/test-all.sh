@@ -6,6 +6,8 @@
 #   tests/run_tests.py       stoned: recovery, governor, telemetry, thermal, Safe Mode, games, comparison
 #   tests/test_cu40.py       stone-cu40: 40 CU opt-in, test, boot guard (fake rpm-ostree/sysfs)
 #   tests/test_home.py       STONE Home: library, shortcut, host, bridge against a real stoned
+#   tests/test_server.py     the Chromium shell transport: secret path, host and origin checks
+#   tests/chromium_selftest.py the real Chromium shell at 3840x2160 against a real stoned (xvfb-run + Chromium)
 #   tests/webkit_selftest.py the real GTK/WebKit shell against a real stoned (needs xvfb-run + WebKitGTK 6)
 #   tests/e2e_home.py        the production page in Chromium, end to end (needs node + tests/e2e deps)
 #   eslint                   page JavaScript: undefined names, duplicates (needs tests/e2e deps)
@@ -22,6 +24,8 @@ run "stoned suite" "$PY" tests/run_tests.py
 run "stone-cu40 suite" "$PY" tests/test_cu40.py
 run "40 CU kernel change (anchors)" "$PY" tests/test_cu40_patch.py
 run "STONE Home suite" "$PY" tests/test_home.py
+run "STONE Home transport (server)" "$PY" tests/test_server.py
+run "Chromium shell self-test (4K)" "$PY" tests/chromium_selftest.py
 if command -v xvfb-run >/dev/null && "$PY" -c "import gi; gi.require_version('WebKit','6.0'); gi.require_version('Gtk','4.0')" 2>/dev/null; then
     run "WebKit shell self-test" "$PY" tests/webkit_selftest.py
 else skip "WebKit shell self-test" "xvfb-run or WebKitGTK 6 missing"; fi

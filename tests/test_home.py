@@ -541,7 +541,8 @@ def H04_steam_ui_first_for_games_and_steam_settings_only_known_sections():
             raise AssertionError(bad)
         except ValueError:
             pass
-    assert system.clean_prefs({"render": 2})["render"] == 2 and system.clean_prefs({"render": 7})["render"] == 0
+    assert system.clean_prefs({"engine": 1})["engine"] == 1 and system.clean_prefs({"engine": 7})["engine"] == 0
+    assert "render" not in system.clean_prefs({"render": 2})
 
 
 @test
