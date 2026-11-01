@@ -10,6 +10,8 @@ Fault injection through FAKE_GOV_MODE:
   error        every Set* call returns a D-Bus error
 Property name case through FAKE_GOV_CASE: "lower" (min/max) or "title" (Min/Max).
 Every call is appended to FAKE_GOV_LOG as JSON lines, so tests can check what was sent.
+FAKE_GOV_SCLK (a fake pp_dpm_sclk path): the "board" runs at the ceiling under load, up to
+FAKE_GOV_SCLK_LIMIT (what this simulated BC-250 can sustain), like the real governor would.
 """
 
 import json
@@ -62,6 +64,10 @@ def main_call(conn, sender, path, iface, method, params, inv):
             return inv.return_dbus_error("org.freedesktop.DBus.Error.InvalidArgs", "outside safe points")
         if MODE != "ignore":
             state["current"] = [mn, mx]
+            if os.environ.get("FAKE_GOV_SCLK"):
+                reach = min(mx, int(os.environ.get("FAKE_GOV_SCLK_LIMIT", "9999")))
+                with open(os.environ["FAKE_GOV_SCLK"], "w") as f:
+                    f.write(f"0: {mn}Mhz\n1: {reach}Mhz *\n")
     elif method == "SetTemperatureThresholds":
         state["throttling"], state["recovery"] = args     # 0,0 disables throttling in the real one
     elif method == "SetLoadTarget":

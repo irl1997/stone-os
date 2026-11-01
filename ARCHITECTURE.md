@@ -1,4 +1,4 @@
-# Arquitectura de STONE OS 0.1.0-rc9
+# Arquitectura de STONE OS 0.1.0-rc12
 
 ```
 STONE OS UI (STONE Home)          Chromium con GPU (respaldo: GTK 4 + WebKitGTK 6 sin GPU), usuario de la consola, en Steam Game Mode
@@ -112,3 +112,21 @@ stone-os/
 ├── development/                         prototipo, generador de la página, servidor de desarrollo, recursos
 └── docs/                                STONED.md, STONE_HOME.md, AUDIT_STATUS.md, FIRMWARE.md
 ```
+
+## STONE DISPLAY (desde rc10)
+
+Capa de pantalla del sistema STONE (`stone_display/`): detecta la pantalla (kernel + Steam), separa las cinco resoluciones y aplica la política de entorno de juego. STONE Home la consulta por el host (`display.status`), nunca por Linux. Detalle en `STONE_DISPLAY.md`.
+
+## STONE OPTIMIZED (desde rc12)
+
+`stone_games/` es el motor de perfiles de juego y corre dentro del host de STONE Home.
+
+- **Al lanzar,** JUGAR → STONE RECOMMENDED. El motor usa:
+  - STONE DISPLAY: Hz, VRR y salida;
+  - STONE PERFORMANCE: `stoned`, perfil por juego;
+  - Steam: opciones de lanzamiento y `RunGame`;
+  - MangoHud: mediciones.
+- **Al salir el juego,** devuelve todo como estaba.
+- **Base de perfiles:** `/usr/share/stone/game-profiles/` (imagen) + `~/.local/share/stone/game-profiles/{auto,user}/`.
+- **Terminal:** `stone-game`.
+- **Detalle:** `STONE_OPTIMIZED.md`.

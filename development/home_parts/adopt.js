@@ -6,6 +6,9 @@ function adopt(st) {
   S.provisional = st.provisional; S.pending = st.pending_result || null; S.thermal = st.thermal || null;
   S.safeReason = st.safe_reason || null;
   if (st.tests) lastTests = st.tests;
+  /* SILENT / BALANCED / PERFORMANCE for THIS machine (stoned's performance range), not numbers in the page */
+  if (st.profiles) Object.entries(st.profiles).forEach(([id, v]) => { if (FACT[id] && v && v.max) Object.assign(FACT[id], { max: v.max, min: v.min, temp: v.temp, resp: v.resp }); });
+  if (st.range) S.range = st.range;
   const sb = document.getElementById('safeBadge'); if (sb) sb.hidden = !st.safe_mode;
   st.slots.forEach((s, k) => { slots[k] = s.state === 'empty' ? null : { max: s.max, min: s.min, temp: s.temp, resp: s.resp, state: s.state, test_level: s.test_level }; });
   G.forEach(g => { g.perf = st.per_game[g.appid] || null; });

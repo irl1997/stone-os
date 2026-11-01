@@ -36,6 +36,7 @@ def recover(store, cmdline_path=None, now=None):
     st = store.load()
     clean = store.get_flag(S.FLAG_CLEAN) is not None
     trial = store.get_flag(S.FLAG_TRIAL)
+    cal = store.get_flag(S.FLAG_CALIBRATION)
     provisional = store.get_flag(S.FLAG_PROVISIONAL)
     boot_unfinished = store.get_flag(S.FLAG_BOOT) is not None
     first_boot = not store.has_state_file() and not boot_unfinished and trial is None and provisional is None
@@ -45,7 +46,7 @@ def recover(store, cmdline_path=None, now=None):
     if clean or first_boot:
         st["fail_count"] = 0
     else:
-        risky = trial is not None or provisional is not None or boot_unfinished \
+        risky = trial is not None or cal is not None or provisional is not None or boot_unfinished \
             or S.slot_index(st["profile"]) is not None
         if risky:
             st["fail_count"] += 1
@@ -65,7 +66,7 @@ def recover(store, cmdline_path=None, now=None):
                 report["actions"].append("stability test discarded")
             st["last_failure"] = {
                 "time": int(now),
-                "during": "test" if trial is not None else "provisional" if provisional is not None else "boot",
+                "during": "test" if trial is not None else "calibration" if cal is not None else "provisional" if provisional is not None else "boot",
                 "profile": failed,
             }
             if not S.is_safe_to_apply(st["profile"], st["slots"]) or failed == st["profile"]:
@@ -77,6 +78,15 @@ def recover(store, cmdline_path=None, now=None):
             # Unclean, but nothing STONE tuned was in play (factory profile, Home had come
             # up): e.g. a game crash at BALANCED. Not counted against tuning; still recorded.
             st["last_failure"] = {"time": int(now), "during": "session", "profile": st["profile"]}
+
+    # A calibration step was applied when the machine went down: that step failed. The result
+    # keeps only what had passed before it (calibration.py), and the boot uses no higher ceiling.
+    if cal is not None:
+        from . import calibration as C
+        st["calibration"] = C.record(cal.get("machine"), cal.get("config") or {}, cal.get("level", "quick"),
+                                     cal.get("steps") or [], cal.get("step"), "crash" if not clean else "interrupted",
+                                     0, cal.get("workload"))
+        report["actions"].append(f"calibration step {cal.get('step')} MHz failed (machine went down)")
 
     # Requests left by `stonectl` when the service could not be reached.
     if store.get_flag(S.FLAG_SAFE_REQUEST) is not None:
@@ -102,7 +112,7 @@ def recover(store, cmdline_path=None, now=None):
         report["actions"].append("unvalidated profile not kept across boot")
 
     store.save(st)
-    for f in (S.FLAG_TRIAL, S.FLAG_PROVISIONAL, S.FLAG_CLEAN):
+    for f in (S.FLAG_TRIAL, S.FLAG_PROVISIONAL, S.FLAG_CLEAN, S.FLAG_CALIBRATION):
         store.clear_flag(f)
     store.set_flag(S.FLAG_BOOT, {"time": int(now)})
     report["fail_count"] = st["fail_count"]

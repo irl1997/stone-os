@@ -90,6 +90,10 @@ METHODS = {
     "setGameProfile": ("SetGameProfile", [_appid, _profile], "(ss)"),
     "subscribe": ("Subscribe", [_enum(CONTEXTS)], "(s)"),
     "unsubscribe": ("Unsubscribe", [], None),
+    # STONE PERFORMANCE 2.0 (stoned/calibration.py)
+    "getCalibration": ("GetCalibration", [], None),
+    "startCalibration": ("StartCalibration", [_enum(("quick", "standard"))], "(s)"),
+    "cancelCalibration": ("CancelCalibration", [], None),
 }
 
 

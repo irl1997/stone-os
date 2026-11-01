@@ -8,7 +8,8 @@ function enterDetail(i, opts = {}) {
   const sec = [[g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf'], ['Propiedades', 'opt']];
   $('#detail').innerHTML = `
     <div class="col"><div class="origin">${esc(g.o)}</div><h1${g.n.length > 22 ? ' class="long"' : ''}>${esc(g.n.toUpperCase())}</h1>
-      <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div></div>
+      <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div>
+      <div class="stats exp" id="dexp" style="margin-top:.35em;opacity:.85"></div></div>
     <div class="primary txt-f" data-f data-act="primary" id="dprim">${prim}</div>
     <div class="second">${sec.map(([s, a]) => `<span class="txt-f" data-f data-act="${a}">${s}</span>`).join('')}</div>
     <div class="info"><div><span>Tamaño</span><b>${g.sz}</b></div><div><span>Origen</span><b>${esc(g.o)}</b></div><div><span>Estado</span><b>${g.upd ? 'Actualizando en Steam' : g.inst ? 'Instalado' : 'No instalado'}</b></div><div><span>Al iniciarse</span><b>${g.perf ? profOf(g.perf).n : 'Perfil global'}${S.safeMode && g.perf ? ' (en pausa: Safe Mode)' : ''}</b></div></div>`;
@@ -22,6 +23,18 @@ function enterDetail(i, opts = {}) {
   NAV.id = 'detail';
   requestAnimationFrame(() => applyFocus());
   hints([['A', prim.charAt(0) + prim.slice(1).toLowerCase()], ['B', 'Volver']]);
+  if (g.src === 'steam' && g.inst) experience(g, i);
+}
+/* STONE OPTIMIZED: GAME -> STONE RECOMMENDED -> PLAY. The host says what JUGAR will use and why;
+   nothing is shown that was not measured or is not in the profile database. */
+async function experience(g, i) {
+  let r = null;
+  try { r = await Sys.gameRecommended(g.appid); } catch (e) { return; }
+  const el = $('#dexp');
+  if (!r || !el || curG !== i || S.screen !== 'detail') return;
+  g.exp = r;
+  el.textContent = `${r.label} · ${r.summary} · ${r.status_text}`;
+  el.title = r.settings || '';
 }
 function detailA(el) {
   const g = G[curG], a = el.dataset.act;
@@ -54,6 +67,7 @@ async function launch(g) {
   if (S.launching !== null) return;
   const ok = await sys('launch', g.appid);
   if (!ok) return;
+  if (g.exp && g.exp.settings && g.exp.status !== 'UNKNOWN') toast(g.exp.settings, false);
   S.launching = g.i; S.running = g.i; S.screen = 'transition';
   recent = [g.i, ...recent.filter(i => i !== g.i)].slice(0, 6);
   const b = stageBox(focusEl());

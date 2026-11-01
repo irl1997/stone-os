@@ -1,8 +1,83 @@
-# STONE OS 0.1.0-rc9
+# STONE OS 0.1.0-rc12
 
-Novena Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
+Duodécima Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
-**El software está listo para probar en la placa. Nada está verificado en hardware todavía** (la primera instalación de RC1 en la placa dio observaciones, no pruebas completas de HARDWARE_VALIDATION).
+**El software está listo para probar en la placa. Nada está verificado en hardware todavía.** No hay benchmarks en esta versión: el perfil de Cyberpunk 2077 es un punto de partida y una matriz de pruebas, sin números.
+
+## Cambios desde 0.1.0-rc11
+
+- **STONE OPTIMIZED — Game Profile Engine** (`stone_games/`, ver `STONE_OPTIMIZED.md`). JUGAR ahora pasa por el perfil del juego:
+  1. pantalla;
+  2. perfil;
+  3. validación;
+  4. gráficos;
+  5. rendimiento;
+  6. Steam;
+  7. vigilancia;
+  8. y, al salir, limpieza.
+- **STONE GAME PROFILE:** perfiles por AppID de Steam en tres capas: incorporados (imagen, versionados), medidos en esta consola y de la persona.
+  - Estados: UNKNOWN, AUTO_GENERATED, RECOMMENDED, USER_MODIFIED y HARDWARE_VERIFIED. Este último solo lo pone la persona con `stone-game verify`.
+  - Las mediciones caducan si cambia el juego, Proton, HelixSR/OptiScaler, 40 CU / regulador, la calibración, la pantalla o las reglas.
+- **STONE GRAPHICS:** Nativo, FSR/XeSS del juego, HelixSR, OptiScaler y Gamescope (solo orientación).
+  - HelixSR/OptiScaler se activan solo para ese lanzamiento con `WINEDLLOVERRIDES`, si la persona los instaló como `winmm.dll`. Las opciones de lanzamiento de la persona se guardan antes y se devuelven después, también si STONE Home o la consola se cayeron.
+  - Nunca se inyecta en juegos con anti-cheat u online. HelixSR nunca se fuerza: se prefiere solo cuando, medido, iguala a la mejor experiencia.
+  - Fallback: HelixSR → FSR del juego → Nativo, sin restos.
+- **STONE OPTIMIZER:**
+  - **Medición:** matriz de pruebas medida con MangoHud (sin overlay). Métricas: media, 1 % low, frametime, varianza, reloj, temperaturas y potencia (marcada como no validada).
+  - **Puntuación:** STONE EXPERIENCE SCORE documentado, por modo. Objetivos según Hz y VRR de la pantalla, sin la regla fija de 60.
+  - **Desempate:** a igual experiencia gana el reloj más bajo.
+  - **Etapa 2:** SILENT/PERFORMANCE de las dos mejores.
+- **Recuperación:**
+  - una caída del juego cuenta el fallo por separado para gráficos y para rendimiento;
+  - el siguiente lanzamiento es seguro;
+  - con dos caídas, la configuración queda sospechosa.
+  - Un perfil por juego elegido a mano en STONE Performance se respeta siempre.
+- **API del host:** `game.profile`, `game.recommended`, `game.modes`, `game.apply`, `game.launchOptimized`, `game.status`, `game.restoreRecommended`.
+  - Ficha del juego: `STONE RECOMMENDED · … · estado`.
+  - Preferencia `optimized` para desactivarlo.
+- **`stone-game`** (terminal): status, plan, measure, play, rate, verify, restore, export y recover.
+- **Cyberpunk 2077:** primer perfil de referencia (sin mediciones) y CYBERPUNK TEST MATRIX. Procedimiento físico en `HARDWARE_VALIDATION.md` §29.
+- **Pruebas:** `tests/test_games.py` (G01–G18). `test-all` aísla `XDG_STATE_HOME`/`XDG_DATA_HOME`.
+- Incluye rc11 (STONE PERFORMANCE 2.0) y rc10 (STONE DISPLAY), por si no se publicaron.
+
+## Cambios en 0.1.0-rc11 (desde rc10)
+
+- **STONE PERFORMANCE 2.0** (ver `STONE_PERFORMANCE.md`): se acaba el techo fijo de 1500 MHz con 40 CU. Cada consola tiene su rango:
+  - **hardware:** el que permite el regulador;
+  - **línea base:** 1500 MHz;
+  - **máximo validado:** el que pasó la calibración de esa consola;
+  - **actual:** el que informa el regulador.
+- **STONE CALIBRATION** (`stonectl calibrate quick|standard`, solo a mano):
+  - sube de 50 en 50 MHz y prueba cada paso con `stone-cu-verify` (resultados comprobados) y `vkmark`;
+  - se detiene ante el primer error, por temperatura de GPU (90 °C) o de CPU (95 °C), o si el reloj no se sostiene;
+  - guarda el último paso aprobado menos 50 MHz de margen, o el máximo del regulador si todo pasa.
+  - Un cuelgue durante un paso cuenta como fallo de ese paso al arrancar.
+  - El resultado queda ligado a esta máquina y a su configuración (CU, kernel, amdgpu, regulador, VBIOS); si cambia algo, vuelve a la línea base hasta recalibrar.
+- **Perfiles:**
+  - SILENT = línea base;
+  - BALANCED = máximo validado, sin pasar de 1850;
+  - PERFORMANCE = hasta el máximo validado;
+  - CUSTOM ≤ máximo validado.
+  - El regulador sigue escalando el reloj con la carga. La página muestra los valores que da `stoned`, no números fijos.
+- **Controlador dinámico** durante los juegos: baja el techo en pasos de 50 MHz cerca del límite de temperatura y lo devuelve al enfriarse. Hay una entrada preparada para el objetivo de cuadros del futuro STONE GAME PROFILE.
+- `GetMetrics` añade CU, máximo validado, línea base, techo, margen térmico, estado del regulador y perfil.
+- Arreglo: al terminar una prueba se detiene todo el grupo de procesos de la carga, también si el proceso principal ya había terminado.
+- Incluye todo lo de rc10 (STONE DISPLAY) por si rc10 no se publicó.
+
+## Cambios desde 0.1.0-rc9
+
+- **STONE DISPLAY** (`stone_display/`, ver `STONE_DISPLAY.md`): detecta la pantalla por el kernel (EDID y modos validados en el enlace, sin root) y por Steam (modo de salida actual, modos, VRR/HDR activos, tamaño que Steam da a los juegos). Separa cinco resoluciones: nativa, salida, la que ven los juegos, interna y final. Lo que no se sabe es DESCONOCIDO, nunca inventado. Escucha los eventos de conexión (udev) en vez de sondear.
+- **Juegos a la resolución del televisor, para todos:** los juegos sólo podían ofrecer el tamaño que Steam les da. Con **Ajustes → Pantalla → Juegos ven: Televisor** (por defecto), STONE:
+  - sube el tamaño por defecto de Steam a la nativa, comprobándolo y deshaciéndolo si Steam no lo acepta;
+  - pone «Nativa» en cada juego que estaba en «Default», también en los desconocidos y recién instalados.
+  Lo que la persona eligió a mano no se toca, y **Juegos ven: Steam** lo deshace todo. Ningún caso por juego ni por AppID.
+- La salida al televisor no se cambia sola: si está por debajo de la nativa, STONE lo dice y explica dónde cambiarla.
+- **Diagnóstico:** `stonectl display`, `stonectl display --json` y `stonectl display diagnostics`. Este último añade la línea de órdenes de Gamescope, los ajustes de sesión y ScopeBuddy, y guarda todo en un archivo para soporte, sin números de serie.
+- **Ajustes → Pantalla** muestra Televisor (nativa, VRR, HDR, Hz máximos), Salida y Juegos ven.
+- 16 pruebas nuevas cubren:
+  - pantallas: 1080p60/120, 1440p60/120, 4K30/60/120, VRR sí/no, HDR sí/no, sin EDID, desconectada, cambio de pantalla y varias salidas;
+  - juegos: conocido, desconocido y con tamaño elegido;
+  - el tamaño por defecto de Steam: verificado y deshecho si Steam no lo acepta.
 
 ## Cambios desde 0.1.0-rc8
 

@@ -15,8 +15,9 @@ itself except the boot check, and that one can only turn the unlock off.
   stone-cu40 guard             (systemd, at boot) GPU errors in the previous 40 CU boot ->
                                turned off again
 
-Stable range: with 40 CU, stoned keeps the GPU at 1500 MHz at most (any profile) and the
-governor's thermal limit stays; the test stops at 90 C. Every kernel-argument change makes a
+Stable range: with 40 CU, stoned keeps the GPU at the baseline (1500 MHz) until this machine
+has been calibrated (stonectl calibrate), then at its validated maximum; the governor's
+thermal limit stays; the test stops at 90 C. Every kernel-argument change makes a
 new boot entry; the previous one (24 CU) stays in the boot menu.
 """
 
@@ -29,7 +30,7 @@ import time
 
 KARG = "amdgpu.bc250_cc_write_mode=3"
 ACTIVE_MODES = {2, 3}
-CEILING_MHZ = 1500
+CEILING_MHZ = 1500                # baseline with 40 CU before this machine is calibrated
 TEST_STOP_C = 90               # the test stops here; the governor throttles before
 ENABLE_MAX_IDLE_C = 75         # too hot at rest to start
 CLOCK_MARGIN_MHZ = 50
@@ -66,6 +67,23 @@ def _int(path):
         return int(v, 0) if v is not None else None
     except ValueError:
         return None
+
+
+def ceiling():
+    """The GPU ceiling stoned enforces now: THIS machine's validated maximum (STONE PERFORMANCE
+    2.0), or the 40 CU baseline when stoned cannot be asked."""
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        r = bus.call_sync("org.stonemachine.Performance1", "/org/stonemachine/Performance1",
+                          "org.stonemachine.Performance1", "GetCalibration", None, GLib.VariantType("(a{sv})"),
+                          Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+        v = int(r["range"]["validated_max"])
+        return v if 1000 <= v <= 2500 else CEILING_MHZ
+    except Exception:  # noqa: BLE001  (no stoned, no bus, old stoned: the baseline)
+        return CEILING_MHZ
 
 
 # ---- what the machine has --------------------------------------------------------------
@@ -212,7 +230,7 @@ def cmd_status():
         f"{'' if cus is None else f' · el driver cuenta {cus} CU'}",
         f"  Opción guardada          : {STATE_TXT[st['state']]}"
         f"{' · motivo: ' + st['reason'] if st.get('reason') else ''}",
-        f"  Límite de GPU con 40 CU  : {CEILING_MHZ} MHz (lo aplica STONE en cualquier perfil)")
+        f"  Límite de GPU con 40 CU  : {ceiling()} MHz (máximo validado de esta consola; sin calibrar, {CEILING_MHZ})")
     if booted_with_karg() != (st["state"] in ("trial", "confirmed")) and st["state"] != "reverted":
         say("  Nota: el próximo arranque puede ser distinto a este (reinicia para aplicar el último cambio).")
     if dev:
@@ -260,8 +278,9 @@ def cmd_enable():
     say("Vas a activar las 40 CU de la GPU (ahora usa 24).",
         "",
         "  · Es un cambio de la comunidad, no de AMD: no todas las placas lo aguantan.",
-        f"  · Con 40 CU STONE limita la GPU a {CEILING_MHZ} MHz en todos los perfiles, porque",
-        "    consume ~30 W más y se calienta más (rango estable medido por el autor).",
+        f"  · Con 40 CU STONE empieza con la GPU a {CEILING_MHZ} MHz como máximo, porque consume",
+        "    ~30 W más y se calienta más. Luego «stonectl calibrate» busca el máximo estable de",
+        "    TU consola paso a paso, y STONE solo usará lo que haya pasado.",
         "  · Después del reinicio corre la prueba: sudo stone-cu40 test",
         "    Si falla, STONE vuelve solo a 24 CU. Si hay errores de GPU, también.",
         "  · Si no arranca: en el menú de arranque elige la entrada anterior, o pulsa e y",
@@ -350,8 +369,9 @@ def cmd_test(argv):
     say(f"Prueba de la GPU con {'40' if active else '24'} CU: {minutes} min de cálculo comprobado contra la CPU.",
         f"Se detiene si la GPU llega a {TEST_STOP_C} °C. No apagues la consola.", "")
     ok, reason, peak_c, peak_mhz, out = watch_test(dev, minutes)
-    if ok and active and peak_mhz > CEILING_MHZ + CLOCK_MARGIN_MHZ:
-        ok, reason = False, f"la GPU subió a {peak_mhz} MHz con 40 CU (límite {CEILING_MHZ})"
+    top = ceiling()
+    if ok and active and peak_mhz > top + CLOCK_MARGIN_MHZ:
+        ok, reason = False, f"la GPU subió a {peak_mhz} MHz con 40 CU (límite {top})"
     cus = active_cus(kernel_log() or "")
     st["tests"] = (st["tests"] + [{"time": int(time.time()), "ok": ok, "cus": cus or (40 if active else 24),
                                     "minutes": minutes, "peak_c": peak_c, "peak_mhz": peak_mhz,

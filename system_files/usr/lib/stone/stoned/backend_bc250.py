@@ -30,13 +30,11 @@ AMD_VENDOR = 0x1002
 TIMEOUT_MS = 2000
 
 # BC-250 40 CU option (stone-cu40). The image's amdgpu has the option; it is in use when the
-# kernel was started with amdgpu.bc250_cc_write_mode=2 or 3 (both write the unlock). With all
-# 40 CU working the GPU draws ~30 W more and runs hotter at the same clock, so STONE then keeps
-# it at 1500 MHz at most, whatever profile is chosen (the unlock's author measured 83 C there,
-# 96 C at 2 GHz).
+# kernel was started with amdgpu.bc250_cc_write_mode=2 or 3 (both write the unlock). The GPU
+# ceiling is no longer a fixed number: the service sets it to THIS machine's validated maximum
+# (calibration.py) and the backend enforces it on everything that reaches the governor.
 CU40_PARAM = "sys/module/amdgpu/parameters/bc250_cc_write_mode"
 CU40_ACTIVE_MODES = {2, 3}
-CU40_CEILING_MHZ = 1500
 
 
 def _root():
@@ -198,21 +196,30 @@ class BC250Backend:
             caps["missing"].append("cyan-skillfish-governor-smu (D-Bus)")
         caps["sensors"] = {k: v is not None for k, v in self._sensor_paths().items()}
         caps["cu40"] = self.cu40()
-        if caps["cu40"]["active"] and caps["governor"]:
+        caps["hardware_range"] = caps["gpu_range"]
+        if caps["governor"] and self._ceiling:
             lo, hi = caps["gpu_range"]
-            caps["gpu_range"] = (lo, min(hi, CU40_CEILING_MHZ))
+            caps["gpu_range"] = (lo, min(hi, self._ceiling))
         self.caps = caps
         return caps
 
     def cu40(self):
         """Whether the image's amdgpu has the 40 CU option and whether this boot uses it."""
         mode = _read_int(_p(CU40_PARAM))
-        active = mode in CU40_ACTIVE_MODES
-        return {"available": mode is not None, "active": active,
-                "ceiling_mhz": CU40_CEILING_MHZ if active else None}
+        return {"available": mode is not None, "active": mode in CU40_ACTIVE_MODES}
+
+    _ceiling = None
+
+    def set_ceiling(self, mhz):
+        """The highest GPU clock anything may ask the governor for (validated maximum, or a
+        calibration step while it runs). None: the governor's own range."""
+        self._ceiling = int(mhz) if mhz else None
+        if self.caps and self.caps.get("governor"):
+            lo, hi = self.caps.get("hardware_range") or self.caps["gpu_range"]
+            self.caps["gpu_range"] = (lo, min(hi, self._ceiling) if self._ceiling else hi)
 
     def ceiling(self):
-        return CU40_CEILING_MHZ if (self.caps or {}).get("cu40", {}).get("active") else None
+        return self._ceiling
 
     def _clamp(self, values):
         """With 40 CU in use nothing above the ceiling reaches the governor."""

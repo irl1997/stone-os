@@ -93,7 +93,7 @@ def build(src):
     t = replace_once(t, "  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);\n  $('#bSound').textContent = `Sonido: ${S.sound ? 'activado' : 'desactivado'}`;\n",
                      "  if (master) master.gain.setTargetAtTime(S.sound ? S.vol : 0, AC.currentTime, .05);\n", "applyPrefs bar")
     t = replace_once(t, "  else if (key === 'tech') { S.tech = !S.tech; }\n",
-                     "  else if (key === 'tech') { S.tech = !S.tech; }\n  else if (key === 'render') { S.render = (S.render + d + RENDER.length) % RENDER.length; play('select'); return applyRender(); }\n", "adjust render")
+                     "  else if (key === 'tech') { S.tech = !S.tech; }\n  else if (key === 'render') { S.render = (S.render + d + RENDER.length) % RENDER.length; play('select'); return applyRender(); }\n  else if (key === 'gameres') { return setGamePolicy(); }\n", "adjust render")
     t = replace_once(t, "  applyPrefs(); play('nav'); enterSettings({ pane: true, ri });\n}", "  applyPrefs(); savePrefs(); armIdleOff(); play('nav'); enterSettings({ pane: true, ri });\n}", "adjust save")
     t = replace_span(t, "  if (r.act === 'steam') { play('select'); return toast('Se abre el panel de Steam con el tema de STONE (fuera del prototipo)', false); }\n  if (r.act === 'desk') { play('error'); return toast('El modo escritorio queda oculto en el producto final', false); }\n",
                      "  if (r.act === 'perf')", "  if (r.act === 'info') { play('select'); return toast(r.where, false); }\n  if (r.act === 'steam') { play('select'); return openSteamSettings(r); }\n  if (r.act === 'emu') return emuA(r);\n  if (r.act === 'measure') { play('select'); return measureSmoothness(); }\n", "settingsA steam")

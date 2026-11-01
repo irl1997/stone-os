@@ -11,6 +11,9 @@ async function selfTest() {
   c.gamepad_api = typeof navigator.getGamepads === 'function';
   await (document.fonts ? document.fonts.load('300 20px Jost') : Promise.resolve());
   c.font = document.fonts ? document.fonts.check('300 20px Jost') : false;
+  /* the size the page is drawn at, once the window has settled (the shell checks it at 4K) */
+  await new Promise(res => setTimeout(res, 1500));
+  c.draw = `${Math.round(innerWidth * devicePixelRatio)}x${Math.round(innerHeight * devicePixelRatio)}`;
   r.pass = c.state === true && c.prefs === true && typeof c.library === 'number' && c.info === true && c.font === true;
   await Bridge.call('selftest', r);
 }

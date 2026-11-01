@@ -63,6 +63,10 @@ PREFS = {
     # 0 GPU (Chromium, at the screen's resolution), 1 no GPU (WebKit shell in software, the
     # fallback). Replaces RC7's "render" (WebKit GPU experiments), which is dropped.
     "engine": (_intr(0, 1), 0),
+    # Game resolution environment (STONE DISPLAY): 0 games see the display's own resolution
+    # (Steam "Native" on games left at "Default"), 1 Steam's default size.
+    "game_res": (_intr(0, 1), 0),
+    "optimized": (_intr(0, 1), 1),        # STONE OPTIMIZED: JUGAR launches with the game profile
 }
 
 

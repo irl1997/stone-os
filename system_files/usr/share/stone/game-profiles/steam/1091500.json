@@ -1,0 +1,221 @@
+{
+ "schema": 1,
+ "appid": "1091500",
+ "name": "Cyberpunk 2077",
+ "status": "UNKNOWN",
+ "revision": 1,
+ "game": {
+  "api": "dx12",
+  "native_upscalers": [
+   "dlss",
+   "fsr",
+   "xess"
+  ],
+  "anti_cheat": false,
+  "online_only": false,
+  "benchmark": "Prueba de rendimiento integrada del juego (Ajustes → Gráficos) [VERIFICAR en placa]",
+  "notes": "Primer perfil de referencia STONE. Sin mediciones: el modo recomendado es un punto de partida seguro (FSR del juego, Calidad, GPU Equilibrado), no un resultado. Las versiones exactas de FSR/XeSS dependen del parche del juego."
+ },
+ "modes": {
+  "recommended": {
+   "graphics": {
+    "path": "game_upscaler",
+    "upscaler_preset": "quality",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.667
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: AMD FSR, modo Calidad. Generación de fotogramas DESACTIVADA."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  }
+ },
+ "candidates": [
+  {
+   "graphics": {
+    "path": "native",
+    "upscaler_preset": null,
+    "internal": {
+     "strategy": "native",
+     "scale": 1.0
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Ajustes → Gráficos → Escalado de resolución: Desactivado (TAA). Preajuste ALTO, trazado de rayos DESACTIVADO."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "game_upscaler",
+    "upscaler_preset": "quality",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.667
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: AMD FSR, modo Calidad. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "game_upscaler",
+    "upscaler_preset": "balanced",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.588
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: AMD FSR, modo Equilibrado. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "game_upscaler",
+    "upscaler_preset": "performance",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.5
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: AMD FSR, modo Rendimiento. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "helixsr",
+    "upscaler_preset": "quality",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.667
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: NVIDIA DLSS (lo reemplaza HelixSR), modo Calidad. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "helixsr",
+    "upscaler_preset": "balanced",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.588
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: NVIDIA DLSS (lo reemplaza HelixSR), modo Equilibrado. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "helixsr",
+    "upscaler_preset": "performance",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.5
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: Escalado de resolución: NVIDIA DLSS (lo reemplaza HelixSR), modo Rendimiento. Generación de fotogramas DESACTIVADA. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  },
+  {
+   "graphics": {
+    "path": "optiscaler",
+    "upscaler_preset": "quality",
+    "internal": {
+     "strategy": "upscaled",
+     "scale": 0.667
+    },
+    "frame_generation": false,
+    "game_settings": "Cyberpunk: DLSS en Calidad; en el menú de OptiScaler (Insert): escalador FSR 3.1. Preajuste ALTO, sin trazado de rayos."
+   },
+   "performance": {
+    "profile": "balanced"
+   },
+   "frame_target": {
+    "fps": null,
+    "vrr": false
+   },
+   "gamescope": {
+    "scaling_filter": null
+   }
+  }
+ ]
+}

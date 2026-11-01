@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc9
+# Seguridad de STONE OS 0.1.0-rc12
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -89,3 +89,28 @@ STONE Home sólo instala los identificadores de Flathub de su catálogo fijo (`s
   - corre con perfil propio (`~/.local/state/stone/chromium`), sin extensiones, sin sincronización ni componentes descargables, y en modo kiosco (sin barra de direcciones);
   - todo destino que no sea 127.0.0.1 va a un proxy que no existe, así que la página no puede cargar nada de internet;
   - en la consola usa su propio sandbox; `--no-sandbox` sólo se usa en las pruebas, como root y sin GPU.
+
+## Calibración (desde 0.1.0-rc11)
+
+- Solo la inicia una persona: `StartCalibration` requiere la acción polkit `org.stonemachine.performance.tune`. Nunca se inicia al arrancar ni por un juego.
+- No sale del rango que publica el regulador (su curva de puntos seguros). STONE nunca cambia voltajes ni el límite de temperatura por encima de 85 °C.
+- La carga corre como el usuario `stoned`, con órdenes fijas: la de `/usr/lib/stone/stability.json` (root) y `/usr/libexec/stone/stone-cu-verify`. Nada llega por IPC.
+- Los valores que no pasaron nunca se aplican al arrancar. Un cuelgue se atribuye al paso que corría.
+
+## STONE OPTIMIZED (desde 0.1.0-rc12)
+
+- **Qué cambia y dónde.** Solo las opciones de lanzamiento de Steam de un juego, y solo por un lanzamiento:
+  - lo hace Steam, a través de su propia interfaz;
+  - antes se guardan las originales (`~/.local/state/stone/game-graphics.json`), después se comprueban y al salir se devuelven;
+  - si algo se interrumpe, se devuelven al volver a abrir STONE Home.
+- **Lo que no toca:** archivos del juego ni de su configuración. Tampoco DLL de nadie: STONE no instala, no descarga, no mueve y no borra HelixSR ni OptiScaler.
+- **Inyección:** nunca en juegos con archivos anti-cheat, ni en los marcados con anti-cheat u online en la base de perfiles. Esto se aplica también a CUSTOM.
+- **Rendimiento:**
+  - solo los perfiles de `stoned`, con sus comprobaciones (máximo validado, Safe Mode, polkit);
+  - STONE OPTIMIZED nunca aplica una frecuencia por su cuenta y nunca activa la generación de cuadros.
+- **Perfiles leídos:** los incorporados, los medidos y los de la persona pasan la misma validación (`schema.py`). Un archivo dañado se ignora.
+- **HARDWARE_VERIFIED:**
+  - solo lo pone una persona en la consola (`stone-game verify`, escribiendo VERIFICADO);
+  - solo sobre una configuración medida en esa consola y aún válida;
+  - un perfil incorporado no puede declararlo.
+- **Mediciones:** son CSV de MangoHud en `~/.local/state/stone/game-metrics/`. No salen de la consola.

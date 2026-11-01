@@ -5,9 +5,15 @@ arguments are checked by the module that owns them. The result goes back through
 done(result) or done(None, code, message), with the same error codes as stoned.
 """
 
+import os
 import threading
 
 from gi.repository import GLib
+
+import stone_display
+from stone_games import optimizer as games_opt
+from stone_games import schema as games_schema
+from stone_games.perf import PerfAsync
 
 from . import bridge
 from . import emulators
@@ -29,6 +35,54 @@ class Host:
         self.selftest = None                                  # set by app.py --selftest
         self.restart = None                                   # set by app.py: restart STONE Home
         self.steam_ui = steamcef                              # Steam's interface (replaced in tests)
+        cef = _SteamUIProxy(self)
+        # STONE DISPLAY: display model and the game resolution environment (stone_display/).
+        self.display = stone_display.Display(game_policy=self.game_policy, cef=cef,
+                                             on_change=lambda why: GLib.idle_add(self._display_changed, why))
+        self.game_env = stone_display.GameEnvironment(cef=cef)
+        # STONE OPTIMIZED: game profiles, graphics paths, measured optimization (stone_games/).
+        self.optimized = games_opt.Engine(root=self.root, cef=cef, display=lambda: self.display.status(fresh=True),
+                                          perf=PerfAsync(self.stoned), log=lambda m: print(m, flush=True))
+        self._opt_busy = False
+        GLib.timeout_add_seconds(3, self._opt_monitor)
+        GLib.timeout_add_seconds(8, lambda: (self._opt_work(self.optimized.recover, "recover"), False)[1])
+
+    def game_policy(self):
+        """"native": games see the display's own resolution; "steam": whatever Steam defaults to."""
+        return "steam" if system.load_prefs().get("game_res") == 1 else "native"
+
+    def _display_changed(self, why):
+        print(f"[stone] display: DISPLAY_CHANGED ({why})", flush=True)
+        self.emit("display", {"changed": True})
+        return False
+
+    # ---- STONE OPTIMIZED: monitor and recovery (off the UI thread) ---------------------------
+    def _opt_work(self, fn, what):
+        if self._opt_busy:
+            return
+        self._opt_busy = True
+
+        def work():
+            try:
+                r = fn()
+                if isinstance(r, dict) and r:
+                    print(f"[stone] optimized: {what}: {r}", flush=True)
+                    if what == "monitor" and r.get("appid"):
+                        GLib.idle_add(lambda: (self.emit("game", {"ended": r}), False)[1])
+            except Exception as e:  # noqa: BLE001  (never take STONE Home down over this)
+                print(f"[stone] optimized: {what} failed: {e!r}", flush=True)
+            finally:
+                self._opt_busy = False
+        threading.Thread(target=work, daemon=True).start()
+
+    def _opt_monitor(self):
+        """MONITOR: only while a game launched by STONE OPTIMIZED is prepared or running."""
+        if os.path.exists(self.optimized.session_path):
+            self._opt_work(self.optimized.tick, "monitor")
+        return True
+
+    def optimized_on(self):
+        return system.load_prefs().get("optimized", 1) == 1
 
     def root(self):
         return self.steam_root or shortcuts.steam_root()
@@ -46,6 +100,8 @@ class Host:
             if fn is None:
                 return done(None, "InvalidValue", "unknown method")
             return fn(args, done)
+        except games_schema.ProfileError as e:
+            return done(None, "InvalidValue", str(e))
         except Exception as e:        # a bad request never takes STONE Home down
             return done(None, "HardwareError", f"internal error: {e!r}")
 
@@ -70,6 +126,28 @@ class Host:
         self.games = {g["appid"]: g["launch"] for g in res["games"] if g.get("launch")}
         self.owned = {g["appid"] for g in res["games"] if not g.get("installed") and g.get("source") == "steam"}
         done(res)
+        # The game environment for every game, known or not: installed games, shortcuts and STONE itself.
+        if self.game_policy() == "native":
+            ids = [g["appid"] for g in res["games"] if g.get("installed")]
+            root = self.root()
+            threading.Thread(target=lambda: self._apply_env(ids + list(shortcuts.shortcut_appids(root))),
+                             daemon=True).start()
+
+    def _env_state(self):
+        snap = self.display.status(fresh=True)
+        return ({"game_default": snap.get("steam_game_default")} if snap.get("steam_available") else None,
+                (snap.get("primary") or {}).get("native_resolution"))
+
+    def _apply_env(self, ids):
+        try:
+            d = self.game_env.ensure_default(self._env_state)        # every game, wherever launched
+            if d.get("status") not in ("ok", "changed", "unsupported", "unknown"):
+                print(f"[stone] display: default game size: {d}", flush=True)
+            r = self.game_env.apply(ids)                              # per game, where still "Default"
+            if r.get("error"):
+                print(f"[stone] display: game environment not applied ({r['error']})", flush=True)
+        except Exception as e:  # noqa: BLE001  (never take STONE Home down over this)
+            print(f"[stone] display: game environment failed: {e!r}", flush=True)
 
     def m_install(self, args, done):
         """Opens Steam's own install dialog for a game of the account that is not installed."""
@@ -131,7 +209,118 @@ class Host:
         gid = url.rsplit("/", 1)[-1]
         if not gid.isdigit():
             return done(None, "InvalidValue", "unknown game")
-        self._in_steam_ui(lambda: self.steam_ui.run_game(int(gid)), lambda: self.sys.open_url(url), done)
+        appid = args[0]
+
+        def launch():
+            if self.game_policy() == "native":
+                self._apply_env([appid])          # a game installed since the last scan, too
+            if gid == appid and self.optimized_on():
+                # GAME -> STONE RECOMMENDED -> PLAY. Any failure here launches the game as it is.
+                try:
+                    r = self.optimized.prepare(appid)
+                    print(f"[stone] optimized: {appid}: {r.get('why') or r.get('error')} "
+                          f"graphics={r.get('graphics_applied')} performance={r.get('performance')}", flush=True)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[stone] optimized: {appid} not prepared ({e!r}); launching unchanged", flush=True)
+            return self.steam_ui.run_game(int(gid))
+        self._in_steam_ui(launch, lambda: self.sys.open_url(url), done)
+
+    # ---- STONE OPTIMIZED API ---------------------------------------------------------------
+    def _opt_call(self, done, fn):
+        def work():
+            try:
+                res = (fn(), None, "")
+            except games_schema.ProfileError as e:
+                res = (None, "InvalidValue", str(e))
+            except Exception as e:  # noqa: BLE001
+                res = (None, "HardwareError", f"optimized: {e!r}")
+            GLib.idle_add(lambda: (done(*res), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _game_args(args, n_min=1, n_max=2):
+        if not n_min <= len(args) <= n_max or not isinstance(args[0], str) or not args[0].isdigit() or len(args[0]) > 10:
+            raise games_schema.ProfileError("appid")
+        mode = args[1] if len(args) > 1 else None
+        if mode is not None and mode not in games_schema.MODES:
+            raise games_schema.ProfileError("mode")
+        return args[0], mode
+
+    def m_game_profile(self, args, done):
+        """getGameProfile(appid)"""
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: frontend_profile(self.optimized.profile(appid)))
+
+    def m_game_recommended(self, args, done):
+        """getRecommendedExperience(appid, mode?)"""
+        appid, mode = self._game_args(args)
+        self._opt_call(done, lambda: frontend_recommended(self.optimized.recommended(appid, mode or self.optimized.chosen_mode(appid))))
+
+    def m_game_modes(self, args, done):
+        """getAvailableModes(appid)"""
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: {"chosen": self.optimized.chosen_mode(appid), "modes": self.optimized.modes(appid)})
+
+    def m_game_apply(self, args, done):
+        """applyGameProfile(appid, mode, config?) - the mode used from now on (custom: with its config)."""
+        if len(args) not in (2, 3):
+            return done(None, "InvalidValue", "arguments")
+        appid, mode = self._game_args(args[:2], 2, 2)
+        cfg = args[2] if len(args) == 3 else None
+        if mode == "custom" and not isinstance(cfg, dict):
+            return done(None, "InvalidValue", "custom needs a configuration")
+        self._opt_call(done, lambda: self.optimized.apply(appid, mode, cfg))
+
+    def m_game_launchOptimized(self, args, done):
+        """launchOptimized(appid, mode?)"""
+        appid, mode = self._game_args(args)
+        if appid not in self.games:
+            return done(None, "InvalidValue", "unknown game")
+        if mode:
+            self.optimized.apply(appid, mode)
+        return self.m_launch([appid], done)
+
+    def m_game_status(self, args, done):
+        """getOptimizationStatus()"""
+        self._opt_call(done, self.optimized.status)
+
+    def m_game_restoreRecommended(self, args, done):
+        """restoreRecommended(appid)"""
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: self.optimized.restore_recommended(appid))
+
+    # ---- display -------------------------------------------------------------------------
+    def m_display_status(self, args, done):
+        """STONE DISPLAY for the interface (no Linux access from the page). args: [fresh?]"""
+        fresh = bool(args and args[0] is True)
+
+        def work():
+            try:
+                res = (frontend_display(self.display.status(fresh=fresh)), None, "")
+            except Exception as e:  # noqa: BLE001
+                res = (None, "HardwareError", f"display: {e!r}")
+            GLib.idle_add(lambda: (done(*res), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
+    def m_display_gamePolicy(self, args, done):
+        """0: games see the display's resolution (Native), 1: Steam's default."""
+        if len(args) != 1 or args[0] not in (0, 1):
+            return done(None, "InvalidValue", "policy")
+        prefs = system.load_prefs()
+        prefs["game_res"] = args[0]
+        system.save_prefs(prefs)
+        self.display.invalidate()
+
+        def work():
+            if args[0] == 1:
+                self.game_env.restore_default()
+                r = self.game_env.restore()
+            else:
+                self.game_env.ensure_default(self._env_state)
+                r = self.game_env.apply(list(self.games) + list(shortcuts.shortcut_appids(self.root())))
+            GLib.idle_add(lambda: (done({"ok": r.get("error") is None, "changed": len(r.get("changed", [])),
+                                          "error": r.get("error")}), False)[1])
+        threading.Thread(target=work, daemon=True).start()
 
     def m_openSteam(self, args, done):
         if len(args) != 1 or args[0] not in system.STEAM_URLS:
@@ -182,3 +371,56 @@ class Host:
             return done(None, "InvalidValue", "not in self-test mode")
         done({"ok": True})
         self.selftest(args[0] if args else None)
+
+
+class _SteamUIProxy:
+    """STONE DISPLAY reaches Steam through the host's current Steam interface (a fake in tests)."""
+
+    def __init__(self, host):
+        self.host = host
+
+    def ui_value(self, expression):
+        fn = getattr(self.host.steam_ui, "ui_value", None)
+        return fn(expression) if fn else None
+
+    def run_game(self, game_id):
+        return self.host.steam_ui.run_game(game_id)
+
+
+def frontend_display(snap):
+    """What the interface needs to show the display (STONE Home never reads Linux itself)."""
+    p = snap.get("primary") or {}
+    nat, out = p.get("native_resolution"), snap.get("output")
+    rates = p.get("refresh_rates") or []
+    return {
+        "connected": bool(p), "name": p.get("display_name"), "connection": p.get("connection_type"),
+        "connector": p.get("connector"), "native": nat, "output": out, "preferred": snap.get("preferred_mode"),
+        "max_hz": max(rates) if rates else None, "rates": rates,
+        "vrr": {"supported": p.get("vrr_supported"), "range": p.get("vrr_range"), "active": p.get("vrr_active")},
+        "hdr": {"supported": p.get("hdr_supported"), "active": p.get("hdr_active")},
+        "game_env": snap.get("game_environment"), "steam_default": snap.get("steam_game_default"),
+        "policy": snap.get("game_policy"), "safe": snap.get("safe_display_mode"),
+        "steam": snap.get("steam_available"), "findings": snap.get("findings", []),
+    }
+
+
+STATUS_TEXT = {"UNKNOWN": "Sin datos", "AUTO_GENERATED": "Medido en esta consola", "RECOMMENDED": "Recomendado por STONE",
+               "USER_MODIFIED": "Tu configuración", "HARDWARE_VERIFIED": "Verificado en esta consola"}
+
+
+def frontend_recommended(r):
+    """What the page shows next to JUGAR (nothing it could not show honestly)."""
+    return {"mode": r["mode"], "label": "STONE RECOMMENDED" if r["mode"] == "recommended" else r["mode"].upper(),
+            "summary": games_opt.summary(r["config"]), "why": r["why"], "settings": r["settings"],
+            "status": r["status"], "status_text": STATUS_TEXT.get(r["status"], r["status"]),
+            "target": r["target"], "output": r["output"], "internal": r["internal"], "trail": r["trail"],
+            "stale": r["stale"]}
+
+
+def frontend_profile(p):
+    return {"id": p["id"], "appid": p["appid"], "name": p["name"], "status": p["status"], "layers": p["layers"],
+            "errors": p["errors"], "db_version": p["db_version"], "game": p["game"],
+            "availability": p["availability"], "stale": p["stale"], "targets": p["targets"],
+            "measurements": len(p["measurements"]),
+            "next_measurement": games_opt.summary(p["next_measurement"]) if p["next_measurement"] else None,
+            "anti_cheat": p["facts"]["anti_cheat"], "injected": (p["facts"]["injected"] or {}).get("kind")}

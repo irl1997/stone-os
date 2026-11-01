@@ -29,14 +29,20 @@ const Bridge = (() => {
 const PerfAPI = { on: Bridge.on };
 ['getCapabilities', 'getState', 'getMetrics', 'homeReady', 'setProfile', 'setSessionProfile', 'startTest', 'cancelTest',
   'measureBaseline', 'saveTestResult', 'discardTestResult', 'restoreDefaults', 'enterSafeMode', 'exitSafeMode',
-  'setGameProfile', 'subscribe', 'unsubscribe'].forEach(m => { PerfAPI[m] = (...a) => Bridge.call('perf.' + m, ...a); });
+  'setGameProfile', 'subscribe', 'unsubscribe', 'getCalibration', 'startCalibration', 'cancelCalibration'].forEach(m => { PerfAPI[m] = (...a) => Bridge.call('perf.' + m, ...a); });
 /* Everything else the console needs from the system: Steam library and launching, power, versions, settings file. */
 const Sys = {
   library: () => Bridge.call('library'), launch: appid => Bridge.call('launch', appid), openSteam: k => Bridge.call('openSteam', k),
   power: a => Bridge.call('power', a), info: () => Bridge.call('systemInfo'),
   prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p),
   openSteamSettings: s => Bridge.call('openSteamSettings', s), restart: () => Bridge.call('restart'),
-  install: appid => Bridge.call('install', appid), emulators: () => Bridge.call('emulators'), emuInstall: k => Bridge.call('emuInstall', k)
+  install: appid => Bridge.call('install', appid), emulators: () => Bridge.call('emulators'), emuInstall: k => Bridge.call('emuInstall', k),
+  display: fresh => Bridge.call('display.status', fresh), displayPolicy: p => Bridge.call('display.gamePolicy', p),
+  /* STONE OPTIMIZED (stone_games/): the game profile behind JUGAR */
+  gameRecommended: (appid, mode) => Bridge.call('game.recommended', ...(mode ? [appid, mode] : [appid])),
+  gameProfile: appid => Bridge.call('game.profile', appid), gameModes: appid => Bridge.call('game.modes', appid),
+  gameApply: (appid, mode, cfg) => Bridge.call('game.apply', ...(cfg ? [appid, mode, cfg] : [appid, mode])),
+  gameStatus: () => Bridge.call('game.status'), gameRestore: appid => Bridge.call('game.restoreRecommended', appid)
 };
 async function sys(method, ...a) {
   try { return await Sys[method](...a); }

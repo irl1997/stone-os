@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# STONE OPTIMIZED from a terminal: game profiles, measurements, verification.
+import sys
+sys.path.insert(0, "/usr/lib/stone")
+from stone_games.cli import main
+sys.exit(main(sys.argv[1:]))

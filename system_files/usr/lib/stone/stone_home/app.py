@@ -121,7 +121,7 @@ class HomeWindow:
         self.win.set_child(self.view)
         size = os.environ.get("STONE_HOME_SIZE", "")
         w, _, h = size.partition("x")
-        if not selftest and w.isdigit() and h.isdigit() and 320 <= int(w) <= 3840 and 240 <= int(h) <= 2160:
+        if not selftest and w.isdigit() and h.isdigit() and 320 <= int(w) <= 7680 and 240 <= int(h) <= 4320:
             # Light drawing mode: a smaller window Gamescope scales to the screen (fewer pixels
             # to draw in software). The page scales itself to the window.
             self.win.set_decorated(False)

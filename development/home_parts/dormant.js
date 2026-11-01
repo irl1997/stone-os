@@ -32,6 +32,10 @@ window.addEventListener('focus', dormantCheck);
     console.info(`[stone] draw: ${Math.round(innerWidth * devicePixelRatio)}x${Math.round(innerHeight * devicePixelRatio)} dpr=${devicePixelRatio} gpu=${gpu}`);
     const lose = gl && gl.getExtension('WEBGL_lose_context');
     if (lose) lose.loseContext();
+    /* The window can still change size once after start (Gamescope, full screen): say so too. */
+    let rt = 0;
+    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() =>
+      console.info(`[stone] draw: ${Math.round(innerWidth * devicePixelRatio)}x${Math.round(innerHeight * devicePixelRatio)} dpr=${devicePixelRatio} (resized)`), 500); });
   } catch (e) { console.warn('[stone] draw: ' + e); }
 })();
 

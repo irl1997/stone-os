@@ -93,7 +93,7 @@ def set_gpu_temp(root, c):
 class Env:
     def __init__(self, board=True, gov_mode="normal", gov_case="lower", gov=True, polkit_off=True,
                  gpu_errors=False, test_seconds=3, workload=("sleep", "3600"), fan=True, thermal_scale=None,
-                 game_source="dbus", min_session_s=None, cu40=None):
+                 game_source="dbus", min_session_s=None, cu40=None, sclk_limit=None):
         self.tmp = tempfile.mkdtemp(prefix="stoned-test-")
         self.sysfs = os.path.join(self.tmp, "root")
         self.state_dir = os.path.join(self.tmp, "state")
@@ -120,6 +120,13 @@ class Env:
                         STONE_TEST_SECONDS=str(test_seconds), PATH=self.bin + ":" + os.environ["PATH"],
                         FAKE_GOV_MODE=gov_mode, FAKE_GOV_CASE=gov_case, FAKE_GOV_LOG=self.gov_log,
                         PYTHONPATH=LIB, STONE_CTL_ALLOW_USER="1")
+        if sclk_limit is not None:     # the simulated board follows the ceiling up to this clock
+            self.env["FAKE_GOV_SCLK"] = os.path.join(self.sysfs, "sys/class/drm/card1/device/pp_dpm_sclk")
+            self.env["FAKE_GOV_SCLK_LIMIT"] = str(sclk_limit)
+        self.env["STONE_RELEASE_FILE"] = os.path.join(self.tmp, "stone-release")
+        with open(self.env["STONE_RELEASE_FILE"], "w") as f:
+            f.write('STONE_GOVERNOR_VERSION="1.2-1"\n')
+        self.env["STONE_CU_VERIFY"] = os.path.join(self.tmp, "no-verify")      # vkmark-style workload in tests
         self.cmdline = os.path.join(self.tmp, "cmdline")
         with open(self.cmdline, "w") as f:
             f.write("quiet splash\n")
@@ -1136,6 +1143,209 @@ def C05_cancelling_a_baseline_touches_nothing(env):
     assert len(env.gov_calls()) == before, env.gov_calls()[before:]
 
 # ---------------------------------------------------------------- runner
+
+# ---------------------------------------------------------------- STONE PERFORMANCE 2.0
+def wait_cal_done(env, timeout=60):
+    end = time.time() + timeout
+    while time.time() < end:
+        c = env.call("GetCalibration")
+        if "running" not in c:
+            return c
+        time.sleep(0.3)
+    raise AssertionError("calibration did not finish")
+
+
+@integration()
+def P01_24cu_range_reproduces_the_factory_profiles(env):
+    c = env.call("GetCapabilities")
+    r = c["range"]
+    assert r["hardware"] == [1000, 2000] and r["baseline"] == 1500 and r["validated_max"] == 2000 and r["cu"] == 24, r
+    assert "factory" in r["validated_source"] and r["calibration"]["state"] == "none", r
+    st = env.call("GetState")
+    assert {k: v["max"] for k, v in st["profiles"].items()} == {"silent": 1500, "balanced": 1850, "performance": 2000}, st["profiles"]
+
+
+@integration(cu40=3)
+def P02_40cu_without_calibration_stays_at_the_baseline(env):
+    r = env.call("GetCapabilities")["range"]
+    assert r["cu"] == 40 and r["validated_max"] == 1500 and r["validated_source"].startswith("baseline"), r
+    st = env.call("SetProfile", "(s)", "performance")
+    assert st["actual"]["max"] == 1500 and st["profiles"]["performance"]["max"] == 1500, st["actual"]
+    bad = env.call("StartTest", "(ua{sv}s)", 0, V({"max": 1600, "min": 1000, "temp": 80, "resp": 1}), "quick")
+    assert "InvalidValue" in err(bad), bad              # CUSTOM never above the validated maximum
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P03_calibration_reaches_the_hardware_maximum_when_everything_passes(env):
+    st = env.call("StartCalibration", "(s)", "quick")
+    assert "running" in st["calibration"], st["calibration"]
+    c = wait_cal_done(env)
+    assert c["last"]["result"] == "complete" and c["last"]["validated_max"] == 2000, c["last"]
+    assert [s["mhz"] for s in c["last"]["steps"]] == list(range(1500, 2001, 50))
+    assert c["range"]["validated_max"] == 2000 and c["range"]["validated_source"] == "calibration", c["range"]
+    st = env.call("SetProfile", "(s)", "performance")
+    assert st["actual"]["max"] == 2000 and st["profiles"]["silent"]["max"] == 1500, st["actual"]
+    assert env.store().get_flag(S.FLAG_CALIBRATION) is None
+    # every step went through the governor and was read back; never above the hardware range
+    ranges = [c["args"][1] for c in env.gov_calls() if c.get("call") == "SetRange"]
+    assert max(ranges) == 2000 and 1550 in ranges, ranges
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=1700)
+def P04_this_board_validates_its_own_maximum_with_a_margin(env):
+    """A board that cannot hold more than 1700 MHz: 1850 still reaches 90 %, 1900 does not."""
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env)
+    last = c["last"]
+    assert last["failed_at"] == 1900 and last["result"] == "partial", last
+    assert last["validated_max"] == 1800, last                 # last pass 1850 - 50 MHz margin
+    assert c["range"]["validated_max"] == 1800
+    st = env.call("SetProfile", "(s)", "performance")
+    assert st["actual"]["max"] == 1800 and st["profiles"]["balanced"]["max"] == 1800, st
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P05_cancel_keeps_the_previous_result(env):
+    env.call("StartCalibration", "(s)", "quick")
+    wait_cal_done(env)
+    env.call("StartCalibration", "(s)", "quick")
+    time.sleep(1.5)
+    st = env.call("CancelCalibration")
+    c = env.call("GetCalibration")
+    assert "running" not in c and c["last"]["validated_max"] == 2000, c
+    assert env.store().get_flag(S.FLAG_CALIBRATION) is None
+    assert st["actual"]["max"] <= 2000
+
+
+@test
+def P06_crash_during_a_step_keeps_only_what_passed_and_counts_as_a_failure():
+    env = Env(cu40=3)
+    try:
+        store = env.store()
+        st = store.load()
+        store.save(st)
+        steps = [{"mhz": m, "passed": True} for m in (1500, 1550, 1600, 1650)]
+        store.set_flag(S.FLAG_CALIBRATION, {"step": 1700, "steps": steps, "level": "standard",
+                                            "config": {"cu": 40}, "machine": "m1", "workload": "stone-cu-verify"})
+        rep = env.recover()
+        st = store.load()
+        cal = st["calibration"]
+        assert cal["failed_at"] == 1700 and cal["validated_max"] == 1600 and cal["stopped"] == "crash", cal
+        assert rep["fail_count"] == 1 and st["last_failure"]["during"] == "calibration", (rep, st["last_failure"])
+        assert store.get_flag(S.FLAG_CALIBRATION) is None
+    finally:
+        env.close()
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P07_result_is_stale_after_a_governor_or_kernel_change(env):
+    env.call("StartCalibration", "(s)", "quick")
+    assert wait_cal_done(env)["range"]["validated_max"] == 2000
+    with open(env.env["STONE_RELEASE_FILE"], "w") as f:
+        f.write('STONE_GOVERNOR_VERSION="1.3-1"\n')
+    env.kill_stoned()
+    env.start_stoned()
+    r = env.call("GetCapabilities")["range"]
+    assert r["validated_max"] == 1500 and r["calibration"]["state"] == "stale", r
+    assert "GPU governor updated" in r["calibration"]["reasons"], r
+
+
+@integration()
+def P08_calibration_refuses_bad_requests(env):
+    assert "InvalidValue" in err(env.call("StartCalibration", "(s)", "forever"))
+    env.call("EnterSafeMode")
+    assert "Unsupported" in err(env.call("StartCalibration", "(s)", "quick"))
+    env.call("ExitSafeMode")
+    set_gpu_temp(env.sysfs, 75)
+    assert "ThermalLimit" in err(env.call("StartCalibration", "(s)", "quick"))
+
+
+@test
+def P09_controller_trims_for_heat_and_spare_frames_only_inside_the_range():
+    import sys as _s
+    _s.path.insert(0, LIB)
+    from stoned import controller as CTL
+    t = CTL.TrimState()
+    seen = [CTL.decide(t, 1900, 1500, 84, 85)[0] for _ in range(9)]      # hot: one step every 3 samples
+    assert seen[2] == 1850 and seen[5] == 1800 and seen[8] == 1750, seen
+    for _ in range(30):
+        CTL.decide(t, 1900, 1500, 50, 85)                                  # cool: back up, never above
+    assert t.trim == 0 and CTL.decide(t, 1900, 1500, 50, 85)[0] == 1900
+    t = CTL.TrimState()
+    for _ in range(40):
+        CTL.decide(t, 1900, 1500, 84, 85)
+    assert CTL.decide(t, 1900, 1500, 84, 85)[0] == 1500                    # never below the baseline
+    t = CTL.TrimState()
+    for _ in range(6):
+        c, why = CTL.decide(t, 1900, 1500, 60, 85, busy_pct=50, frame_ms=10.0, target_fps=60)
+    assert c == 1850 and why == "spare", (c, why)                          # 60 FPS held at half load
+    c, why = CTL.decide(t, 1900, 1500, 60, 85, busy_pct=99, frame_ms=20.0, target_fps=60)
+    assert c == 1900 and why == "short", (c, why)
+
+
+@test
+def P10_calibration_rules():
+    import sys as _s
+    _s.path.insert(0, LIB)
+    from stoned import calibration as C
+    assert C.steps(1500, 2000) == list(range(1500, 2001, 50)) and C.steps(1500, 1980)[-1] == 1980
+    assert C.validated_from([1500, 1550, 1600], None, 2000) == 1600          # stopped (thermal) without failing
+    assert C.validated_from([1500, 1550, 1600], 1650, 2000) == 1550
+    assert C.validated_from([1500], 1550, 2000) == 1500 and C.validated_from([], 1500, 2000) is None
+    assert C.validated_from(list(range(1500, 2001, 50)), None, 2000) == 2000
+    cfg = {"cu": 40, "vbios": "x", "kernel": "k1", "amdgpu": "a", "governor": "g", "test": C.CAL_VERSION}
+    rec = {"machine": "m", "config": dict(cfg), "validated_max": 1900, "result": "complete"}
+    assert C.status(rec, cfg, "m")["state"] == "complete"
+    assert C.status(rec, dict(cfg, cu=24), "m")["reasons"] == ["CU count changed"]
+    assert C.status(rec, cfg, "other")["state"] == "stale"
+    assert C.status(dict(rec, validated_max=None, stopped="crash"), cfg, "m")["state"] == "failed"
+    rng = C.performance_range({"hardware_range": (1000, 2000)}, rec, cfg, "m")
+    assert rng["validated_max"] == 1900 and rng["baseline"] == 1500
+    rng = C.performance_range({"hardware_range": (1000, 2000)}, dict(rec, validated_max=2400), cfg, "m")
+    assert rng["validated_max"] == 2000                                    # never above the governor's range
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=1700)
+def P11_stonectl_calibrate_and_calibration(env):
+    code, out = ctl(env, "calibration")
+    assert code == 0 and "40 CU" in out and "Máximo validado:  1500 MHz" in out and "1000–2000 MHz" in out, out
+    code, out = ctl(env, "calibrate", "quick")
+    assert code == 0 and "Máximo validado:  1800 MHz (calibración de esta consola)" in out and "1900✗" in out, out
+    code, out = ctl(env, "calibrate", "forever")
+    assert code == 2, out
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P12_heat_during_calibration_stops_it_and_keeps_what_stayed_cool(env):
+    import threading
+    env.call("StartCalibration", "(s)", "quick")
+    threading.Timer(4.5, lambda: set_gpu_temp(env.sysfs, 95)).start()
+    c = wait_cal_done(env)
+    last = c["last"]
+    assert last["result"] == "thermal" and last["validated_max"] is not None, last
+    assert last["validated_max"] < 2000 and c["range"]["validated_max"] == last["validated_max"], last
+    set_gpu_temp(env.sysfs, 55)
+    st = env.call("GetState")
+    assert st["actual"]["max"] <= last["validated_max"], st["actual"]
+
+
+@integration(cu40=3, test_seconds=3, sclk_limit=9999, workload=("sleep", "3599"))
+def P13_wrong_gpu_results_fail_the_step_and_nothing_is_validated(env):
+    """stone-cu-verify (here a stand-in that reports wrong results) runs next to the load."""
+    v = env.env["STONE_CU_VERIFY"]
+    with open(v, "w") as f:
+        f.write("#!/bin/sh\nsleep 1\necho 'mismatch'\nexit 2\n")
+    os.chmod(v, 0o755)
+    open(v + ".spv", "w").close()
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env)
+    last = c["last"]
+    assert last["steps"][0]["reason"] == "wrong_results" and last.get("validated_max") is None, last
+    assert last["workload"] == "stone-cu-verify + vkmark", last
+    assert c["range"]["validated_max"] == 1500 and c["range"]["calibration"]["state"] == "failed", c["range"]
+    time.sleep(0.5)
+    assert subprocess.run(["pgrep", "-f", "^sleep 3599$"], capture_output=True).returncode != 0   # the load was stopped too
+
 def main():
     only = sys.argv[1:]
     passed = failed = 0

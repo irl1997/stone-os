@@ -9,6 +9,35 @@ const RENDER_TXT = ['Chromium con la GPU, a la resolución del televisor. Recome
   'Respaldo sin GPU (WebKit). Úsalo sólo si GPU falla: a 4K va lento'];
 /* The resolution STONE is drawn at, in real pixels. */
 const drawRes = () => `${Math.round(innerWidth * devicePixelRatio)} × ${Math.round(innerHeight * devicePixelRatio)}`;
+/* STONE DISPLAY (stone_display/ through the host; the page never reads Linux). Read when Pantalla
+   opens and again when the host says the display changed. */
+const resTxt = m => m && m.w ? `${m.w} × ${m.h}${m.hz ? ' · ' + m.hz + ' Hz' : ''}` : 'Desconocida';
+function loadDisplay(fresh) {
+  S.dispLoading = true;
+  Sys.display(!!fresh).then(r => { S.disp = r; }, () => { S.disp = { error: true }; }).then(() => {
+    S.dispLoading = false;
+    if (S.screen === 'settings' && CATS[cat] === 'Pantalla') enterSettings({ pane: !!NAV.pane, ri: NAV.pane ? NAV.c : 0 });
+  });
+}
+Bridge.on('display', () => { S.disp = null; if (S.screen === 'settings' && CATS[cat] === 'Pantalla') loadDisplay(true); });
+function displayRows() {
+  const D = S.disp;
+  if (!D) { if (!S.dispLoading) loadDisplay(); return [{ l: 'Televisor', s: 'Leyendo la pantalla…', v: '', ro: true }]; }
+  if (D.error) return [{ l: 'Televisor', s: 'No se pudo leer la pantalla', v: '', ro: true }];
+  if (!D.connected) return [{ l: 'Televisor', s: 'No hay ninguna pantalla conectada', v: '', ro: true }];
+  const caps = [D.vrr && D.vrr.supported ? (D.vrr.range ? `VRR ${D.vrr.range.min}–${D.vrr.range.max} Hz` : 'VRR') : null,
+    D.hdr && D.hdr.supported ? 'HDR' : null, D.max_hz ? `hasta ${D.max_hz} Hz` : null].filter(Boolean).join(' · ');
+  const warn = (D.findings || []).find(f => f.level === 'warn');
+  const games = D.game_env ? `${D.game_env.w} × ${D.game_env.h}` : 'Desconocida';
+  return [
+    { l: 'Televisor', s: `${D.name || 'Pantalla'}${D.connection ? ' · ' + D.connection : ''}${caps ? ' · ' + caps : ''}`, v: resTxt(D.native), act: 'info',
+      where: warn ? warn.text : `Nativa ${resTxt(D.native)}. Salida actual ${resTxt(D.output)}. Diagnóstico completo: stonectl display` },
+    { l: 'Salida', s: D.output ? (D.native && D.output.w < D.native.w ? 'Por debajo de la nativa del televisor' : 'La que envía la consola al televisor') : 'Steam no respondió todavía',
+      v: resTxt(D.output), act: 'info', where: D.native && D.output && D.output.w < D.native.w
+        ? 'Botón STEAM → Ajustes → Pantalla → Resolución: elige la nativa del televisor' : 'La resolución de salida la fija Steam (Ajustes → Pantalla)' },
+    { l: 'Juegos ven', s: D.policy === 'native' ? 'La resolución del televisor; cada juego decide cómo dibujar' : 'Lo que Steam da por defecto',
+      v: D.policy === 'native' ? `Televisor · ${games}` : `Steam · ${games}`, key: 'gameres' }];
+}
 /* Emulators: fixed catalog in the host (stone_home/emulators.py), installed from Flathub. */
 const EMU_STATE = {};
 function loadEmulators() {
@@ -77,6 +106,7 @@ function catRows() {
   const rel = (S.info && S.info.release) || {}, dep = (S.info && S.info.deployments) || null;
   switch (CATS[cat]) {
     case 'Pantalla': return { d: 'Ajusta cómo se ve STONE en tu televisor.', rows: [
+      ...displayRows(),
       { l: 'Área segura', s: 'Usa ← → hasta que las cuatro esquinas se vean completas', v: `${S.safe} %`, key: 'safe' },
       steam('Resolución y frecuencia', 'Las fija Steam para todo el sistema', 'Botón STEAM → Ajustes → Pantalla'),
       steam('HDR', 'Según el televisor y el juego', 'Botón STEAM → Ajustes → Pantalla'),
@@ -134,6 +164,16 @@ function cu40Row() {
     + 'Si la prueba falla, STONE vuelve sola a 24 CU. Para apagarlo: sudo stone-cu40 disable';
   if (!S.caps) return { l: 'GPU · unidades de cálculo', s: 'Leyendo…', v: '' };
   if (!c || !c.available) return { l: 'GPU · unidades de cálculo', s: 'Esta versión de STONE OS no trae el desbloqueo de 40 CU', v: '24 CU' };
-  if (c.active) return { l: 'GPU · unidades de cálculo', s: `40 CU en uso · STONE limita la GPU a ${c.ceiling_mhz} MHz en todos los perfiles`, v: '40 CU', act: 'info', where: 'Estado y prueba: sudo stone-cu40 status · sudo stone-cu40 test. Para apagarlo: sudo stone-cu40 disable' };
+  if (c.active) return { l: 'GPU · unidades de cálculo', s: `40 CU en uso · máximo validado de esta consola: ${c.ceiling_mhz} MHz`, v: '40 CU', act: 'info', where: 'Para buscar el máximo estable de esta consola: stonectl calibrate (terminal). Estado: stonectl calibration. 40 CU: sudo stone-cu40 status' };
   return { l: 'GPU · unidades de cálculo', s: '24 CU en uso · 40 CU disponible, se activa a mano con prueba de estabilidad', v: '24 CU', act: 'info', where: how };
+}
+
+/* Game resolution environment (Juegos ven): Televisor = every game sees the display's own
+   resolution (Steam "Native"); Steam = Steam's default. The host applies it to every game. */
+function setGamePolicy() {
+  const next = S.disp && S.disp.policy === 'native' ? 1 : 0;
+  play('select');
+  toast(next === 0 ? 'Los juegos verán la resolución del televisor' : 'Los juegos usarán la resolución que Steam da por defecto', false);
+  Sys.displayPolicy(next).then(r => { if (r && !r.ok) toast('Steam no respondió: se aplica al abrir el próximo juego', false); })
+    .catch(() => {}).then(() => { S.disp = null; loadDisplay(true); });
 }

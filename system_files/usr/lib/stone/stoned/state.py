@@ -32,6 +32,7 @@ FLAG_BOOT = "boot-in-progress"        # set by --recover, cleared once Home has 
 FLAG_TRIAL = "trial"                  # a stability test is applying draft values
 FLAG_PROVISIONAL = "provisional"      # a not-yet-validated slot is applied right now
 FLAG_CLEAN = "clean-shutdown"         # written by the orderly shutdown path only
+FLAG_CALIBRATION = "calibration"      # a calibration step is applied right now (step, passed so far)
 # Written by `stonectl` (as root) when stoned cannot be reached; read at the next boot.
 FLAG_SAFE_REQUEST = "safe-request"
 FLAG_SAFE_EXIT = "safe-exit"
@@ -54,6 +55,7 @@ def default_state():
         "safe_reason": None,             # "failures" | "kernel" | "manual"
         "last_failure": None,
         "tests": [],                     # recent stability-test results (BEFORE / AFTER)
+        "calibration": None,             # STONE CALIBRATION result for this machine (calibration.py)
     }
 
 
@@ -120,6 +122,10 @@ def _sanitize(raw):
     st["last_failure"] = raw.get("last_failure") if isinstance(raw.get("last_failure"), dict) else None
     if isinstance(raw.get("tests"), list):
         st["tests"] = [t for t in raw["tests"] if isinstance(t, dict)][-10:]
+    cal = raw.get("calibration")
+    if isinstance(cal, dict) and isinstance(cal.get("config"), dict) and \
+            (cal.get("validated_max") is None or (isinstance(cal.get("validated_max"), int) and 1000 <= cal["validated_max"] <= 2500)):
+        st["calibration"] = cal
     for key in ("profile", "last_known_good"):
         if is_profile_id(raw.get(key), st["slots"]):
             st[key] = raw[key]

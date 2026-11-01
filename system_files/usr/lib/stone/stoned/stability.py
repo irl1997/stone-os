@@ -27,6 +27,7 @@ CONF = os.environ.get("STONE_STABILITY_CONF", "/usr/lib/stone/stability.json")
 DEFAULT_CMD = ["vkmark", "--winsys", "headless", "--run-forever"]
 AMDGPU_ERRORS = ("ring gfx timeout", "gpu reset", "amdgpu: *error*", "page fault", "gpu hang")
 TEMP_MARGIN = 5
+CPU_STOP_C = 95          # calibration steps stop here (Zen 2 TJmax is 100 C)
 
 
 def workload_cmd():
@@ -79,10 +80,11 @@ def compare(before, after):
 
 
 class Run:
-    def __init__(self, slot, values, level, backend, clock=time.monotonic):
+    def __init__(self, slot, values, level, backend, clock=time.monotonic, cmd=None, duration=None):
         self.slot, self.values, self.level = slot, values, level
         self.backend, self.clock = backend, clock
-        self.duration = int(os.environ.get("STONE_TEST_SECONDS", P.TEST_LEVELS[level]))
+        self.cmd = cmd                      # calibration: stone-cu-verify instead of the default load
+        self.duration = int(os.environ.get("STONE_TEST_SECONDS") or duration or P.TEST_LEVELS[level])
         self.t0 = self.clock()
         self.wall0 = time.time()
         self.proc = None
@@ -91,7 +93,7 @@ class Run:
         self.reason = None
 
     def start(self):
-        self.proc = subprocess.Popen(workload_cmd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        self.proc = subprocess.Popen(self.cmd or workload_cmd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL, start_new_session=True)
 
     def sample(self):
@@ -104,22 +106,34 @@ class Run:
                              "clock": m.get("gpu_clock_mhz"), "power": m.get("gpu_power_w")})
         if t is not None and t > self.values["temp"] + TEMP_MARGIN:
             return self.finish(False, "thermal")
+        c = m.get("cpu_temp_c")
+        if self.cmd and c is not None and c >= CPU_STOP_C:
+            # calibration: a 40 CU GPU at high clocks also heats the CPU next to it (one die)
+            return self.finish(False, "cpu_thermal")
         if self.proc and self.proc.poll() is not None and self.proc.returncode != 0:
-            return self.finish(False, "workload_failed")
+            # stone-cu-verify exits 2 when the GPU computed wrong results
+            return self.finish(False, "wrong_results" if self.cmd and self.proc.returncode == 2 else "workload_failed")
         if self.clock() - self.t0 >= self.duration:
             return self.finish(True, None)
         return None
 
     def stop_workload(self):
-        if self.proc and self.proc.poll() is None:
-            try:
-                os.killpg(self.proc.pid, signal.SIGTERM)
-                self.proc.wait(timeout=5)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                try:
-                    os.killpg(self.proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+        """The whole process group, also when its leader already ended (a calibration load
+        started next to stone-cu-verify must not outlive it)."""
+        if not self.proc:
+            return
+        try:
+            os.killpg(self.proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            os.killpg(self.proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
 
     def finish(self, ok, reason):
         self.stop_workload()

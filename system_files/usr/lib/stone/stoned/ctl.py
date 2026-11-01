@@ -5,6 +5,10 @@ For when the interface cannot be used. Commands:
   stonectl status
   stonectl safe-mode on|off
   stonectl restore-defaults
+  stonectl display [--json | diagnostics]   (STONE DISPLAY, see stone_display/cli.py)
+  stonectl calibration                     STONE PERFORMANCE: range, validated maximum, last result
+  stonectl calibrate [quick|standard]      search THIS machine's highest stable GPU ceiling
+                                           (progress on screen; Ctrl+C cancels and keeps the old result)
 
 It asks stoned over D-Bus first. If stoned does not answer, or polkit refuses (a remote
 session), and stonectl runs as root, it leaves a request in /var/lib/stone/flags that
@@ -20,7 +24,8 @@ from . import state as S
 
 NAME = "org.stonemachine.Performance1"
 PATH = "/org/stonemachine/Performance1"
-USAGE = "uso: stonectl status | safe-mode on|off | restore-defaults"
+USAGE = ("uso: stonectl status | safe-mode on|off | restore-defaults | display [--json | diagnostics] | "
+         "calibration | calibrate [quick|standard]")
 
 TEXT = {
     "failures": "dos arranques seguidos sin terminar bien",
@@ -35,11 +40,11 @@ def _bus():
     return Gio.bus_get_sync(kind, None)
 
 
-def _call(method):
+def _call(method, args=None):
     from gi.repository import Gio, GLib
     bus = _bus()
     try:
-        r = bus.call_sync(NAME, PATH, NAME, method, None, GLib.VariantType("(a{sv})"),
+        r = bus.call_sync(NAME, PATH, NAME, method, args, GLib.VariantType("(a{sv})"),
                           Gio.DBusCallFlags.NONE, 10000, None)
         return r.unpack()[0], None
     except GLib.Error as e:
@@ -108,7 +113,82 @@ def restore_defaults(out):
     return 1
 
 
+SOURCE = {"calibration": "calibración de esta consola"}
+RESULT = {"complete": "completa: llegó al máximo del regulador", "partial": "falló un paso: se guardó el anterior con margen",
+          "thermal": "se detuvo por temperatura", "failed": "no pasó ni la línea base"}
+
+
+def calibration(out):
+    c, err = _call("GetCalibration")
+    if c is None:
+        out.write(f"stoned no responde ({err}).\n")
+        return 1
+    r = c.get("range") or {}
+    cal = r.get("calibration") or {}
+    hw = r.get("hardware") or [None, None]
+    lines = ["STONE PERFORMANCE",
+             f"  GPU:              {r.get('cu', '?')} CU",
+             f"  Rango del regulador (hardware): {hw[0]}–{hw[1]} MHz",
+             f"  Línea base:       {r.get('baseline')} MHz",
+             f"  Máximo validado:  {r.get('validated_max')} MHz ({SOURCE.get(r.get('validated_source'), r.get('validated_source'))})",
+             f"  Calibración:      {cal.get('state')}" + (f" ({', '.join(cal.get('reasons') or [])})" if cal.get("reasons") else "")]
+    last = c.get("last")
+    if last:
+        steps = last.get("steps") or []
+        lines += [f"  Último resultado: {RESULT.get(last.get('result'), last.get('result'))}"
+                  + (f", falló a {last['failed_at']} MHz" if last.get("failed_at") else "")
+                  + (f", máx {last['max_temp_c']} °C" if last.get("max_temp_c") else ""),
+                  "  Pasos:            " + " ".join(f"{s['mhz']}{'✓' if s['passed'] else '✗'}" for s in steps)]
+    run = c.get("running")
+    if run:
+        lines.append(f"  EN CURSO: paso {run['step']}/{run['of']} a {run['step_mhz']} MHz, {run['seconds']}/{run['step_seconds']} s")
+    out.write("\n".join(lines) + "\n")
+    return 0
+
+
+def calibrate(level, out, poll=2.0):
+    from gi.repository import GLib
+    import time
+    st, err = _call("StartCalibration", GLib.Variant("(s)", (level,)))
+    if st is None:
+        out.write(f"No se pudo empezar ({err}).\n")
+        return 1
+    out.write(f"Calibración {level}: STONE sube la GPU de 50 en 50 MHz y prueba cada paso con carga y comprobación de resultados.\n"
+              "Se detiene sola ante el primer error o calor. Ctrl+C cancela (se conserva el resultado anterior).\n")
+    try:
+        while True:
+            c, err = _call("GetCalibration")
+            if c is None:
+                out.write(f"stoned dejó de responder ({err}).\n")
+                return 1
+            run = c.get("running")
+            if not run:
+                break
+            out.write(f"\r  paso {run['step']}/{run['of']}: {run['step_mhz']} MHz · {run['seconds']}/{run['step_seconds']} s"
+                      f" · máx {run.get('max_temp_c') or '?'} °C · pasados: {len(run.get('passed') or [])}   ")
+            out.flush()
+            time.sleep(poll)
+    except KeyboardInterrupt:
+        _call("CancelCalibration")
+        out.write("\nCancelada. Se conserva el resultado anterior.\n")
+        return 1
+    out.write("\n")
+    return calibration(out)
+
+
 def main(argv, out=sys.stdout):
+    if argv == ["calibration"]:
+        return calibration(out)
+    if argv[:1] == ["calibrate"] and len(argv) <= 2:
+        level = argv[1] if len(argv) == 2 else "standard"
+        if level not in ("quick", "standard"):
+            out.write(USAGE + "\n")
+            return 2
+        return calibrate(level, out)
+    if argv[:1] == ["display"]:
+        # STONE DISPLAY (the console user's view: Steam's display state comes from their Steam)
+        from stone_display.cli import main as display_main
+        return display_main(argv[1:], out)
     if argv == ["status"]:
         return status(out)
     if len(argv) == 2 and argv[0] == "safe-mode" and argv[1] in ("on", "off"):

@@ -6,6 +6,8 @@
 #   tests/run_tests.py       stoned: recovery, governor, telemetry, thermal, Safe Mode, games, comparison
 #   tests/test_cu40.py       stone-cu40: 40 CU opt-in, test, boot guard (fake rpm-ostree/sysfs)
 #   tests/test_home.py       STONE Home: library, shortcut, host, bridge against a real stoned
+#   tests/test_display.py    STONE DISPLAY: EDID, connectors, Steam display state, output policy, game environment
+#   tests/test_games.py      STONE OPTIMIZED: game profiles, graphics paths, metrics, score, launch/exit/crash flows
 #   tests/test_server.py     the Chromium shell transport: secret path, host and origin checks
 #   tests/chromium_selftest.py the real Chromium shell at 3840x2160 against a real stoned (xvfb-run + Chromium)
 #   tests/webkit_selftest.py the real GTK/WebKit shell against a real stoned (needs xvfb-run + WebKitGTK 6)
@@ -16,6 +18,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 PY="${PYTHON:-python3}"
+# Nothing a suite writes (game profiles, launch-option records, display state) lands in the real home.
+XDG_STATE_HOME="$(mktemp -d)"; XDG_DATA_HOME="$(mktemp -d)"; export XDG_STATE_HOME XDG_DATA_HOME
+trap 'rm -rf "$XDG_STATE_HOME" "$XDG_DATA_HOME"' EXIT
 fails=0; skips=0
 run() { local name="$1"; shift; echo "=== ${name}"; if "$@"; then echo "PASS  ${name}"; else echo "FAIL  ${name}"; fails=$((fails + 1)); fi; }
 skip() { if [[ "${STONE_REQUIRE_ALL:-0}" == 1 ]]; then echo "FAIL  $1 (cannot run: $2)"; fails=$((fails + 1)); else echo "SKIP  $1 ($2)"; skips=$((skips + 1)); fi; }
@@ -24,6 +29,8 @@ run "stoned suite" "$PY" tests/run_tests.py
 run "stone-cu40 suite" "$PY" tests/test_cu40.py
 run "40 CU kernel change (anchors)" "$PY" tests/test_cu40_patch.py
 run "STONE Home suite" "$PY" tests/test_home.py
+run "STONE DISPLAY suite" "$PY" tests/test_display.py
+run "STONE OPTIMIZED suite" "$PY" tests/test_games.py
 run "STONE Home transport (server)" "$PY" tests/test_server.py
 run "Chromium shell self-test (4K)" "$PY" tests/chromium_selftest.py
 if command -v xvfb-run >/dev/null && "$PY" -c "import gi; gi.require_version('WebKit','6.0'); gi.require_version('Gtk','4.0')" 2>/dev/null; then

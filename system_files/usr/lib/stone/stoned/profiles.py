@@ -32,10 +32,30 @@ RESPONSE = {0: (0.80, 0.65), 1: (0.65, 0.50), 2: (0.50, 0.35)}
 TEST_LEVELS = {"quick": 300, "standard": 1800, "extended": 7200}   # seconds
 
 
-def resolve(pid, st):
+def factory(pid, rng=None):
+    """SILENT / BALANCED / PERFORMANCE for THIS machine's performance range (calibration.py):
+    SILENT     the baseline ceiling, low temperature limit: efficiency and noise first.
+    BALANCED   the global default: the validated maximum, but not above the governor's own
+               factory value (BALANCED_CAP).
+    PERFORMANCE may use up to the VALIDATED maximum when the load asks for it. The governor still
+               scales the clock with load, so PERFORMANCE does not mean "always at maximum".
+    Without a range (no governor): the governor's factory values."""
+    v = dict(FACTORY[pid])
+    if not rng or not rng.get("validated_max"):
+        return v
+    base, top = rng["baseline"], rng["validated_max"]
+    v["max"] = {"silent": base, "balanced": min(top, BALANCED_CAP), "performance": top}[pid]
+    v["max"] = max(v["max"], STONE_MAX[0])
+    return v
+
+
+BALANCED_CAP = 1850
+
+
+def resolve(pid, st, rng=None):
     """Profile id -> concrete values, or raise."""
     if pid in FACTORY:
-        return dict(FACTORY[pid])
+        return factory(pid, rng)
     k = S.slot_index(pid)
     if k is None or st["slots"][k] is None:
         raise StoneError(INVALID_VALUE, f"unknown profile {pid!r}")
@@ -76,13 +96,14 @@ def validate_values(values, caps):
     return {"max": mx, "min": mn, "temp": temp, "resp": resp}
 
 
-def check_can_apply(values, caps, st, current, gpu_temp, testing, thermal_reduced=False):
+def check_can_apply(values, caps, st, current, gpu_temp, testing, thermal_reduced=False, rng=None):
     """Mode, hardware and thermal checks for anything about to reach the governor."""
     if not caps.get("governor"):
         raise StoneError(UNSUPPORTED, "GPU governor not available")
     if testing:
         raise StoneError(BUSY, "a stability test is running")
-    if st["safe_mode"] and (values["max"] > FACTORY["balanced"]["max"] or values["temp"] > FACTORY["balanced"]["temp"]):
+    bal = factory("balanced", rng)
+    if st["safe_mode"] and (values["max"] > bal["max"] or values["temp"] > bal["temp"]):
         raise StoneError(SAFE_MODE, "Safe Mode: nothing above BALANCED")
     if thermal_reduced and values["max"] > FACTORY["silent"]["max"]:
         raise StoneError(THERMAL_LIMIT, "performance reduced by the thermal watch until the GPU cools down")

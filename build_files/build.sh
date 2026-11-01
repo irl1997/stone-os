@@ -69,6 +69,25 @@ dnf5 -y install webkitgtk6.0 gtk4
 python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('WebKit', '6.0'); from gi.repository import Gtk, WebKit" \
     || { echo "ERROR: WebKitGTK 6 / GTK 4 bindings missing; STONE Home cannot run"; exit 1; }
 python3 -m compileall -q /usr/lib/stone/stone_home
+## STONE DISPLAY (stone_display/): display hotplug events come from udev through GUdev; without
+## it the model is still right, it is just re-read when STONE Home opens Pantalla.
+python3 -m compileall -q /usr/lib/stone/stone_display
+## STONE OPTIMIZED (stone_games/): game profiles. Built-in profiles are checked here with the same
+## rules as at run time; MangoHud (Bazzite ships it) is what measures frames.
+python3 -m compileall -q /usr/lib/stone/stone_games
+python3 -c "
+import glob, json, sys
+sys.path.insert(0, '/usr/lib/stone')
+from stone_games import schema
+for p in glob.glob('/usr/share/stone/game-profiles/steam/*.json'):
+    schema.clean_profile(json.load(open(p)), 'builtin')
+" || { echo "ERROR: a built-in STONE game profile is invalid"; exit 1; }
+command -v mangohud >/dev/null 2>&1 || ls /usr/lib64/mangohud/libMangoHud*.so >/dev/null 2>&1 \
+    || echo "WARNING: MangoHud not found; STONE OPTIMIZED cannot measure games on this image"
+python3 -c "import gi; gi.require_version('GUdev', '1.0'); from gi.repository import GUdev" \
+    || dnf5 -y install --skip-unavailable libgudev
+python3 -c "import gi; gi.require_version('GUdev', '1.0'); from gi.repository import GUdev" \
+    || echo "WARNING: GUdev not available; STONE DISPLAY will not see display hotplug events"
 test -x /usr/libexec/stone-home || { echo "ERROR: /usr/libexec/stone-home missing"; exit 1; }
 test -x /usr/bin/steam || { echo "ERROR: /usr/bin/steam missing; STONE Home launches games through Steam"; exit 1; }
 ## The Game Mode session STONE Home rides along with (gamescope-session-plus, user unit).

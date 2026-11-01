@@ -20,6 +20,8 @@ from gi.repository import Gio, GLib
 from . import state as S
 from . import profiles as P
 from . import stability
+from . import calibration as C
+from . import controller as CTL
 from . import recover as recover_mod
 from .telemetry import Telemetry
 from .thermal import ThermalWatch
@@ -57,6 +59,9 @@ XML = f"""
     <method name="SetGameProfile"><arg type="s" name="appid" direction="in"/><arg type="s" name="profile" direction="in"/><arg type="a{{sv}}" direction="out"/></method>
     <method name="GameStarted"><arg type="s" name="appid" direction="in"/><arg type="a{{sv}}" direction="out"/></method>
     <method name="GameEnded"><arg type="s" name="appid" direction="in"/><arg type="b" name="normal" direction="in"/><arg type="a{{sv}}" direction="out"/></method>
+    <method name="GetCalibration"><arg type="a{{sv}}" direction="out"/></method>
+    <method name="StartCalibration"><arg type="s" name="level" direction="in"/><arg type="a{{sv}}" direction="out"/></method>
+    <method name="CancelCalibration"><arg type="a{{sv}}" direction="out"/></method>
     <signal name="StateChanged"><arg type="a{{sv}}"/></signal>
     <signal name="TestFinished"><arg type="a{{sv}}"/></signal>
     <method name="Subscribe"><arg type="s" name="context" direction="in"/><arg type="a{{sv}}" direction="out"/></method>
@@ -73,7 +78,8 @@ WRITE_METHODS = {"HomeReady": ACT_CHANGE, "SetProfile": ACT_CHANGE, "RestoreDefa
                  "SetGameProfile": ACT_CHANGE, "GameStarted": ACT_CHANGE, "GameEnded": ACT_CHANGE,
                  "StartTest": ACT_TUNE, "CancelTest": ACT_CHANGE, "SaveTestResult": ACT_TUNE,
                  "DiscardTestResult": ACT_CHANGE, "SetSessionProfile": ACT_CHANGE,
-                 "EnterSafeMode": ACT_CHANGE, "ExitSafeMode": ACT_CHANGE, "MeasureBaseline": ACT_TUNE}
+                 "EnterSafeMode": ACT_CHANGE, "ExitSafeMode": ACT_CHANGE, "MeasureBaseline": ACT_TUNE,
+                 "StartCalibration": ACT_TUNE, "CancelCalibration": ACT_CHANGE}
 
 
 def to_variant(v):
@@ -117,6 +123,9 @@ class Service:
         self.backend = backend or BC250Backend(bus)
         self.st = self.store.load()
         self.caps = self.backend.capabilities()
+        self.cal = None                # running calibration {"level","steps","plan","run","done"}
+        self.trim = CTL.TrimState()    # dynamic controller during games
+        self._refresh_range()
         self.applied = None            # profile id stoned last applied, or None (governor factory)
         self.run = None                # running stability test
         self.run_timer = 0
@@ -134,6 +143,7 @@ class Service:
         self.game_source = os.environ.get("STONE_GAME_SOURCE", "steam")
         self.steam = None
         self._recover_from_service_crash()
+        self._recover_calibration_crash()
         self._enforce_ceiling()
         GLib.timeout_add_seconds(CEILING_CHECK_S, lambda: (self._enforce_ceiling(), True)[1])
         if self.game_source == "steam":
@@ -170,14 +180,43 @@ class Service:
         except StoneError as e:
             log(f"stoned: could not apply the 40 CU ceiling: {e.code} {e.message}")
 
+    def _refresh_range(self):
+        """Performance range of THIS machine now (calibration.py); the backend enforces its
+        validated maximum on everything that reaches the governor."""
+        self.config = C.configuration(self.backend, self.caps)
+        self.machine = C.machine_id(self.backend)
+        self.range = C.performance_range(self.caps, self.st.get("calibration"), self.config, self.machine)
+        if self.caps.get("governor"):
+            self.backend.set_ceiling(self.range["validated_max"])
+
+    def _recover_calibration_crash(self):
+        """stoned restarted during a calibration step (not a reboot: recover.py handles that)."""
+        flag = self.store.get_flag(S.FLAG_CALIBRATION)
+        if flag is None:
+            return
+        log("stoned: calibration interrupted by a service restart")
+        self._store_calibration(C.record(flag.get("machine", self.machine), flag.get("config", self.config),
+                                         flag.get("level", "quick"), flag.get("steps", []), flag.get("step"),
+                                         "interrupted", (self.range["hardware"] or [0, 0])[1], flag.get("workload")))
+        self.store.clear_flag(S.FLAG_CALIBRATION)
+        try:
+            self._apply_profile(self.st["last_known_good"])
+        except StoneError as e:
+            self.rollback_notice = e.code
+
+    def _store_calibration(self, rec):
+        self.st["calibration"] = rec
+        self._save()
+        self._refresh_range()
+
     # ---- helpers ----------------------------------------------------------------------
     def _save(self):
         self.store.save(self.st)
         self.st = self.store.load()
 
     def _apply_profile(self, pid):
-        values = P.resolve(pid, self.st)
-        if self.thermal_reduced and values["max"] > P.FACTORY["silent"]["max"]:
+        values = P.resolve(pid, self.st, self.range)
+        if self.thermal_reduced and values["max"] > P.factory("silent", self.range)["max"]:
             # The thermal watch holds SILENT until the GPU cools; the profile comes back then.
             return self._actual()
         actual = self.backend.apply(values)
@@ -216,6 +255,10 @@ class Service:
             "thermal": dict(self.thermal.view(), reduced=self.thermal_reduced, last=self.thermal_notice),
             "telemetry": self.telemetry.status(),
             "games": self.steam.status() if self.steam else {"source": self.game_source},
+            "range": self.range,
+            "profiles": {pid: P.factory(pid, self.range) for pid in S.FACTORY_PROFILES},
+            "calibration": self._cal_view() if self.cal is not None else {"running": None, "last": (self.st.get("calibration") or {}).get("result")},
+            "dynamic": {"trim_mhz": self.trim.trim},
         }
 
     def _test_view(self):
@@ -240,6 +283,13 @@ class Service:
         c["temp_range"] = list(P.STONE_TEMP)
         c["stability_test"] = stability.available() and c["governor"]
         c["advanced"] = c["governor"]     # CUSTOM and advanced need the full chain
+        c["calibration"] = c["governor"] and (C.workload(60)[0] is not None or stability.available())
+        c["range"] = self.range
+        c["hardware_range"] = list(c.get("hardware_range") or c["gpu_range"])
+        cu = dict(c.get("cu40") or {})
+        if cu.get("active"):
+            cu["ceiling_mhz"] = self.range["validated_max"]          # THIS machine's validated maximum
+        c["cu40"] = cu
         c.pop("initial_range", None)
         return c
 
@@ -247,7 +297,17 @@ class Service:
         return self.state()
 
     def GetMetrics(self):
-        return self.telemetry.sample()
+        """Live readings + what the future STONE GAME PROFILE needs from STONE PERFORMANCE."""
+        m = dict(self.telemetry.sample())
+        a = self._actual()
+        limit = a.get("temp") if isinstance(a, dict) else None
+        t = m.get("gpu_temp_c")
+        m.update(cu_count=self.range.get("cu"), validated_max_mhz=self.range.get("validated_max"),
+                 baseline_mhz=self.range.get("baseline"), ceiling_mhz=a.get("max") if isinstance(a, dict) else None,
+                 thermal_headroom_c=round(limit - t, 1) if (limit and t is not None) else None,
+                 governor="ok" if self.caps.get("governor") and "error" not in a else "unavailable",
+                 profile=self._effective(), dynamic_trim_mhz=self.trim.trim)
+        return m
 
     # ---- telemetry and thermal watch ----------------------------------------------------
     def Subscribe(self, sender, context):
@@ -268,10 +328,31 @@ class Service:
         fan = last["fan_rpm"] if fresh else self.backend._val("fan_rpm")
         before = self.thermal.interval_s()
         self.thermal.update(gpu, fan)
+        self._dynamic(gpu, (last or {}).get("gpu_busy_pct") if fresh else None)
         if self.thermal.interval_s() != before:
             self._thermal_timer = GLib.timeout_add(int(self.thermal.interval_s() * 1000), self._thermal_tick)
             return False
         return True
+
+    def _dynamic(self, gpu_temp, busy):
+        """Dynamic controller (controller.py) during a game: the ceiling moves inside
+        [baseline, profile maximum] for thermal headroom; the governor does the rest."""
+        if not (self.game and self.caps.get("governor") and not self.run and self.cal is None
+                and not self.thermal_reduced and not self.st["safe_mode"]):
+            return
+        try:
+            values = P.resolve(self.game["profile"], self.st, self.range)
+        except StoneError:
+            return
+        ceiling, why = CTL.decide(self.trim, values["max"], self.range["baseline"], gpu_temp, values["temp"], busy)
+        if not why:
+            return
+        try:
+            self.backend.apply(dict(values, max=ceiling))
+            log(f"stoned: dynamic ceiling {ceiling} MHz ({why}, GPU {gpu_temp} C)")
+            self._changed()
+        except StoneError as e:
+            log(f"stoned: dynamic ceiling not applied: {e.code}")
 
     def _effective(self):
         return (self.game or {}).get("profile") or self.st["profile"]
@@ -279,7 +360,9 @@ class Service:
     def _thermal_reduce(self, reason):
         """Lower only. SILENT is applied temporarily; the user's choice is kept, except a
         CUSTOM slot in use, which loses its validation (it ran too hot)."""
-        if self.run:
+        if self.cal is not None:
+            self._cal_stop("thermal")
+        elif self.run:
             self.CancelTest()
         pid = self._effective()
         k = S.slot_index(pid)
@@ -295,7 +378,7 @@ class Service:
             self.store.clear_flag(S.FLAG_PROVISIONAL)
         self.thermal_reduced = True
         try:
-            self.backend.apply(dict(P.FACTORY["silent"]))
+            self.backend.apply(P.factory("silent", self.range))
             self.applied = "thermal"
         except StoneError as e:
             log(f"stoned: thermal reduce could not apply SILENT: {e.code} {e.message}")
@@ -345,10 +428,10 @@ class Service:
         k = S.slot_index(pid)
         if k is not None and self.st["slots"][k]["state"] == S.SLOT_FAILED:
             raise StoneError(NOT_VALIDATED, "this slot failed; test it again first")
-        values = P.resolve(pid, self.st)
+        values = P.resolve(pid, self.st, self.range)
         current = self._actual()
         P.check_can_apply(values, self.caps, self.st, None if "error" in current else current,
-                          self.backend.gpu_temp(), bool(self.run), self.thermal_reduced)
+                          self.backend.gpu_temp(), bool(self.run), self.thermal_reduced, self.range)
         provisional = not S.is_safe_to_apply(pid, self.st["slots"])
         if provisional:
             # An unvalidated slot is allowed only for this boot; the flag is written
@@ -376,7 +459,7 @@ class Service:
         vals = P.validate_values(values, self.caps)
         current = self._actual()
         P.check_can_apply(vals, self.caps, self.st, None if "error" in current else current,
-                          self.backend.gpu_temp(), False, self.thermal_reduced)
+                          self.backend.gpu_temp(), False, self.thermal_reduced, self.range)
         if self.st["safe_mode"]:
             raise StoneError(UNSUPPORTED, "no tests in Safe Mode")
         # LAST KNOWN GOOD first, then the trial flag, then the hardware.
@@ -413,7 +496,7 @@ class Service:
             raise StoneError(P.THERMAL_LIMIT, "performance reduced by the thermal watch")
         pid = self._effective()
         try:
-            self.run = stability.Run(None, P.resolve(pid, self.st), level, self.backend)
+            self.run = stability.Run(None, P.resolve(pid, self.st, self.range), level, self.backend)
             self.run.baseline = pid
             self.run.start()
         except OSError as e:
@@ -449,6 +532,8 @@ class Service:
         self.store.clear_flag(S.FLAG_TRIAL)
 
     def _finish(self, result):
+        if self.cal is not None:
+            return self._cal_step_done(result)
         run, self.run = self.run, None
         self.telemetry.hold("test", False)
         if getattr(run, "baseline", None):
@@ -469,6 +554,8 @@ class Service:
         self._changed()
 
     def CancelTest(self):
+        if self.cal is not None:
+            return self.CancelCalibration()
         if not self.run:
             return self.state()
         self.run.stop_workload()
@@ -516,6 +603,143 @@ class Service:
         self._changed()
         return self.state()
 
+    # ---- STONE CALIBRATION ------------------------------------------------------------------
+    def GetCalibration(self):
+        return self._cal_view()
+
+    def _cal_view(self):
+        rec = self.st.get("calibration") or {}
+        run = None
+        if self.cal is not None:
+            run = {"level": self.cal["level"], "step_mhz": self.cal["plan"][self.cal["i"]] if self.cal["i"] < len(self.cal["plan"]) else None,
+                   "step": self.cal["i"] + 1, "of": len(self.cal["plan"]), "passed": [x["mhz"] for x in self.cal["steps"] if x["passed"]],
+                   "seconds": round(self.run.clock() - self.run.t0) if self.run else 0,
+                   "step_seconds": self.run.duration if self.run else None, "max_temp_c": self.run.max_temp if self.run else None,
+                   "workload": self.cal["workload"]}
+        return {"range": self.range, "running": run,
+                "last": {k: rec.get(k) for k in ("time", "level", "validated_max", "result", "failed_at", "stopped",
+                                                  "max_temp_c", "workload", "steps")} if rec else None}
+
+    def StartCalibration(self, level):
+        """Progressive search of THIS machine's highest stable GPU ceiling (calibration.py).
+        Started by the person only; never at boot, never by a game."""
+        if level not in C.STEP_SECONDS:
+            raise StoneError(INVALID_VALUE, "level must be quick or standard")
+        if self.run or self.cal is not None:
+            raise StoneError(BUSY, "a test is already running")
+        if not self.caps.get("governor"):
+            raise StoneError(UNSUPPORTED, "GPU governor not available")
+        if self.st["safe_mode"]:
+            raise StoneError(UNSUPPORTED, "no calibration in Safe Mode")
+        if self.game:
+            raise StoneError(BUSY, "close the game first")
+        if self.thermal_reduced:
+            raise StoneError(P.THERMAL_LIMIT, "performance reduced by the thermal watch")
+        t = self.backend.gpu_temp()
+        if t is not None and t >= C.TEMP_LIMIT_C - 15:
+            raise StoneError(P.THERMAL_LIMIT, f"GPU at {t} C: let it cool down first")
+        cmd, wname = C.workload(C.STEP_SECONDS[level])
+        if cmd is None and not stability.available():
+            raise StoneError(UNSUPPORTED, "no calibration workload installed")
+        hi = self.range["hardware"][1]
+        plan = C.steps(self.range["baseline"], hi)
+        if not plan:
+            raise StoneError(UNSUPPORTED, "no frequency range to calibrate")
+        # LAST KNOWN GOOD before anything reaches the hardware.
+        if S.is_safe_to_apply(self.st["profile"], self.st["slots"]):
+            self.st["last_known_good"] = self.st["profile"]
+        self._save()
+        self.cal = {"level": level, "plan": plan, "i": 0, "steps": [], "cmd": cmd, "workload": wname}
+        log(f"stoned: calibration ({level}, {wname}) {plan[0]}..{plan[-1]} MHz")
+        self.telemetry.hold("test", True)
+        self._cal_start_step()
+        self._changed()
+        return self.state()
+
+    def _cal_values(self, mhz):
+        lo = max(P.STONE_MIN[0], (self.range["hardware"] or [1000])[0])
+        return {"max": mhz, "min": min(lo, mhz), "temp": C.TEMP_LIMIT_C, "resp": 1}
+
+    def _cal_start_step(self):
+        mhz = self.cal["plan"][self.cal["i"]]
+        # The flag goes first: a hang or power cut is attributed to this step at the next boot.
+        self.store.set_flag(S.FLAG_CALIBRATION, {"step": mhz, "steps": self.cal["steps"], "level": self.cal["level"],
+                                                 "config": self.config, "machine": self.machine,
+                                                 "workload": self.cal["workload"], "time": int(time.time())})
+        vals = self._cal_values(mhz)
+        try:
+            self.backend.set_ceiling(mhz)                  # this step only
+            self.backend.apply(vals)
+            self.applied = "calibration"
+            self.run = stability.Run(None, vals, "standard", self.backend, cmd=self.cal["cmd"],
+                                     duration=C.STEP_SECONDS[self.cal["level"]])
+            self.run.start()
+        except (StoneError, OSError) as e:
+            log(f"stoned: calibration step {mhz} MHz could not start: {e!r}")
+            self.run = None
+            return self._cal_end("apply_failed" if isinstance(e, StoneError) else "workload_failed")
+        self.run_timer = GLib.timeout_add_seconds(1, self._tick)
+
+    def _cal_step_done(self, result):
+        self.run = None
+        mhz = self.cal["plan"][self.cal["i"]]
+        step = {"mhz": mhz, "passed": bool(result["passed"]), "reason": result.get("reason"),
+                "max_temp_c": result.get("max_temp_c"), "median_clock_mhz": result.get("median_clock_mhz"),
+                "avg_power_w": result.get("avg_power_w"), "seconds": result.get("seconds")}
+        self.cal["steps"].append(step)
+        log(f"stoned: calibration {mhz} MHz {'passed' if step['passed'] else 'FAILED: ' + str(step['reason'])}"
+            f" (max {step['max_temp_c']} C, median {step['median_clock_mhz']} MHz)")
+        if not step["passed"]:
+            return self._cal_end("thermal" if step["reason"] in ("thermal", "cpu_thermal") else None, failed_at=mhz)
+        self.cal["i"] += 1
+        if self.cal["i"] >= len(self.cal["plan"]):
+            return self._cal_end(None)
+        self._cal_start_step()
+        self._changed()
+
+    def _cal_stop(self, why):
+        """Thermal watch or cancel: stop the running step now."""
+        if self.cal is None:
+            return
+        if self.run:
+            self.run.stop_workload()
+            self.run = None
+        if self.run_timer:
+            GLib.source_remove(self.run_timer)
+            self.run_timer = 0
+        self._cal_end(why)
+
+    def _cal_end(self, stopped, failed_at=None):
+        cal, self.cal = self.cal, None
+        self.run = None
+        self.telemetry.hold("test", False)
+        self.backend.set_ceiling(self.range["validated_max"])
+        if stopped == "cancelled" and not cal["steps"]:
+            self.store.clear_flag(S.FLAG_CALIBRATION)
+        elif stopped == "cancelled":
+            log("stoned: calibration cancelled; the previous result is kept")
+            self.store.clear_flag(S.FLAG_CALIBRATION)
+        else:
+            rec = C.record(self.machine, self.config, cal["level"], cal["steps"], failed_at, stopped,
+                           self.range["hardware"][1], cal["workload"])
+            self.store.clear_flag(S.FLAG_CALIBRATION)
+            self._store_calibration(rec)
+            log(f"stoned: calibration result {rec['result']}: validated maximum {rec['validated_max']} MHz")
+            self.bus.emit_signal(None, PATH, IFACE, "TestFinished",
+                                 GLib.Variant.new_tuple(to_variant(dict(kind="calibration", passed=rec["validated_max"] is not None,
+                                                                        **{k: rec[k] for k in ("validated_max", "result", "failed_at", "stopped")}))))
+        try:
+            self._apply_profile(self.st["last_known_good"])      # back to the saved, now re-resolved profile
+        except StoneError as e:
+            self.rollback_notice = e.code
+        self._changed()
+
+    def CancelCalibration(self):
+        if self.cal is None:
+            return self.state()
+        self._cal_stop("cancelled")
+        return self.state()
+
     def SetSessionProfile(self, pid):
         """Quick Menu during a game: this session only, back to the global one when it ends."""
         if not self.game:
@@ -527,10 +751,10 @@ class Service:
         k = S.slot_index(pid)
         if k is not None and self.st["slots"][k]["state"] == S.SLOT_FAILED:
             raise StoneError(NOT_VALIDATED, "this slot failed; test it again first")
-        values = P.resolve(pid, self.st)
+        values = P.resolve(pid, self.st, self.range)
         current = self._actual()
         P.check_can_apply(values, self.caps, self.st, None if "error" in current else current,
-                          self.backend.gpu_temp(), False, self.thermal_reduced)
+                          self.backend.gpu_temp(), False, self.thermal_reduced, self.range)
         prov = self.store.get_flag(S.FLAG_PROVISIONAL)
         if not S.is_safe_to_apply(pid, self.st["slots"]):
             self.store.set_flag(S.FLAG_PROVISIONAL, {"profile": pid, "appid": self.game["appid"], "time": int(time.time())})
@@ -628,6 +852,7 @@ class Service:
         if not appid.isdigit():
             raise StoneError(INVALID_VALUE, "appid must be a Steam AppID")
         pid = self.st["per_game"].get(appid) if not self.st["safe_mode"] else None
+        self.trim.reset()
         self.game = {"appid": appid, "profile": pid or self.st["profile"]}
         if pid and pid != self.st["profile"] and not self.run:
             k = S.slot_index(pid)
@@ -644,6 +869,7 @@ class Service:
         return self.state()
 
     def _game_ended(self, appid, normal):
+        self.trim.reset()
         """normal = a clean session: long enough and no GPU error in the kernel log."""
         prov = self.store.get_flag(S.FLAG_PROVISIONAL)
         same_game = self.game is not None and self.game["appid"] == appid

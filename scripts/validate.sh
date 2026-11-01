@@ -14,10 +14,11 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # 1. required files
 for f in Containerfile VERSION LICENSE README.md BUILD.md INSTALL.md RECOVERY.md ARCHITECTURE.md HARDWARE_VALIDATION.md \
-         RELEASE_NOTES.md DEPENDENCIES.md GITHUB_SETUP.md SECURITY.md config/build.env disk_config/iso.toml \
+         RELEASE_NOTES.md DEPENDENCIES.md GITHUB_SETUP.md SECURITY.md STONE_DISPLAY.md STONE_PERFORMANCE.md STONE_OPTIMIZED.md config/build.env disk_config/iso.toml \
          build_files/build.sh build_files/check-kernel.sh build_files/governor-config.py \
          .github/workflows/ci.yml .github/workflows/build-image.yml .github/workflows/build-installer.yml .github/workflows/release.yml \
-         system_files/usr/bin/stoned system_files/usr/bin/stonectl system_files/usr/bin/stone-home system_files/usr/bin/stone-home-session system_files/usr/bin/stone-cu40 \
+         system_files/usr/bin/stoned system_files/usr/bin/stonectl system_files/usr/bin/stone-home system_files/usr/bin/stone-home-session system_files/usr/bin/stone-cu40 system_files/usr/bin/stone-game \
+         system_files/usr/share/stone/game-profiles/index.json system_files/usr/share/stone/game-profiles/steam/1091500.json \
          build_files/cu40/build-amdgpu.sh build_files/cu40/patch-gfx10.py build_files/cu40/verify/stone-cu-verify.c \
          system_files/usr/share/stone-home/index.html system_files/usr/share/stone-home/icon.png \
          system_files/usr/share/stone-home/boot/stone-startup.webm; do
@@ -47,6 +48,7 @@ else skip "shellcheck"; fi
 
 # 5. python
 if $PY -m py_compile system_files/usr/lib/stone/stoned/*.py system_files/usr/lib/stone/stone_home/*.py \
+        system_files/usr/lib/stone/stone_games/*.py system_files/usr/lib/stone/stone_display/*.py \
         build_files/governor-config.py tests/*.py development/*.py 2>/dev/null; then ok "python compiles"; else bad "python compile"; fi
 if have ruff; then
     if ruff check --select E4,E9,F,W,B --ignore B008 --target-version py311 system_files/usr/lib/stone build_files tests development; then ok "ruff"; else bad "ruff"; fi
@@ -58,6 +60,14 @@ import json, sys, tomllib
 for p in ("system_files/usr/lib/stone/stability.json", "tests/e2e/package.json"):
     json.load(open(p))
 tomllib.load(open("disk_config/iso.toml", "rb"))
+# STONE GAME PROFILE database: every built-in profile must pass the same checks as at run time.
+import glob
+sys.path.insert(0, "system_files/usr/lib/stone")
+from stone_games import schema
+idx = json.load(open("system_files/usr/share/stone/game-profiles/index.json"))
+for p in glob.glob("system_files/usr/share/stone/game-profiles/steam/*.json"):
+    prof = schema.clean_profile(json.load(open(p)), "builtin")
+    assert prof["appid"] in idx["profiles"]["steam"], p
 PY
 then ok "json and toml"; else bad "json/toml"; fi
 if have xmllint; then

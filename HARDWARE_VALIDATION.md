@@ -342,6 +342,77 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 4. Con un juego abierto: `grep 'asleep\|awake' ~/.local/state/stone/home.log` muestra «asleep» al entrar al juego. `top`: los procesos de Chromium cerca de 0 % de CPU durante el juego.
 5. FPS del mismo juego con STONE abierto detrás y cerrado (Alt+F4 en STONE): diferencia dentro del ruido (±2 %).
 
+## 27. STONE DISPLAY CON TELEVISOR 4K (juego de validación: Cyberpunk 2077)
+
+1. Con STONE abierta, terminal (Ctrl+Alt+F3, entrar): `stonectl display`. Anotar A · Nativa, B · Salida actual, Steam por defecto, C · Juegos ven y los avisos.
+2. Abrir Cyberpunk 2077 desde STONE → Ajustes → Gráficos → Resolución: anotar la mayor.
+3. Con el juego abierto: Ctrl+Alt+F3 → `stonectl display diagnostics`. `Xwayland :1` debe ser igual a la nativa; foto.
+4. Otro juego de motor distinto: pasos 2–3.
+5. Juego desconocido: instalar uno que nunca se abrió, abrirlo desde la biblioteca de Steam (no desde STONE): su resolución máxima debe ser la nativa.
+6. Evidencia de la causa: Ajustes → Pantalla → Juegos ven: Steam; repetir 2–3 con Cyberpunk; volver a Televisor.
+7. Desconectar y conectar el HDMI con STONE abierta: `grep 'display:' ~/.local/state/stone/home.log` muestra DISPLAY_CHANGED.
+
+## 28. STONE PERFORMANCE 2.0 (40 CU, calibración por máquina)
+
+1. Con 40 CU activo (sección 25): `stonectl calibration` → 40 CU, línea base 1500, máximo validado 1500 (sin calibrar).
+2. `sudo stone-cu40 test --minutes 10` a la línea base → APROBADA.
+3. `stonectl calibrate quick` con la consola ventilada → anotar pasos ✓/✗, máximo validado, temperatura máxima.
+4. `stonectl calibrate standard` (larga, ~1 h) → el máximo validado de esta consola.
+5. Jugar 30 min en PERFORMANCE: `cat /sys/class/drm/card*/device/pp_dpm_sclk` nunca por encima del validado; `journalctl -u stoned | grep 'dynamic ceiling'` si se calentó; sin errores amdgpu.
+6. Carga larga: 2 h de juego exigente; temperatura GPU < 85 °C sostenida, CPU < 95 °C.
+7. Reinicio: `stonectl calibration` mantiene el resultado. Tras `bootc upgrade` con kernel nuevo: «stale» y vuelta a 1500 hasta recalibrar.
+8. Recuperación: cortar la luz durante un paso de `stonectl calibrate quick` → al arrancar, `stonectl calibration` muestra el paso como fallo y `stonectl status` un fallo más; la consola arranca a la línea base.
+
+
+## 29. STONE OPTIMIZED — Cyberpunk 2077 (primer perfil real)
+
+Desde una TTY (Ctrl+Alt+F3), `stone-game measure` lanza el juego y espera; se vuelve a Game Mode para jugar y luego a la TTY para leer el resultado. También sirve por SSH.
+
+Necesitas:
+
+- rc12 con 40 CU calibrado (§25, §28);
+- TV 4K con salida a 3840×2160 (§27);
+- Cyberpunk 2077 instalado;
+- un teléfono con cronómetro;
+- SSH desde el Mac (`ssh usuario@stone-machine`), o Konsole en modo escritorio para los pasos de texto.
+
+Las mediciones se lanzan con Steam en Game Mode. `stone-game` habla con Steam y con `stoned`, y espera a que el juego termine.
+
+1. **HelixSR** (opcional, para las filas T05–T07):
+   - instalar HelixSR 3.1 en `Cyberpunk 2077/bin/x64` con su instalador, **renombrando el proxy a `winmm.dll`** (no `dxgi.dll`);
+   - `stone-game status 1091500` → `inyección instalada: helixsr como winmm.dll` y helixsr *disponible*;
+   - si dice `dxgi.dll`, las filas nativas aparecen como no disponibles y STONE explica por qué.
+2. **Estado:** `stone-game status 1091500`. Anotar pantalla (3840x2160 @ Hz, VRR), objetivos por modo, máximo validado, 40 CU y rutas disponibles.
+3. **Plan:** `stone-game plan 1091500` → filas T01… con el ajuste que hay que poner en el juego.
+4. **Ruta fija (una sola vez):**
+   - elegir una partida guardada en una zona exigente, por ejemplo Japantown de día;
+   - definir una ruta de 2 minutos andando y en coche, siempre la misma;
+   - preset del juego ALTO, sin trazado de rayos, sin generación de cuadros.
+5. **Cada fila:**
+   - poner en el menú del juego el ajuste que indica `plan`;
+   - salir del juego;
+   - `stone-game measure 1091500` (o `--config N` para la fila N);
+   - en la TV: cargar la partida guardada en menos de 90 s;
+   - desde el segundo 90, recorrer la ruta 2 minutos (MangoHud registra 120 s sin mostrar nada);
+   - salir al escritorio desde el menú;
+   - la terminal imprime: media, 1 % low, cv, reloj, temperatura y puntuación.
+   - Si dice `MangoHud wrote no log`, anotarlo y seguir: es una prueba pendiente.
+6. **Imagen:** después de cada fila, `stone-game rate 1091500 <n> <1-5>` (n = número de run en `plan`), según cómo se vio en la TV a 2–3 m.
+7. **Etapa 2:** `stone-game plan 1091500` vuelve a ofrecer filas con SILENT y PERFORMANCE de las dos mejores. Medirlas igual.
+8. **Recomendación:** `stone-game status 1091500` → `STONE RECOMMENDED: … (measured on this console …)`.
+9. **Jugar:**
+   - desde STONE Home: ficha de Cyberpunk → debe decir `STONE RECOMMENDED · … · Medido en esta consola` → JUGAR;
+   - el aviso indica el ajuste del juego;
+   - jugar 30 min.
+   - Comprobar: `stone-game status` durante la partida (se ve con SSH); al salir, `steam` muestra las opciones de lanzamiento de Cyberpunk **vacías** (o las tuyas).
+10. **Caída simulada:**
+    - durante una fila HelixSR, cerrar el juego antes de 60 s;
+    - `stone-game status 1091500` → el siguiente lanzamiento seguro es el FSR del juego, sin `WINEDLLOVERRIDES`;
+    - una partida normal vuelve a HelixSR.
+11. **Verificar:** `stone-game verify 1091500` → escribir VERIFICADO → estado HARDWARE_VERIFIED.
+12. **Exportar:** `stone-game export 1091500 > cyberpunk-stone.json` y enviarlo: es el **PRIMER PERFIL REAL DE STONE**.
+13. **Invalidación:** cambiar el modo de la TV (por ejemplo, 60 ↔ 120 Hz) → `stone-game status` muestra `mediciones VENCIDAS por cambio de: display`. Volver al modo anterior → vuelven a valer.
+
 
 ## Matriz de resultados
 
@@ -372,5 +443,8 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 | 22 ROLLBACK | Arranca la versión anterior | | NOT TESTED |
 | 23 AUTOARRANQUE QUE FALLA | Game Mode normal, STONE a mano | | NOT TESTED |
 | 24 SIN BC-250 | Todo «no disponible», nada se aplica | | NOT TESTED |
+| 29 STONE OPTIMIZED (Cyberpunk) | Matriz medida con datos reales, opciones de lanzamiento limpias al salir, caída → ruta segura, perfil exportado | | NOT TESTED |
+| 28 PERFORMANCE 2.0 | Máximo validado propio, nunca superado, recuperación tras corte | | NOT TESTED |
+| 27 STONE DISPLAY 4K | Nativa 3840×2160, juegos (conocido, otro, desconocido) ofrecen 3840×2160, cambio de pantalla visto | | NOT TESTED |
 | 26 STONE HOME GPU 4K | 3840 × 2160 con GPU AMD, ≥ 55 FPS, dormido en juego, sin coste en FPS | | NOT TESTED |
 | 25 40 CU (opcional) | 40 CU contados, prueba aprobada, ≤ 1500 MHz, sin errores; vuelta a 24 CU | | NOT TESTED |

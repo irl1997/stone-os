@@ -1,0 +1,13 @@
+{
+ "db_version": 1,
+ "schema": 1,
+ "launchers": [
+  "steam"
+ ],
+ "profiles": {
+  "steam": [
+   "1091500"
+  ]
+ },
+ "note": "STONE PROFILE DATABASE (built-in). A future online database is delivered with image updates in this same layout."
+}

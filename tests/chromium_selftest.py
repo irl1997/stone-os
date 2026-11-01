@@ -63,7 +63,7 @@ def main():
                  STONE_RELEASE_FILE=rel, XDG_CONFIG_HOME=os.path.join(tmp, "config"), XDG_STATE_HOME=os.path.join(tmp, "state"),
                  HOME=tmp, STONE_CHROMIUM=binary, GDK_BACKEND="x11", PYTHONPATH=LIB,
                  # test machines run as root and without a GPU; the console runs sandboxed on its GPU
-                 STONE_CHROMIUM_EXTRA="--no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader")
+                 STONE_CHROMIUM_EXTRA="--no-sandbox --test-type --use-angle=swiftshader --enable-unsafe-swiftshader")
         code = ("import sys; sys.path.insert(0, %r); from stone_home import chromium; "
                 "sys.exit(chromium.main(['stone-home', '--selftest']))" % LIB)
         p = subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 3840x2160x24", sys.executable, "-c", code],
@@ -83,7 +83,10 @@ def main():
         if "screen=3840x2160 scale=2" not in log:
             print("FAIL  chromium self-test: the shell did not see the 4K screen\n" + log[-2000:])
             return 1
-        if "[stone] draw: 3840x2160 dpr=2" not in log:
+        # Playwright's "Chrome for Testing" adds a 56 px banner ("only for automated testing") that
+        # the system Chromium of the image does not have.
+        cft = "pw-browsers" in binary or "ms-playwright" in binary
+        if result["checks"].get("draw") not in (("3840x2160", "3840x2048") if cft else ("3840x2160",)) or "dpr=2" not in log:
             print("FAIL  chromium self-test: the page was not drawn at 3840x2160\n" + log[-3000:])
             return 1
         print("PASS  chromium self-test (Chromium shell, HTTP transport with token, real stoned, drawn at 3840x2160)")
