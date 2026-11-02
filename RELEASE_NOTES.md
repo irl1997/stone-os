@@ -1,4 +1,12 @@
-# STONE OS 0.1.0-rc13
+# STONE OS 0.1.0-rc14
+
+Release Candidate 14 de STONE OS para STONE MACHINE (AMD BC-250). Es el contenido de rc13, completo y publicado en una sola vez.
+
+El primer paquete de rc13 no traía `tests/run_tests.py` y la publicación quedó a medias, así que esta versión lo reúne todo desde rc12. Incluye la corrección de la calibración: la GPU se mantiene ocupada durante la prueba, y una carga que no la usa da una calibración «no válida» en vez de una falla.
+
+**Nada está verificado en hardware todavía.**
+
+## 0.1.0-rc13
 
 Release Candidate 13 de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44). Corrige lo que mostró la calibración de rc11 en la placa.
 
