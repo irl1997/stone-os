@@ -1376,6 +1376,28 @@ def P15_an_invalid_attempt_keeps_the_previous_calibration(env):
     assert c["range"]["validated_max"] == 1800 and c["last"]["result"] == "partial", c
 
 
+@integration(cu40=3, test_seconds=1, gpu_busy=0xFFFF, workload=("sleep", "3599"))
+def P16_bc250_without_a_readable_clock_calibrates_from_the_verifier_s_own_gpu_time(env):
+    """Board, rc14: pp_dpm_sclk said "1: 5Mhz *" under full load and gpu_metrics had no activity,
+    while stone-cu-verify kept the GPU busy (0.135 s per pass, 0 errors). The clock rule is
+    skipped (not readable) and stone-cu-verify's GPU time shows the load was real."""
+    with open(os.path.join(env.sysfs, "sys/class/drm/card1/device/pp_dpm_sclk"), "w") as f:
+        f.write("0: 1000Mhz\n1: 5Mhz *\n2: 2000Mhz\n")
+    v = env.env["STONE_CU_VERIFY"]
+    with open(v, "w") as f:
+        f.write('#!/bin/sh\ni=0\nwhile true; do echo "pass=$i seconds=0.090 checked_groups=5 errors=0"; i=$((i+1)); sleep 0.1; done\n')
+    os.chmod(v, 0o755)
+    open(v + ".spv", "w").close()
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env, timeout=90)
+    last = c["last"]
+    assert last["result"] == "complete" and last["validated_max"] == 2000, last
+    step = last["steps"][0]
+    assert step["clock_readable"] is False and step["pass_s"] == 0.09 and step["gpu_share_pct"] >= 50, step
+    code, out = ctl(env, "calibration")
+    assert "Velocidad real:" in out and "1500:1.00x" in out, out
+
+
 def main():
     only = sys.argv[1:]
     passed = failed = 0

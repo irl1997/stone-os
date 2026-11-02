@@ -1,4 +1,32 @@
-# STONE OS 0.1.0-rc14
+# STONE OS 0.1.0-rc15
+
+Release Candidate 15 de STONE OS para STONE MACHINE (AMD BC-250). Corrige la calibración con lo que mostró la placa en rc14.
+
+**Nada está verificado en hardware todavía.**
+
+## Lo que mostró la placa (rc14, 01-11-2026)
+
+- **La prueba de cálculo ya hace trabajar a la GPU:**
+  - `stone-cu-verify` hizo 589 pasadas de 0,135 s de GPU cada una, con 0 errores;
+  - la GPU estuvo ocupada alrededor del 87 % del tiempo.
+- **La frecuencia que lee STONE no es real en la BC-250:** `pp_dpm_sclk` muestra `0: 1000Mhz / 1: 5Mhz * / 2: 2000Mhz` con la GPU a pleno trabajo.
+- **No hay lectura de uso:** `gpu_metrics` no informa la actividad de la GPU, y el regulador no publica la frecuencia actual por D-Bus.
+- **Resultado:** con esos datos, rc14 concluía «la carga no usó la GPU» aunque sí la usó.
+
+## Cambios desde 0.1.0-rc14
+
+- **Una frecuencia bajo 200 MHz con carga se considera «no legible»,** no una medición. La regla de frecuencia sostenida se omite en vez de fallar el paso.
+- **Cuánto trabajó la GPU se toma**, en este orden:
+  1. del sensor de actividad (si existe);
+  2. del propio informe de `stone-cu-verify` (tiempo de GPU por pasada en `workload.log`);
+  3. solo al final, de la subida de temperatura.
+- **Medición real en reemplazo de la frecuencia:** el tiempo por pasada de `stone-cu-verify` (trabajo fijo) se guarda en cada paso.
+  - `stonectl calibration` muestra «Velocidad real» por paso. Si la GPU de verdad sube de frecuencia, ese número sube con los MHz.
+  - El registro de `stoned` lo compara con el primer paso.
+- La línea en vivo de `stonectl calibrate` muestra «GPU ? MHz» cuando la lectura no es real.
+- **Prueba:** P16 (BC-250 sin frecuencia legible: la calibración completa usa el informe de `stone-cu-verify`).
+
+## 0.1.0-rc14
 
 Release Candidate 14 de STONE OS para STONE MACHINE (AMD BC-250). Es el contenido de rc13, completo y publicado en una sola vez.
 

@@ -143,6 +143,11 @@ def calibration(out):
                   + (f", falló a {last['failed_at']} MHz" if last.get("failed_at") else "")
                   + (f", máx {last['max_temp_c']} °C" if last.get("max_temp_c") else ""),
                   "  Pasos:            " + " ".join(f"{s['mhz']}{'✓' if s['passed'] else '✗'}" for s in steps)]
+        timed = [s for s in steps if s.get("pass_s")]
+        if len(timed) >= 2:
+            # fixed work per pass: a higher clock must make it faster (the clock sensor of the BC-250 is not readable)
+            lines.append("  Velocidad real:   " + " ".join(f"{s['mhz']}:{timed[0]['pass_s'] / s['pass_s']:.2f}x" for s in timed)
+                         + "  (trabajo fijo; debe subir con los MHz)")
     run = c.get("running")
     if run:
         lines.append(f"  EN CURSO: paso {run['step']}/{run['of']} a {run['step_mhz']} MHz, {run['seconds']}/{run['step_seconds']} s")
@@ -169,7 +174,7 @@ def calibrate(level, out, poll=2.0):
             if not run:
                 break
             out.write(f"\r  paso {run['step']}/{run['of']}: {run['step_mhz']} MHz · {run['seconds']}/{run['step_seconds']} s"
-                      f" · máx {run.get('max_temp_c') or '?'} °C · GPU {run.get('clock_mhz') or '?'} MHz"
+                      f" · máx {run.get('max_temp_c') or '?'} °C · GPU {run['clock_mhz'] if (run.get('clock_mhz') or 0) >= 200 else '?'} MHz"
                       f" {run.get('busy_pct') if run.get('busy_pct') is not None else '?'} % · pasados: {len(run.get('passed') or [])}   ")
             out.flush()
             time.sleep(poll)

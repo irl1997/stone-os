@@ -688,10 +688,17 @@ class Service:
         step = {"mhz": mhz, "passed": bool(result["passed"]), "reason": result.get("reason"),
                 "max_temp_c": result.get("max_temp_c"), "median_clock_mhz": result.get("median_clock_mhz"),
                 "avg_power_w": result.get("avg_power_w"), "seconds": result.get("seconds"),
-                "busy_median_pct": result.get("busy_median_pct"), "temp_rise_c": result.get("temp_rise_c")}
+                "busy_median_pct": result.get("busy_median_pct"), "temp_rise_c": result.get("temp_rise_c"),
+                "pass_s": result.get("verify_pass_s"), "gpu_share_pct": result.get("verify_gpu_share_pct"),
+                "clock_readable": result.get("clock_readable")}
+        first = next((x for x in self.cal["steps"] if x.get("pass_s")), None)
+        speed = (f", speed x{first['pass_s'] / step['pass_s']:.3f} vs {first['mhz']} MHz (clock x{mhz / first['mhz']:.3f})"
+                 if first and step["pass_s"] else "")
         log(f"stoned: calibration {mhz} MHz {'passed' if step['passed'] else 'FAILED: ' + str(step['reason'])}"
-            f" (max {step['max_temp_c']} C, +{step['temp_rise_c']} C, median {step['median_clock_mhz']} MHz,"
-            f" GPU busy {step['busy_median_pct']} %)")
+            f" (max {step['max_temp_c']} C, +{step['temp_rise_c']} C, clock {step['median_clock_mhz'] or 'not readable'}"
+            f"{'' if step['clock_readable'] else ' (sensor ' + str(result.get('clock_raw_median_mhz')) + ' MHz)'},"
+            f" GPU busy {step['busy_median_pct'] if step['busy_median_pct'] is not None else '?'} %,"
+            f" stone-cu-verify GPU {step['gpu_share_pct']} % at {step['pass_s']} s/pass{speed})")
         if not step["passed"]:
             for line in result.get("workload_output") or []:
                 log(f"stoned: calibration workload: {line}")

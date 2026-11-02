@@ -172,3 +172,14 @@ En `HARDWARE_VALIDATION.md` §28.
 - **Pendiente en la placa:**
   - si vkmark headless funciona bajo `stoned`: está en `/var/lib/stone/workload.log`;
   - qué muestra `pp_dpm_sclk` con carga.
+
+## Placa, 01-11-2026 (rc14)
+
+- **`pp_dpm_sclk`:** con carga muestra `1: 5Mhz *`. No da la frecuencia real.
+- **`gpu_metrics`:** sin actividad, porque el *fix-metrics* del regulador no está activo.
+- **Regulador por D-Bus:**
+  - publica los rangos *Allowed* (500–2000), *Current* e *Initial* (1000–1850), los umbrales de temperatura (75/85) y los objetivos de carga (0,5–0,65);
+  - no publica la frecuencia actual;
+  - tiene una propiedad `Enabled = false` cuyo significado está [VERIFICAR].
+- **`stone-cu-verify`:** 0,135 s por pasada, 0 errores, GPU ocupada alrededor del 87 %.
+- **Cambio en rc15:** la «Velocidad real» por paso (trabajo fijo) muestra si subir el techo sube de verdad la frecuencia.

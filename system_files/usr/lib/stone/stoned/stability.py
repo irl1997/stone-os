@@ -13,11 +13,17 @@ Pass criteria, all of them:
   * GPU temperature never above the requested limit + 5 C (the governor should hold it),
   * sustained clock >= 90 % of the requested max while not throttling (STANDARD and up).
 
-A load that did not use the GPU proves nothing either way: if the GPU was mostly idle (median
-activity < LIGHT_BUSY_PCT, or, without that reading, it warmed less than LIGHT_RISE_C), a low
-clock is reported as "load_too_light", never as an unstable GPU (board, rc11: the GPU sat at
-48 C and the step was called unstable). The workload's own output goes to workload.log in the
-state folder so the reason it did not load the GPU can be read.
+A load that did not use the GPU proves nothing either way. How busy the GPU was comes from, in
+order: the GPU activity sensor (gpu_metrics; absent on the BC-250 without the governor's
+fix-metrics), stone-cu-verify's own account of its GPU time (pass=... seconds=... in
+workload.log), and only then the temperature rise. Below LIGHT_BUSY_PCT the step is
+"load_too_light", never an unstable GPU.
+
+The BC-250's pp_dpm_sclk does not show the real clock (board, rc14: "0: 1000Mhz / 1: 5Mhz * /
+2: 2000Mhz" under full load), so a clock below CLOCK_CREDIBLE_MHZ is "not readable" and the
+sustained-clock rule is skipped rather than failing the step. What stands in for it is a real
+measurement: stone-cu-verify's time per pass (fixed work), which shrinks as the clock rises;
+the calibration records it per step and compares steps.
 """
 
 import json
@@ -34,7 +40,9 @@ DEFAULT_CMD = ["vkmark", "--winsys", "headless", "--run-forever"]
 AMDGPU_ERRORS = ("ring gfx timeout", "gpu reset", "amdgpu: *error*", "page fault", "gpu hang")
 TEMP_MARGIN = 5
 LIGHT_BUSY_PCT = 50      # median GPU activity below this: the load did not use the GPU
-LIGHT_RISE_C = 8         # without an activity reading: warmed less than this
+LIGHT_RISE_C = 8         # without any other evidence: warmed less than this
+CLOCK_CREDIBLE_MHZ = 200 # a "current clock" below this under load is not a reading (board, rc14:
+                         # pp_dpm_sclk shows "1: 5Mhz *" while the GPU computes at full speed)
 CPU_STOP_C = 95          # calibration steps stop here (Zen 2 TJmax is 100 C)
 
 
@@ -176,9 +184,11 @@ class Run:
             ok, reason = False, "kernel_log_unavailable"
         elif ok and errs:
             ok, reason = False, "gpu_errors"
-        clocks = [s["clock"] for s in self.samples if s["clock"] is not None]
+        raw = [s["clock"] for s in self.samples if s["clock"] is not None]
+        credible = bool(raw) and sum(1 for c in raw if c >= CLOCK_CREDIBLE_MHZ) * 2 > len(raw)
+        clocks = raw if credible else []
         # Throttling: at the thermal limit and clearly below the requested ceiling.
-        timed = [s for s in self.samples if s["clock"] is not None and s["temp"] is not None]
+        timed = [s for s in self.samples if s["clock"] is not None and s["temp"] is not None] if credible else []
         thr = [s for s in timed if s["temp"] >= self.values["temp"] - 1 and s["clock"] < 0.95 * self.values["max"]]
         throttle_pct = round(100 * len(thr) / len(timed), 1) if timed else None
         powers = [s["power"] for s in self.samples if s["power"] is not None]
@@ -187,11 +197,20 @@ class Run:
         busy_median = busy[len(busy) // 2] if busy else None
         temps = [s["temp"] for s in self.samples if s["temp"] is not None]
         rise = (max(temps) - temps[0]) if temps else None
-        light = (busy_median < LIGHT_BUSY_PCT) if busy_median is not None else (rise is not None and rise < LIGHT_RISE_C)
+        verify = self.verify_stats()
+        if busy_median is not None:
+            light = busy_median < LIGHT_BUSY_PCT
+        elif verify["gpu_share_pct"] is not None:
+            light = verify["gpu_share_pct"] < LIGHT_BUSY_PCT
+        else:
+            light = rise is not None and rise < LIGHT_RISE_C
         if ok and self.level != "quick":
             hot = self.max_temp is not None and self.max_temp >= self.values["temp"] - 1
-            if sustained is None or (not hot and sustained < 0.9 * self.values["max"]):
-                ok, reason = False, "load_too_light" if light else "clock_not_sustained"
+            if credible:
+                if not hot and sustained < 0.9 * self.values["max"]:
+                    ok, reason = False, "load_too_light" if light else "clock_not_sustained"
+            elif light or (busy_median is None and verify["gpu_share_pct"] is None and rise is None):
+                ok, reason = False, "load_too_light"     # clock not readable and nothing shows the GPU worked
         return {"slot": self.slot, "level": self.level, "passed": ok, "reason": reason,
                 "seconds": round(self.clock() - self.t0), "max_temp_c": self.max_temp,
                 "median_clock_mhz": sustained, "throttle_pct": throttle_pct,
@@ -199,4 +218,31 @@ class Run:
                 "values": dict(self.values), "time": int(self.wall0),
                 "gpu_errors": (errs or [])[:5], "busy_median_pct": busy_median,
                 "temp_rise_c": round(rise, 1) if rise is not None else None,
+                "clock_readable": credible, "clock_raw_median_mhz": sorted(raw)[len(raw) // 2] if raw else None,
+                "verify_pass_s": verify["pass_s"], "verify_gpu_share_pct": verify["gpu_share_pct"],
                 "workload_output": self.workload_tail() if not ok else []}
+
+    def verify_stats(self):
+        """stone-cu-verify's own report of this run: median GPU seconds per pass (fixed work, so
+        it falls as the clock rises) and its GPU time as a share of the run."""
+        out = {"pass_s": None, "gpu_share_pct": None}
+        try:
+            with open(self.log_path(), errors="replace") as f:
+                text = f.read(4 * 2**20)
+        except OSError:
+            return out
+        secs = []
+        for line in text.splitlines():
+            if line.startswith("pass="):
+                for part in line.split():
+                    if part.startswith("seconds="):
+                        try:
+                            secs.append(float(part[8:]))
+                        except ValueError:
+                            pass
+        if not secs:
+            return out
+        elapsed = max(self.clock() - self.t0, 1e-6)
+        out["pass_s"] = round(sorted(secs)[len(secs) // 2], 4)
+        out["gpu_share_pct"] = round(min(100.0, 100.0 * sum(secs) / elapsed), 1)
+        return out
