@@ -1,4 +1,4 @@
-# Arquitectura de STONE OS 0.1.0-rc12
+# Arquitectura de STONE OS 0.1.0-rc13
 
 ```
 STONE OS UI (STONE Home)          Chromium con GPU (respaldo: GTK 4 + WebKitGTK 6 sin GPU), usuario de la consola, en Steam Game Mode

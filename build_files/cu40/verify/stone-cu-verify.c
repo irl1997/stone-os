@@ -1,13 +1,19 @@
 /*
  * STONE: GPU compute correctness test, used by `stone-cu40 test` before 40 CU is kept.
  *
- *   stone-cu-verify <shader.spv> [--seconds S] [--elements N] [--iters I]
+ *   stone-cu-verify <shader.spv> [--seconds S] [--elements N] [--iters I] [--full]
  *
- * Runs stone-cu-verify.comp over N elements again and again for S seconds and compares every
- * result with the same computation done on the CPU. Prints one line per pass and a summary:
+ * Runs stone-cu-verify.comp over N elements again and again for S seconds and compares results
+ * with the same computation done on the CPU. Prints one line per pass and a summary:
  *   device=<name>
- *   pass=<k> seconds=<gpu time> errors=<count>
- *   summary passes=<k> checked=<values> errors=<count>
+ *   pass=<k> seconds=<gpu time> checked_groups=<n> errors=<count>
+ *   summary passes=<k> checked=<values> gpu_busy=<percent of wall time> errors=<count>
+ *
+ * The GPU must stay busy (rc11 on the board: 7 ms of GPU work, then ~10 s of CPU checking, so
+ * the GPU idled at 48 C and the governor dropped the clock). So each pass is long on the GPU
+ * (default 2048 iterations per value) and the CPU checks a random sample of workgroups that
+ * costs about CHECK_SHARE of the GPU time; over a run every compute unit gets sampled many
+ * times. --full checks every value (slow; for tests of this program).
  * Exit: 0 all results right, 2 wrong results, 1 the test could not run.
  * Only a GPU is used; a CPU (software) Vulkan device is refused unless
  * STONE_CU_VERIFY_ALLOW_CPU=1 (tests of this program only).
@@ -23,6 +29,7 @@
 #include <vulkan/vulkan.h>
 
 #define LOCAL 256u
+#define CHECK_SHARE 0.15      /* CPU checking time as a share of the GPU time of a pass */
 
 struct push { uint32_t n, salt, iters, pad; };
 
@@ -98,13 +105,15 @@ int main(int argc, char **argv)
 {
 	const char *spv_path = NULL;
 	double seconds = 60;
-	uint32_t n = 16u << 20, iters = 64;
+	uint32_t n = 16u << 20, iters = 2048;
+	int full = 0;
 	for (int i = 1; i < argc; ++i) {
 		if (!strcmp(argv[i], "--seconds") && i + 1 < argc) seconds = atof(argv[++i]);
 		else if (!strcmp(argv[i], "--elements") && i + 1 < argc) n = (uint32_t)strtoul(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--iters") && i + 1 < argc) iters = (uint32_t)strtoul(argv[++i], NULL, 10);
+		else if (!strcmp(argv[i], "--full")) full = 1;
 		else if (!spv_path && argv[i][0] != '-') spv_path = argv[i];
-		else { fprintf(stderr, "usage: %s <shader.spv> [--seconds S] [--elements N] [--iters I]\n", argv[0]); return 1; }
+		else { fprintf(stderr, "usage: %s <shader.spv> [--seconds S] [--elements N] [--iters I] [--full]\n", argv[0]); return 1; }
 	}
 	if (!spv_path || n == 0 || n % LOCAL || n > (64u << 20) || iters == 0 || iters > 4096 ||
 	    !(seconds > 0 && seconds <= 7200)) {
@@ -237,11 +246,12 @@ int main(int argc, char **argv)
 	uint64_t total_errors = 0, checked = 0;
 	uint32_t pass = 0;
 	const uint32_t ulp_tolerance = 0;     /* IEEE multiply and add are exact-rounded on both */
-	double start = now();
+	double start = now(), gpu_total = 0;
+	uint32_t sample = 4, rng = 0x2545f491u;
 	do {
 		struct push p = { .n = n, .salt = 0x9e3779b9u * (pass + 1u), .iters = iters };
-		memset(out_i, 0, (size_t)n * 4);
-		memset(out_f, 0, (size_t)n * 4);
+		/* No clearing between passes: every pass has its own salt, so a value the GPU did not
+		   write (left from the pass before) does not match and counts as an error. */
 		VkCommandBufferBeginInfo cbbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 						  .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
 		CHECK(vkResetCommandBuffer(cb, 0), "vkResetCommandBuffer");
@@ -263,7 +273,15 @@ int main(int argc, char **argv)
 		double gpu_s = now() - t0;
 
 		uint64_t errors = 0;
-		for (uint32_t base = 0; base < n; base += LOCAL) {
+		const uint32_t groups = n / LOCAL;
+		uint32_t want_groups = full ? groups : sample;
+		if (want_groups > groups) want_groups = groups;
+		double c0 = now();
+		for (uint32_t k = 0; k < want_groups; ++k) {
+			uint32_t g;
+			if (full) g = k;
+			else { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; g = rng % groups; }
+			uint32_t base = g * LOCAL;
 			for (uint32_t l = 0; l < LOCAL; ++l) {
 				pre(base + l, seeds[base + l], &p, &xs[l], &ys[l], &fs[l]);
 				lds[l] = xs[l] ^ ys[l];
@@ -279,13 +297,23 @@ int main(int argc, char **argv)
 				errors += bad;
 			}
 		}
-		printf("pass=%u seconds=%.3f errors=%" PRIu64 "\n", pass, gpu_s, errors);
+		double check_s = now() - c0;
+		if (!full && want_groups > 0) {
+			/* next pass: as many groups as fit in CHECK_SHARE of this pass's GPU time */
+			double per = check_s / want_groups, budget = CHECK_SHARE * gpu_s;
+			uint32_t next = per > 0 ? (uint32_t)(budget / per) : sample * 2;
+			sample = next < 4 ? 4 : next;
+		}
+		gpu_total += gpu_s;
+		printf("pass=%u seconds=%.3f checked_groups=%u errors=%" PRIu64 "\n", pass, gpu_s, want_groups, errors);
 		fflush(stdout);
 		total_errors += errors;
-		checked += (uint64_t)n * 2u;
+		checked += (uint64_t)want_groups * LOCAL * 2u;
 		++pass;
 	} while (now() - start < seconds);
-	printf("summary passes=%u checked=%" PRIu64 " errors=%" PRIu64 "\n", pass, checked, total_errors);
+	double wall = now() - start;
+	printf("summary passes=%u checked=%" PRIu64 " gpu_busy=%.0f errors=%" PRIu64 "\n", pass, checked,
+	       wall > 0 ? 100.0 * gpu_total / wall : 0.0, total_errors);
 
 	vkDestroyFence(dev, fence, NULL);
 	vkDestroyCommandPool(dev, cp, NULL);

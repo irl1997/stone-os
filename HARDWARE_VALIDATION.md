@@ -356,7 +356,7 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 
 1. Con 40 CU activo (sección 25): `stonectl calibration` → 40 CU, línea base 1500, máximo validado 1500 (sin calibrar).
 2. `sudo stone-cu40 test --minutes 10` a la línea base → APROBADA.
-3. `stonectl calibrate quick` con la consola ventilada → anotar pasos ✓/✗, máximo validado, temperatura máxima.
+3. `stonectl calibrate quick` con la consola ventilada → la línea en vivo debe mostrar la GPU cerca del paso (p. ej. `GPU 1500 MHz 95 %`) y la temperatura subiendo; anotar pasos ✓/✗, máximo validado y temperatura máxima. Si dice «no válida», mandar `journalctl -u stoned -b | grep calibration` y `cat /var/lib/stone/workload.log` (con sudo).
 4. `stonectl calibrate standard` (larga, ~1 h) → el máximo validado de esta consola.
 5. Jugar 30 min en PERFORMANCE: `cat /sys/class/drm/card*/device/pp_dpm_sclk` nunca por encima del validado; `journalctl -u stoned | grep 'dynamic ceiling'` si se calentó; sin errores amdgpu.
 6. Carga larga: 2 h de juego exigente; temperatura GPU < 85 °C sostenida, CPU < 95 °C.

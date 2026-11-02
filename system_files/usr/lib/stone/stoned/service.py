@@ -616,6 +616,8 @@ class Service:
                    "seconds": round(self.run.clock() - self.run.t0) if self.run else 0,
                    "step_seconds": self.run.duration if self.run else None, "max_temp_c": self.run.max_temp if self.run else None,
                    "workload": self.cal["workload"]}
+            last = self.run.samples[-1] if self.run and self.run.samples else {}
+            run["clock_mhz"], run["busy_pct"] = last.get("clock"), last.get("busy")
         return {"range": self.range, "running": run,
                 "last": {k: rec.get(k) for k in ("time", "level", "validated_max", "result", "failed_at", "stopped",
                                                   "max_temp_c", "workload", "steps")} if rec else None}
@@ -685,10 +687,25 @@ class Service:
         mhz = self.cal["plan"][self.cal["i"]]
         step = {"mhz": mhz, "passed": bool(result["passed"]), "reason": result.get("reason"),
                 "max_temp_c": result.get("max_temp_c"), "median_clock_mhz": result.get("median_clock_mhz"),
-                "avg_power_w": result.get("avg_power_w"), "seconds": result.get("seconds")}
-        self.cal["steps"].append(step)
+                "avg_power_w": result.get("avg_power_w"), "seconds": result.get("seconds"),
+                "busy_median_pct": result.get("busy_median_pct"), "temp_rise_c": result.get("temp_rise_c")}
         log(f"stoned: calibration {mhz} MHz {'passed' if step['passed'] else 'FAILED: ' + str(step['reason'])}"
-            f" (max {step['max_temp_c']} C, median {step['median_clock_mhz']} MHz)")
+            f" (max {step['max_temp_c']} C, +{step['temp_rise_c']} C, median {step['median_clock_mhz']} MHz,"
+            f" GPU busy {step['busy_median_pct']} %)")
+        if not step["passed"]:
+            for line in result.get("workload_output") or []:
+                log(f"stoned: calibration workload: {line}")
+            sclk = self.backend._sensor_paths().get("gpu_clock") if hasattr(self.backend, "_sensor_paths") else None
+            try:
+                with open(sclk) as f:
+                    log("stoned: calibration pp_dpm_sclk: " + " | ".join(x.strip() for x in f.read().splitlines()[:8]))
+            except (OSError, TypeError):
+                pass
+        if result.get("reason") == "load_too_light":
+            # Not a hardware result: the test load did not use the GPU. Nothing is learned about
+            # this step; the previous calibration (if any) stays.
+            return self._cal_end("load_too_light")
+        self.cal["steps"].append(step)
         if not step["passed"]:
             return self._cal_end("thermal" if step["reason"] in ("thermal", "cpu_thermal") else None, failed_at=mhz)
         self.cal["i"] += 1
@@ -714,17 +731,23 @@ class Service:
         self.run = None
         self.telemetry.hold("test", False)
         self.backend.set_ceiling(self.range["validated_max"])
+        prev = self.st.get("calibration") or {}
         if stopped == "cancelled" and not cal["steps"]:
             self.store.clear_flag(S.FLAG_CALIBRATION)
         elif stopped == "cancelled":
             log("stoned: calibration cancelled; the previous result is kept")
+            self.store.clear_flag(S.FLAG_CALIBRATION)
+        elif stopped == "load_too_light" and prev.get("validated_max"):
+            log("stoned: calibration load did not use the GPU; the previous result is kept")
             self.store.clear_flag(S.FLAG_CALIBRATION)
         else:
             rec = C.record(self.machine, self.config, cal["level"], cal["steps"], failed_at, stopped,
                            self.range["hardware"][1], cal["workload"])
             self.store.clear_flag(S.FLAG_CALIBRATION)
             self._store_calibration(rec)
-            log(f"stoned: calibration result {rec['result']}: validated maximum {rec['validated_max']} MHz")
+            log(f"stoned: calibration result {rec['result']}: validated maximum "
+                f"{str(rec['validated_max']) + ' MHz' if rec['validated_max'] else 'none (the baseline stays)'}"
+                f"{' - ' + str(stopped) if stopped else ''}")
             self.bus.emit_signal(None, PATH, IFACE, "TestFinished",
                                  GLib.Variant.new_tuple(to_variant(dict(kind="calibration", passed=rec["validated_max"] is not None,
                                                                         **{k: rec[k] for k in ("validated_max", "result", "failed_at", "stopped")}))))

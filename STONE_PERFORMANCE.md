@@ -159,3 +159,16 @@ Pasan todas, junto con las 68 pruebas anteriores de `stoned`.
 ## 9. Prueba física
 
 En `HARDWARE_VALIDATION.md` §28.
+
+
+## Placa, 01-11-2026 (rc11)
+
+- **Resultado:** `stonectl calibrate quick` falló en el primer paso, con 40 CU a 1500 MHz: `clock_not_sustained`, máx 48 °C, mediana 58 MHz.
+- **`stone-cu-verify` a mano:** 0 errores, con pasadas de GPU de 7 ms.
+- **Causa:** la carga de STONE dejaba la GPU sin trabajo casi todo el tiempo.
+- **Corrección en rc13:**
+  - `stone-cu-verify` mantiene la GPU ocupada y comprueba una muestra;
+  - una carga que no ocupa la GPU deja la calibración **no válida** (`load_too_light`), sin contar falla.
+- **Pendiente en la placa:**
+  - si vkmark headless funciona bajo `stoned`: está en `/var/lib/stone/workload.log`;
+  - qué muestra `pp_dpm_sclk` con carga.

@@ -115,7 +115,8 @@ def restore_defaults(out):
 
 SOURCE = {"calibration": "calibración de esta consola"}
 RESULT = {"complete": "completa: llegó al máximo del regulador", "partial": "falló un paso: se guardó el anterior con margen",
-          "thermal": "se detuvo por temperatura", "failed": "no pasó ni la línea base"}
+          "thermal": "se detuvo por temperatura", "failed": "no pasó ni la línea base",
+          "invalid": "no válida: la carga de prueba no hizo trabajar a la GPU (no es una falla de la GPU)"}
 
 
 def calibration(out):
@@ -135,7 +136,10 @@ def calibration(out):
     last = c.get("last")
     if last:
         steps = last.get("steps") or []
-        lines += [f"  Último resultado: {RESULT.get(last.get('result'), last.get('result'))}"
+        res = last.get("result")
+        if res == "partial" and not any(s.get("passed") for s in steps):
+            res = "failed"
+        lines += [f"  Último resultado: {RESULT.get(res, res)}"
                   + (f", falló a {last['failed_at']} MHz" if last.get("failed_at") else "")
                   + (f", máx {last['max_temp_c']} °C" if last.get("max_temp_c") else ""),
                   "  Pasos:            " + " ".join(f"{s['mhz']}{'✓' if s['passed'] else '✗'}" for s in steps)]
@@ -165,7 +169,8 @@ def calibrate(level, out, poll=2.0):
             if not run:
                 break
             out.write(f"\r  paso {run['step']}/{run['of']}: {run['step_mhz']} MHz · {run['seconds']}/{run['step_seconds']} s"
-                      f" · máx {run.get('max_temp_c') or '?'} °C · pasados: {len(run.get('passed') or [])}   ")
+                      f" · máx {run.get('max_temp_c') or '?'} °C · GPU {run.get('clock_mhz') or '?'} MHz"
+                      f" {run.get('busy_pct') if run.get('busy_pct') is not None else '?'} % · pasados: {len(run.get('passed') or [])}   ")
             out.flush()
             time.sleep(poll)
     except KeyboardInterrupt:

@@ -12,6 +12,12 @@ Pass criteria, all of them:
   * no amdgpu error in the kernel log since the test started,
   * GPU temperature never above the requested limit + 5 C (the governor should hold it),
   * sustained clock >= 90 % of the requested max while not throttling (STANDARD and up).
+
+A load that did not use the GPU proves nothing either way: if the GPU was mostly idle (median
+activity < LIGHT_BUSY_PCT, or, without that reading, it warmed less than LIGHT_RISE_C), a low
+clock is reported as "load_too_light", never as an unstable GPU (board, rc11: the GPU sat at
+48 C and the step was called unstable). The workload's own output goes to workload.log in the
+state folder so the reason it did not load the GPU can be read.
 """
 
 import json
@@ -27,6 +33,8 @@ CONF = os.environ.get("STONE_STABILITY_CONF", "/usr/lib/stone/stability.json")
 DEFAULT_CMD = ["vkmark", "--winsys", "headless", "--run-forever"]
 AMDGPU_ERRORS = ("ring gfx timeout", "gpu reset", "amdgpu: *error*", "page fault", "gpu hang")
 TEMP_MARGIN = 5
+LIGHT_BUSY_PCT = 50      # median GPU activity below this: the load did not use the GPU
+LIGHT_RISE_C = 8         # without an activity reading: warmed less than this
 CPU_STOP_C = 95          # calibration steps stop here (Zen 2 TJmax is 100 C)
 
 
@@ -92,9 +100,35 @@ class Run:
         self.max_temp = None
         self.reason = None
 
+    def log_path(self):
+        from .state import state_dir
+        return os.path.join(state_dir(), "workload.log")
+
     def start(self):
-        self.proc = subprocess.Popen(self.cmd or workload_cmd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL, start_new_session=True)
+        env = dict(os.environ)
+        cache = os.path.join(os.path.dirname(self.log_path()), "cache")
+        try:
+            os.makedirs(cache, exist_ok=True)
+            env.update(HOME=os.path.dirname(self.log_path()), XDG_CACHE_HOME=cache)
+        except OSError:
+            pass
+        try:
+            out = open(self.log_path(), "w")
+        except OSError:
+            out = subprocess.DEVNULL
+        try:
+            self.proc = subprocess.Popen(self.cmd or workload_cmd(), stdin=subprocess.DEVNULL, stdout=out,
+                                         stderr=subprocess.STDOUT, start_new_session=True, env=env)
+        finally:
+            if out is not subprocess.DEVNULL:
+                out.close()
+
+    def workload_tail(self, lines=6):
+        try:
+            with open(self.log_path(), errors="replace") as f:
+                return [x.strip()[:200] for x in f.read()[-4000:].splitlines() if x.strip()][-lines:]
+        except OSError:
+            return []
 
     def sample(self):
         """Called once per second. Returns None while running, or a finished result."""
@@ -102,7 +136,7 @@ class Run:
         t = m.get("gpu_temp_c")
         if t is not None:
             self.max_temp = t if self.max_temp is None else max(self.max_temp, t)
-        self.samples.append({"t": round(self.clock() - self.t0, 1), "temp": t,
+        self.samples.append({"t": round(self.clock() - self.t0, 1), "temp": t, "busy": m.get("gpu_busy_pct"),
                              "clock": m.get("gpu_clock_mhz"), "power": m.get("gpu_power_w")})
         if t is not None and t > self.values["temp"] + TEMP_MARGIN:
             return self.finish(False, "thermal")
@@ -149,13 +183,20 @@ class Run:
         throttle_pct = round(100 * len(thr) / len(timed), 1) if timed else None
         powers = [s["power"] for s in self.samples if s["power"] is not None]
         sustained = sorted(clocks)[len(clocks) // 2] if clocks else None   # median
+        busy = sorted(s["busy"] for s in self.samples if s.get("busy") is not None)
+        busy_median = busy[len(busy) // 2] if busy else None
+        temps = [s["temp"] for s in self.samples if s["temp"] is not None]
+        rise = (max(temps) - temps[0]) if temps else None
+        light = (busy_median < LIGHT_BUSY_PCT) if busy_median is not None else (rise is not None and rise < LIGHT_RISE_C)
         if ok and self.level != "quick":
             hot = self.max_temp is not None and self.max_temp >= self.values["temp"] - 1
             if sustained is None or (not hot and sustained < 0.9 * self.values["max"]):
-                ok, reason = False, "clock_not_sustained"
+                ok, reason = False, "load_too_light" if light else "clock_not_sustained"
         return {"slot": self.slot, "level": self.level, "passed": ok, "reason": reason,
                 "seconds": round(self.clock() - self.t0), "max_temp_c": self.max_temp,
                 "median_clock_mhz": sustained, "throttle_pct": throttle_pct,
                 "avg_power_w": round(sum(powers) / len(powers), 1) if powers else None,
                 "values": dict(self.values), "time": int(self.wall0),
-                "gpu_errors": (errs or [])[:5]}
+                "gpu_errors": (errs or [])[:5], "busy_median_pct": busy_median,
+                "temp_rise_c": round(rise, 1) if rise is not None else None,
+                "workload_output": self.workload_tail() if not ok else []}

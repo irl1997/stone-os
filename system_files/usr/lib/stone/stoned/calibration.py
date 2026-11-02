@@ -96,6 +96,8 @@ def status(record, config, mid):
     reasons = [why for key, why in STALE_KEYS if old.get(key) != config.get(key)]
     if reasons:
         return {"state": "stale", "reasons": reasons}
+    if record.get("stopped") == "load_too_light":
+        return {"state": "invalid", "reasons": ["the test load did not use the GPU (not a GPU failure)"]}
     if record.get("validated_max") is None:
         return {"state": "failed", "reasons": [record.get("stopped") or "baseline did not pass"]}
     return {"state": record.get("result", "complete"), "reasons": []}
@@ -162,7 +164,8 @@ def workload(seconds):
 def record(mid, config, level, steps_done, failed_at, stopped, hardware_hi, workload_name):
     passed = [s["mhz"] for s in steps_done if s["passed"]]
     v = validated_from(passed, failed_at, hardware_hi)
-    result = "complete" if failed_at is None and stopped is None else ("thermal" if stopped == "thermal" else "partial")
+    result = "complete" if failed_at is None and stopped is None else \
+        {"thermal": "thermal", "load_too_light": "invalid"}.get(stopped, "partial")
     return {"machine": mid, "config": config, "level": level, "time": int(time.time()), "version": CAL_VERSION,
             "workload": workload_name, "steps": steps_done[-24:], "failed_at": failed_at, "stopped": stopped,
             "validated_max": v, "result": result,

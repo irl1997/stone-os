@@ -1,4 +1,33 @@
-# STONE OS 0.1.0-rc12
+# STONE OS 0.1.0-rc13
+
+Release Candidate 13 de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44). Corrige lo que mostró la calibración de rc11 en la placa.
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc12
+
+- **Calibración, lo visto en la placa (01-11-2026):** el primer paso (1500 MHz con 40 CU) se dio por inestable con la GPU a 48 °C y una frecuencia mediana de 58 MHz.
+  - La causa era la prueba de STONE, no la placa. `stone-cu-verify` ocupaba la GPU 7 ms y después el procesador comprobaba durante unos 10 s, así que la GPU pasaba casi todo el tiempo sin trabajo y el regulador bajaba la frecuencia. Además, las 40 CU dieron **0 errores** de cálculo.
+- **`stone-cu-verify` mantiene la GPU ocupada:**
+  - pasadas largas en la GPU (2048 iteraciones por valor);
+  - el procesador comprueba una muestra aleatoria de grupos que cuesta como mucho el 15 % del tiempo de GPU;
+  - informa `gpu_busy=` (en el emulador: 87 % del tiempo).
+  - `--full` comprueba todo, como antes.
+- **Una carga que no usa la GPU ya no se da por falla de la GPU.** Si la actividad mediana queda bajo 50 %, o la GPU se calienta menos de 8 °C cuando no hay lectura de actividad, el paso queda como `load_too_light`. Entonces la calibración queda **no válida**, no «fallida»: no cuenta como falla y conserva el resultado anterior.
+- **Diagnóstico:**
+  - lo que imprime la carga (vkmark / `stone-cu-verify`) queda en `/var/lib/stone/workload.log`;
+  - al fallar un paso, el registro de `stoned` muestra:
+    - esas últimas líneas;
+    - el contenido de `pp_dpm_sclk`;
+    - la subida de temperatura;
+    - la actividad mediana de la GPU.
+  - `stonectl calibrate` muestra en vivo la frecuencia y la actividad de la GPU.
+- La carga corre con `HOME` y caché propios en `/var/lib/stone`, porque el servicio no puede escribir en `/home`.
+- `stonectl calibration` dice «no pasó ni la línea base» cuando falla el primer paso, en vez de «se guardó el anterior con margen».
+- **Pruebas:** P14 (carga sin GPU → no válida) y P15 (un intento no válido conserva la calibración anterior).
+- Incluye rc12 (STONE OPTIMIZED).
+
+## 0.1.0-rc12
 
 Duodécima Release Candidate de STONE OS para STONE MACHINE (AMD BC-250), sobre Bazzite `bazzite-deck` (Fedora 44).
 
