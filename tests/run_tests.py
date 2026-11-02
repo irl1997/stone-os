@@ -93,13 +93,17 @@ def set_gpu_temp(root, c):
 class Env:
     def __init__(self, board=True, gov_mode="normal", gov_case="lower", gov=True, polkit_off=True,
                  gpu_errors=False, test_seconds=3, workload=("sleep", "3600"), fan=True, thermal_scale=None,
-                 game_source="dbus", min_session_s=None, cu40=None, sclk_limit=None):
+                 game_source="dbus", min_session_s=None, cu40=None, sclk_limit=None, gpu_busy=None):
         self.tmp = tempfile.mkdtemp(prefix="stoned-test-")
         self.sysfs = os.path.join(self.tmp, "root")
         self.state_dir = os.path.join(self.tmp, "state")
         self.bin = os.path.join(self.tmp, "bin")
         os.makedirs(self.bin)
         make_sysfs(self.sysfs, board=board, fan=fan)
+        if gpu_busy is None and sclk_limit is not None:
+            gpu_busy = 9900              # a calibration load keeps the simulated GPU busy
+        if gpu_busy is not None:
+            write_gpu_metrics(self.sysfs, gpu_busy)
         if cu40 is not None:     # the image's amdgpu has the 40 CU option; value = this boot's mode
             os.makedirs(os.path.join(self.sysfs, "sys/module/amdgpu/parameters"))
             with open(os.path.join(self.sysfs, "sys/module/amdgpu/parameters/bc250_cc_write_mode"), "w") as f:
@@ -596,7 +600,7 @@ def I15_home_ready_applies_only_validated_profiles(env):
     assert r["applied"] == "c2" and env.gov_state()["max"] == 1900, r
 
 
-@integration(test_seconds=3)
+@integration(test_seconds=3, gpu_busy=9900)
 def I21_standard_test_fails_when_clock_is_not_sustained(env):
     env.call("StartTest", "(ua{sv}s)", 0, V({"max": 1950, "min": 1000, "temp": 80, "resp": 1}), "standard")
     st = wait_test_done(env)                       # fake clock stays at 1500 MHz, no throttling
@@ -1345,6 +1349,32 @@ def P13_wrong_gpu_results_fail_the_step_and_nothing_is_validated(env):
     assert c["range"]["validated_max"] == 1500 and c["range"]["calibration"]["state"] == "failed", c["range"]
     time.sleep(0.5)
     assert subprocess.run(["pgrep", "-f", "^sleep 3599$"], capture_output=True).returncode != 0   # the load was stopped too
+
+@integration(cu40=3, test_seconds=2, sclk_limit=600, gpu_busy=800, workload=("sh", "-c", "echo 'vkmark: no GPU device'; sleep 3599"))
+def P14_a_load_that_does_not_use_the_gpu_is_invalid_not_a_gpu_failure(env):
+    """Board, rc11: the GPU idled at 48 C, the clock stayed low and the baseline was called
+    unstable. A mostly idle GPU (8 % busy) makes the attempt INVALID: nothing failed, nothing
+    is validated, the workload's own words are in the journal."""
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env)
+    last = c["last"]
+    assert last["result"] == "invalid" and last["stopped"] == "load_too_light" and last.get("failed_at") is None, last
+    assert c["range"]["validated_max"] == 1500 and c["range"]["calibration"]["state"] == "invalid", c["range"]
+    code, out = ctl(env, "calibration")
+    assert "no válida" in out and "no es una falla" in out, out
+    log = open(os.path.join(env.state_dir, "workload.log")).read()
+    assert "no GPU device" in log, log
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=1700)
+def P15_an_invalid_attempt_keeps_the_previous_calibration(env):
+    env.call("StartCalibration", "(s)", "quick")
+    assert wait_cal_done(env)["range"]["validated_max"] == 1800
+    write_gpu_metrics(env.sysfs, 500)               # this time the load leaves the GPU idle
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env)
+    assert c["range"]["validated_max"] == 1800 and c["last"]["result"] == "partial", c
+
 
 def main():
     only = sys.argv[1:]
