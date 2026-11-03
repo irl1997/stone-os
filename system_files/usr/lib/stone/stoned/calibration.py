@@ -33,6 +33,12 @@ import time
 CAL_VERSION = 1
 STEP_MHZ = 50
 MARGIN_MHZ = 50
+# The machine went down (power cut, hang) at a step: the most serious failure there is. The
+# validated maximum stays at least CRASH_MARGIN_MHZ below the step it went down at (and, as
+# always, MARGIN_MHZ below the last step that passed), and no later calibration of this machine
+# in this configuration goes back to that step (board, rc15: total hang at 2000 MHz, 40 CU; fans kept
+# running, nothing reached the log).
+CRASH_MARGIN_MHZ = 100
 TEMP_LIMIT_C = 85                 # STONE never raises the governor's throttling point above this
 BASELINE_40CU = 1500
 BALANCED_CAP = 1850               # BALANCED: the governor's own factory value, at most
@@ -135,14 +141,24 @@ def steps(start, hardware_hi):
     return out
 
 
-def validated_from(passed, failed_at, hardware_hi):
+def validated_from(passed, failed_at, hardware_hi, margin=MARGIN_MHZ):
     """passed: steps that passed, in order; failed_at: the step that failed (None = none failed)."""
     if not passed:
         return None
     top = max(passed)
     if failed_at is None and top >= hardware_hi:
         return top
-    return max(min(passed), top - MARGIN_MHZ) if failed_at is not None else top
+    return max(min(passed), top - margin) if failed_at is not None else top
+
+
+def crash_cap(crash, config, mid):
+    """The step this machine went down at, if it still applies (same machine and configuration)."""
+    if not crash or crash.get("machine") != mid:
+        return None
+    old = crash.get("config") or {}
+    if any(old.get(k) != config.get(k) for k, _ in STALE_KEYS):
+        return None
+    return crash.get("mhz")
 
 
 def workload(seconds):
@@ -164,6 +180,8 @@ def workload(seconds):
 def record(mid, config, level, steps_done, failed_at, stopped, hardware_hi, workload_name):
     passed = [s["mhz"] for s in steps_done if s["passed"]]
     v = validated_from(passed, failed_at, hardware_hi)
+    if stopped in ("crash", "crash_cap") and v is not None and isinstance(failed_at, int):
+        v = max(min(passed), min(v, failed_at - CRASH_MARGIN_MHZ))
     result = "complete" if failed_at is None and stopped is None else \
         {"thermal": "thermal", "load_too_light": "invalid"}.get(stopped, "partial")
     return {"machine": mid, "config": config, "level": level, "time": int(time.time()), "version": CAL_VERSION,

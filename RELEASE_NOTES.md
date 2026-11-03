@@ -1,4 +1,27 @@
-# STONE OS 0.1.0-rc15
+# STONE OS 0.1.0-rc16
+
+Release Candidate 16 de STONE OS para STONE MACHINE (AMD BC-250). Aplica lo que mostró la primera calibración completa en la placa.
+
+**Nada está verificado en hardware todavía, salvo los datos de la calibración que se citan abajo.**
+
+## Lo que mostró la placa (rc15, 02-11-2026, 40 CU)
+
+- **La calibración rápida pasó de 1500 a 1950 MHz.** La «velocidad real» subió igual que la frecuencia (1950 MHz: ×1,30, frecuencia ×1,30), así que el regulador obedece. GPU entre 59 y 71 °C.
+- **En el paso de 2000 MHz la consola dejó de responder** (pantalla negra, ventiladores aún girando). El registro del kernel no alcanzó a guardar nada antes del corte, y como la fuente siguió entregando energía, no fue un corte de alimentación. Fue un **cuelgue total** de la GPU/APU a 2000 MHz: la inestabilidad que la calibración debe encontrar.
+- **STONE se recuperó solo:** contó el fallo, marcó el paso de 2000 como fallido y guardó 1950 − 50 = 1900 MHz.
+
+## Cambios desde 0.1.0-rc15
+
+- **Un cuelgue o apagado durante la calibración es la peor falla, y se trata como tal:**
+  - el máximo validado queda **al menos 100 MHz bajo el paso donde se colgó**, y como siempre 50 MHz bajo el último paso aprobado;
+  - **ninguna calibración vuelve a probar ese paso** en esa consola y esa configuración. Si cambia el kernel, el regulador, las CU o la VBIOS, la marca deja de valer junto con la calibración.
+  - En esta consola: máximo validado **1900 MHz** (100 bajo el cuelgue a 2000, y 1950 pasó). Las próximas calibraciones se detienen en 1950. El resultado de rc15 se migra solo al arrancar.
+- **`stonectl calibration`** muestra «Apagado en: 2000 MHz» (cuelgue o apagado).
+- **Pruebas:**
+  - P06 actualizada (marca del cuelgue);
+  - P17 nueva: el resultado de rc15 da 1900, un resultado a 50 MHz del cuelgue baja a 1900, y el paso del cuelgue no se repite.
+
+## 0.1.0-rc15
 
 Release Candidate 15 de STONE OS para STONE MACHINE (AMD BC-250). Corrige la calibración con lo que mostró la placa en rc14.
 

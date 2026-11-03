@@ -87,6 +87,9 @@ def recover(store, cmdline_path=None, now=None):
                                      cal.get("steps") or [], cal.get("step"), "crash" if not clean else "interrupted",
                                      0, cal.get("workload"))
         report["actions"].append(f"calibration step {cal.get('step')} MHz failed (machine went down)")
+        if not clean and isinstance(cal.get("step"), int):
+            st["calibration_crash"] = {"mhz": cal["step"], "machine": cal.get("machine"),
+                                       "config": cal.get("config") or {}, "time": int(now)}
 
     # Requests left by `stonectl` when the service could not be reached.
     if store.get_flag(S.FLAG_SAFE_REQUEST) is not None:

@@ -56,6 +56,7 @@ def default_state():
         "last_failure": None,
         "tests": [],                     # recent stability-test results (BEFORE / AFTER)
         "calibration": None,             # STONE CALIBRATION result for this machine (calibration.py)
+        "calibration_crash": None,       # {"mhz", "machine", "config", "time"}: the machine went down at this step
     }
 
 
@@ -126,6 +127,10 @@ def _sanitize(raw):
     if isinstance(cal, dict) and isinstance(cal.get("config"), dict) and \
             (cal.get("validated_max") is None or (isinstance(cal.get("validated_max"), int) and 1000 <= cal["validated_max"] <= 2500)):
         st["calibration"] = cal
+    crash = raw.get("calibration_crash")
+    if isinstance(crash, dict) and isinstance(crash.get("mhz"), int) and 500 <= crash["mhz"] <= 3000 \
+            and isinstance(crash.get("config"), dict):
+        st["calibration_crash"] = crash
     for key in ("profile", "last_known_good"):
         if is_profile_id(raw.get(key), st["slots"]):
             st[key] = raw[key]

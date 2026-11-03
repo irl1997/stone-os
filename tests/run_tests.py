@@ -1234,7 +1234,9 @@ def P06_crash_during_a_step_keeps_only_what_passed_and_counts_as_a_failure():
         rep = env.recover()
         st = store.load()
         cal = st["calibration"]
+        # the machine went down: at least 100 MHz below that step, 50 below the last one that passed
         assert cal["failed_at"] == 1700 and cal["validated_max"] == 1600 and cal["stopped"] == "crash", cal
+        assert st["calibration_crash"]["mhz"] == 1700, st.get("calibration_crash")
         assert rep["fail_count"] == 1 and st["last_failure"]["during"] == "calibration", (rep, st["last_failure"])
         assert store.get_flag(S.FLAG_CALIBRATION) is None
     finally:
@@ -1396,6 +1398,36 @@ def P16_bc250_without_a_readable_clock_calibrates_from_the_verifier_s_own_gpu_ti
     assert step["clock_readable"] is False and step["pass_s"] == 0.09 and step["gpu_share_pct"] >= 50, step
     code, out = ctl(env, "calibration")
     assert "Velocidad real:" in out and "1500:1.00x" in out, out
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P17_a_hang_is_never_tested_again_and_the_maximum_stays_100_mhz_below_it(env):
+    """Board, rc15: 1500..1950 passed, the console hung at 2000 MHz (fans running) and rc15 kept
+    1900. rc16: 1900 is 100 MHz below the hang and 50 below 1950, so it stays; 2000 is marked and a
+    new calibration stops at 1950. A record 50 MHz from the hang (1950) is pulled down to 1900."""
+    env.call("StartCalibration", "(s)", "quick")
+    rec = wait_cal_done(env)
+    store = env.store()
+    st = store.load()
+    cal = st["calibration"]
+    cal.update(failed_at=2000, stopped="crash", validated_max=1950, result="partial",
+               steps=[s for s in cal["steps"] if s["mhz"] < 2000])
+    st["calibration"] = cal
+    store.save(st)
+    env.kill_stoned()
+    env.start_stoned()
+    c = env.call("GetCalibration")
+    assert c["range"]["validated_max"] == 1900 and c["crash_mhz"] == 2000, (c["range"], c.get("crash_mhz"))
+    st = env.call("SetProfile", "(s)", "performance")
+    assert st["actual"]["max"] == 1900, st["actual"]
+    env.call("StartCalibration", "(s)", "quick")
+    c = wait_cal_done(env)
+    last = c["last"]
+    assert max(s["mhz"] for s in last["steps"]) == 1950 and last["validated_max"] == 1900, last
+    assert last["stopped"] == "crash_cap" and c["range"]["validated_max"] == 1900, last
+    code, out = ctl(env, "calibration")
+    assert "Apagado en:       2000 MHz" in out, out
+    assert rec["last"]["validated_max"] == 2000
 
 
 def main():

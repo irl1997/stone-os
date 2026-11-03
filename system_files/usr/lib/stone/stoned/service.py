@@ -183,11 +183,35 @@ class Service:
     def _refresh_range(self):
         """Performance range of THIS machine now (calibration.py); the backend enforces its
         validated maximum on everything that reaches the governor."""
+        self._migrate_calibration_crash()
         self.config = C.configuration(self.backend, self.caps)
         self.machine = C.machine_id(self.backend)
         self.range = C.performance_range(self.caps, self.st.get("calibration"), self.config, self.machine)
         if self.caps.get("governor"):
             self.backend.set_ceiling(self.range["validated_max"])
+
+    def _migrate_calibration_crash(self):
+        """A power cut recorded by rc15 (before the wider crash margin and the cap existed): the same
+        rules now apply to it (40 CU board, hang at 2000 MHz, 1950 passed: 1900 MHz)."""
+        rec = self.st.get("calibration") or {}
+        if rec.get("stopped") != "crash" or not isinstance(rec.get("failed_at"), int):
+            return
+        passed = [s["mhz"] for s in rec.get("steps") or [] if s.get("passed")]
+        v = C.validated_from(passed, rec["failed_at"], 0)
+        if v is not None:
+            v = max(min(passed), min(v, rec["failed_at"] - C.CRASH_MARGIN_MHZ))
+        changed = False
+        if v != rec.get("validated_max"):
+            log(f"stoned: calibration ended by a power cut at {rec['failed_at']} MHz: validated maximum "
+                f"{rec.get('validated_max')} -> {v} MHz (crash margin {C.CRASH_MARGIN_MHZ} MHz)")
+            rec["validated_max"] = v
+            changed = True
+        if not self.st.get("calibration_crash"):
+            self.st["calibration_crash"] = {"mhz": rec["failed_at"], "machine": rec.get("machine"),
+                                            "config": rec.get("config") or {}, "time": rec.get("time")}
+            changed = True
+        if changed:
+            self._save()
 
     def _recover_calibration_crash(self):
         """stoned restarted during a calibration step (not a reboot: recover.py handles that)."""
@@ -618,7 +642,8 @@ class Service:
                    "workload": self.cal["workload"]}
             last = self.run.samples[-1] if self.run and self.run.samples else {}
             run["clock_mhz"], run["busy_pct"] = last.get("clock"), last.get("busy")
-        return {"range": self.range, "running": run,
+        cap = C.crash_cap(self.st.get("calibration_crash"), self.config, self.machine)
+        return {"range": self.range, "running": run, "crash_mhz": cap,
                 "last": {k: rec.get(k) for k in ("time", "level", "validated_max", "result", "failed_at", "stopped",
                                                   "max_temp_c", "workload", "steps")} if rec else None}
 
@@ -644,6 +669,9 @@ class Service:
         if cmd is None and not stability.available():
             raise StoneError(UNSUPPORTED, "no calibration workload installed")
         hi = self.range["hardware"][1]
+        cap = C.crash_cap(self.st.get("calibration_crash"), self.config, self.machine)
+        if cap is not None:
+            hi = min(hi, cap - C.STEP_MHZ)        # never again the step this machine went down at
         plan = C.steps(self.range["baseline"], hi)
         if not plan:
             raise StoneError(UNSUPPORTED, "no frequency range to calibrate")
@@ -651,8 +679,9 @@ class Service:
         if S.is_safe_to_apply(self.st["profile"], self.st["slots"]):
             self.st["last_known_good"] = self.st["profile"]
         self._save()
-        self.cal = {"level": level, "plan": plan, "i": 0, "steps": [], "cmd": cmd, "workload": wname}
-        log(f"stoned: calibration ({level}, {wname}) {plan[0]}..{plan[-1]} MHz")
+        self.cal = {"level": level, "plan": plan, "i": 0, "steps": [], "cmd": cmd, "workload": wname, "crash_cap": cap}
+        log(f"stoned: calibration ({level}, {wname}) {plan[0]}..{plan[-1]} MHz"
+            + (f" (stops below {cap} MHz: this machine went down there)" if cap else ""))
         self.telemetry.hold("test", True)
         self._cal_start_step()
         self._changed()
@@ -748,6 +777,8 @@ class Service:
             log("stoned: calibration load did not use the GPU; the previous result is kept")
             self.store.clear_flag(S.FLAG_CALIBRATION)
         else:
+            if failed_at is None and stopped is None and cal.get("crash_cap"):
+                failed_at, stopped = cal["crash_cap"], "crash_cap"    # the plan ended below a power cut
             rec = C.record(self.machine, self.config, cal["level"], cal["steps"], failed_at, stopped,
                            self.range["hardware"][1], cal["workload"])
             self.store.clear_flag(S.FLAG_CALIBRATION)

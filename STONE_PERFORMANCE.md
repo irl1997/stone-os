@@ -183,3 +183,17 @@ En `HARDWARE_VALIDATION.md` §28.
   - tiene una propiedad `Enabled = false` cuyo significado está [VERIFICAR].
 - **`stone-cu-verify`:** 0,135 s por pasada, 0 errores, GPU ocupada alrededor del 87 %.
 - **Cambio en rc15:** la «Velocidad real» por paso (trabajo fijo) muestra si subir el techo sube de verdad la frecuencia.
+
+## Placa, 02-11-2026 (rc15): primera calibración real, 40 CU
+
+| Paso (MHz) | 1500 | 1550 | 1600 | 1650 | 1700 | 1750 | 1800 | 1850 | 1900 | 1950 | 2000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Resultado | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | cuelgue total |
+| GPU máx (°C) | 59 | 61 | 64 | 64 | 66 | 67 | 68 | 69 | 70 | 71 | — |
+| s/pasada | 0,135 | 0,131 | 0,127 | 0,123 | 0,120 | 0,116 | 0,113 | 0,110 | 0,107 | 0,104 | — |
+| Velocidad real | 1,00× | 1,03× | 1,06× | 1,10× | 1,13× | 1,16× | 1,19× | 1,23× | 1,26× | 1,30× | — |
+
+- **Medición:** calibración rápida (90 s por paso); GPU ocupada alrededor del 87 % con `stone-cu-verify` y 0 errores de cálculo.
+- **Velocidad:** escala igual que la frecuencia, así que el regulador aplica los techos.
+- **A 2000 MHz:** pantalla negra y la consola sin responder, pero los ventiladores siguieron girando, así que la fuente no cortó. Fue un cuelgue total de la APU con 40 CU a 2000 MHz bajo carga sostenida, con la GPU a 71 °C, que no es un problema de temperatura. El registro no guardó nada porque el sistema se detuvo antes.
+- **Resultado con las reglas de rc16:** máximo validado 1900 MHz (100 bajo el cuelgue, 50 bajo 1950) y 2000 MHz excluido. Pendiente: confirmar 1900 con la calibración completa (5 min por paso) y con juego largo.

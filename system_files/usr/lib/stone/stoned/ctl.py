@@ -148,6 +148,9 @@ def calibration(out):
             # fixed work per pass: a higher clock must make it faster (the clock sensor of the BC-250 is not readable)
             lines.append("  Velocidad real:   " + " ".join(f"{s['mhz']}:{timed[0]['pass_s'] / s['pass_s']:.2f}x" for s in timed)
                          + "  (trabajo fijo; debe subir con los MHz)")
+    if c.get("crash_mhz"):
+        lines.append(f"  Apagado en:       {c['crash_mhz']} MHz: la consola se colgó o apagó en ese paso; no se vuelve a probar"
+                     f" y el máximo queda al menos 100 MHz por debajo")
     run = c.get("running")
     if run:
         lines.append(f"  EN CURSO: paso {run['step']}/{run['of']} a {run['step_mhz']} MHz, {run['seconds']}/{run['step_seconds']} s")
