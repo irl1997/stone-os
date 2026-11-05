@@ -20,7 +20,7 @@ import sys
 import threading
 import time
 
-from . import drm, link, model, steam, xwayland
+from . import drm, link, model, steam, xwayland  # noqa: F401  (stone_display.link is part of the package API)
 
 CHUNK = 150
 LOG_PREFIX = "[stone] display:"

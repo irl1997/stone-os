@@ -650,6 +650,13 @@ def D23_steam_settings_are_built_from_what_steam_offers_and_stay_safe():
         shutil.rmtree(home, ignore_errors=True)
 
 
+@test
+def D24_steam_settings_are_shown_in_spanish_only_where_known():
+    from stone_home import steamsettings as SS
+    assert SS.spanish("Enable Hdr", "Display") == ("Activar HDR", "Pantalla")
+    assert SS.spanish("Some Unknown Thing", "Weird › Audio") == ("Some Unknown Thing", "Weird › Audio")
+
+
 def main():
     only = sys.argv[1:]
     failed = 0

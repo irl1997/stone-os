@@ -137,6 +137,9 @@ if grep -rnE "\b(TODO|FIXME|XXX)\b|CAMBIAR-POR|PLACEHOLDER" --include='*' system
 
 # 9. STONE Home page is generated from the prototype and up to date
 if $PY development/build_home.py --check; then ok "STONE Home page up to date"; else bad "STONE Home page out of date"; fi
+sim_out=$(mktemp)
+if $PY development/build_simulation.py "$sim_out" >/dev/null && grep -q "SimStoned" "$sim_out"; then ok "simulation page builds"; else bad "simulation page builds"; fi
+rm -f "$sim_out"
 
 # 10. workflows
 if have actionlint; then

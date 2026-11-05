@@ -348,7 +348,7 @@ class Host:
             try:
                 return self._steamset().set_bool(args[0], args[1])
             except ValueError as e:
-                raise games_schema.ProfileError(str(e))
+                raise games_schema.ProfileError(str(e)) from e
         self._opt_call(done, work)
 
     def m_game_optimizeStatus(self, args, done):

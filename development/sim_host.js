@@ -56,6 +56,11 @@ const Bridge = (() => {
   }
 
   /* ---- Steam's own settings, as the discovery layer would list them for one Steam (names split into words) ---- */
+  const SS_ES = { 'Enable Hdr': 'Activar HDR', 'Use Native Resolution': 'Usar la resolución nativa', 'Screen Brightness': 'Brillo de pantalla', 'Game Volume': 'Volumen de los juegos',
+    'Mute On Minimize': 'Silenciar al minimizar', 'Enable Xbox Support': 'Soporte para mandos Xbox', 'Enable Playstation Support': 'Soporte para mandos PlayStation', 'Haptics Enabled': 'Vibración háptica',
+    'Enable Wifi Power Save': 'Ahorro de energía del Wi-Fi', 'Allow Downloads During Gameplay': 'Descargar mientras se juega', 'Download Region': 'Región de descarga', 'Show Fps Counter': 'Mostrar contador de FPS',
+    'Enable Animations': 'Animaciones', 'Enable Steam Play': 'Activar Steam Play', 'Enable Developer Mode': 'Modo desarrollador', 'Show Toast Notifications': 'Mostrar avisos emergentes' };
+  const SS_AREA = { Display: 'Pantalla', Audio: 'Audio', Controller: 'Mandos', Network: 'Red', Downloads: 'Descargas', Interface: 'Interfaz', Compatibility: 'Compatibilidad', System: 'Sistema', Notifications: 'Notificaciones' };
   const STEAMSET = [
     { id: 'Settings.Display.EnableHdr', label: 'Enable Hdr', area: 'Display', value: false, writable: true },
     { id: 'Settings.Display.UseNativeResolution', label: 'Use Native Resolution', area: 'Display', value: true, writable: true },
@@ -73,7 +78,7 @@ const Bridge = (() => {
     { id: 'Settings.Compatibility.EnableSteamPlay', label: 'Enable Steam Play', area: 'Compatibility', value: true, writable: true },
     { id: 'Settings.System.EnableDeveloperMode', label: 'Enable Developer Mode', area: 'System', value: false, writable: true },
     { id: 'Settings.Notifications.ShowToastNotifications', label: 'Show Toast Notifications', area: 'Notifications', value: true, writable: true }
-  ].map(x => Object.assign({ type: typeof x.value === 'boolean' ? 'bool' : typeof x.value === 'number' ? 'number' : 'text' }, x));
+  ].map(x => Object.assign({}, x, { label_en: x.label, label: SS_ES[x.label] || x.label, area: SS_AREA[x.area] || x.area })).map(x => Object.assign({ type: typeof x.value === 'boolean' ? 'bool' : typeof x.value === 'number' ? 'number' : 'text' }, x));
 
   /* ---- image enhancement: components, per-game choices, install, optimization ---- */
   const comps = { helixsr: null, optiscaler: null };            /* what STONE has downloaded */
@@ -111,8 +116,8 @@ const Bridge = (() => {
     install: async () => ({ ok: true }),
     openSteam: async () => ({ ok: true }), openSteamSettings: async () => ({ ok: true }), restart: async () => ({ ok: true }),
     power: async ([a]) => { toast(`Simulación: «${a === 'off' ? 'Apagar' : 'Reiniciar'}» no hace nada aquí`, false); return { ok: true }; },
-    systemInfo: () => ({ release: { STONE_VERSION: '0.1.0-rc22 (simulación)', STONE_BASE_IMAGE: 'bazzite-deck', STONE_KERNEL: 'simulado', STONE_MESA: 'simulado', STONE_GOVERNOR_VERSION: 'simulado' },
-      boot_time: Math.round(now - 3600), deployments: { booted: { image: 'simulación', version: '0.1.0-rc22', timestamp: now }, staged: null, rollback: null } }),
+    systemInfo: () => ({ release: { STONE_VERSION: '0.1.0-rc23 (simulación)', STONE_BASE_IMAGE: 'bazzite-deck', STONE_KERNEL: 'simulado', STONE_MESA: 'simulado', STONE_GOVERNOR_VERSION: 'simulado' },
+      boot_time: Math.round(now - 3600), deployments: { booted: { image: 'simulación', version: '0.1.0-rc23', timestamp: now }, staged: null, rollback: null } }),
     'prefs.get': () => prefs,
     'prefs.set': ([p]) => (prefs = Object.assign({}, prefs, p)),
     emulators: () => ['RetroDECK|Todo en uno: la mayoría de consolas clásicas en una sola app|1', 'RetroArch|Consolas clásicas con núcleos de libretro|0', 'Dolphin|GameCube y Wii|0',
@@ -189,11 +194,11 @@ const Bridge = (() => {
     const gr = x.createLinearGradient(0, 0, w, h); gr.addColorStop(0, `hsl(${hsh},38%,26%)`); gr.addColorStop(1, `hsl(${(hsh + 50) % 360},34%,9%)`);
     x.fillStyle = gr; x.fillRect(0, 0, w, h);
     x.fillStyle = 'rgba(255,255,255,.07)'; x.beginPath(); x.arc(w * .78, h * .3, h * .55, 0, 7); x.fill();
-    x.fillStyle = 'rgba(237,233,227,.9)'; x.font = `300 ${Math.round(h * (kind === 'hero' ? .13 : .075))}px Jost, sans-serif`; x.textBaseline = 'bottom';
+    x.fillStyle = 'rgba(237,233,227,.9)'; x.font = `300 ${Math.round(h * (kind === 'hero' ? .13 : .075))}px Jost, sans-serif`; x.textBaseline = 'bottom'; if (kind === 'hero') x.textAlign = 'center';
     const words = (g ? g.name : appid).toUpperCase().split(' '); let line = '', y = h - h * .08; const lines = [];
     for (const wd of words) { const tt = line ? line + ' ' + wd : wd; if (x.measureText(tt).width > w * .8 && line) { lines.push(line); line = wd; } else line = tt; }
     lines.push(line); const lh = h * (kind === 'hero' ? .15 : .085); y -= (lines.length - 1) * lh;
-    lines.forEach((l, i) => x.fillText(l, w * .07, y + i * lh));
+    lines.forEach((l, i) => x.fillText(l, kind === 'hero' ? w * .5 : w * .07, y + i * lh));
     return (artCache[k] = c.toDataURL('image/jpeg', .85));
   }
   async function call(method, ...args) {

@@ -1,10 +1,17 @@
-# STONE OS 0.1.0-rc22
+# STONE OS 0.1.0-rc23
 
-Release Candidate 22 de STONE OS para STONE MACHINE (AMD BC-250).
+Release Candidate 23 de STONE OS para STONE MACHINE (AMD BC-250).
 
 **Nada está verificado en hardware todavía.**
 
-## Cambios desde 0.1.0-rc21
+## Cambios desde 0.1.0-rc22
+
+- **Ajustes → Steam en español.** Los nombres y áreas de los ajustes que STONE reconoce se muestran en español («Activar HDR», «Mandos», «Descargas»…). Los que no reconoce se muestran con el nombre que da Steam: no se adivina ni se mezcla.
+- **Simulación de STONE OS** (`development/build_simulation.py`): genera una página que ejecuta la interfaz real con datos inventados, para verla sin la consola. No mide nada ni muestra FPS. La validación comprueba que se genera.
+- **CI:** corregidos los 4 avisos de ruff de rc22 (`raise … from`, import público de `stone_display.link`) y la prueba del navegador, que contaba mal las categorías de Ajustes desde que existe «Steam».
+- Prueba D24.
+
+## Cambios en rc22 (desde 0.1.0-rc21)
 
 - **Ajustes → Steam: los ajustes de Steam dentro de STONE.** STONE pregunta a la interfaz de tu Steam qué funciones ofrece (solo los nombres) y arma la lista con los pares `GetX` / `SetX` que encuentra:
   - los de **sí/no** se cambian con A; los números y textos se **muestran** (solo lectura);

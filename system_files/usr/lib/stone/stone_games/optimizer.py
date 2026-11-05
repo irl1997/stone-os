@@ -379,9 +379,9 @@ class Engine:
         try:
             return {"ok": True, **install.fetch(kind, log=self.log)}
         except install.InstallError as e:
-            raise schema.ProfileError(str(e))
+            raise schema.ProfileError(str(e)) from e
         except OSError as e:
-            raise schema.ProfileError(f"no se pudo descargar ({e.__class__.__name__}): ¿hay internet?")
+            raise schema.ProfileError(f"no se pudo descargar ({e.__class__.__name__}): ¿hay internet?") from e
 
     def install_plan(self, appid, kind="optiscaler"):
         from . import install

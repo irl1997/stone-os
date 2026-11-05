@@ -38,6 +38,24 @@ def humanize(name):
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name).strip()
 
 
+# Spanish for the names STONE recognises. Steam's own name stays when it is not here: nothing is guessed.
+AREAS_ES = {"Display": "Pantalla", "Audio": "Audio", "Controller": "Mandos", "Network": "Red", "Bluetooth": "Bluetooth",
+            "Downloads": "Descargas", "Interface": "Interfaz", "Compatibility": "Compatibilidad", "System": "Sistema",
+            "Notifications": "Notificaciones", "Storage": "Almacenamiento", "Power": "Energía", "Input": "Entrada"}
+LABELS_ES = {"Enable Hdr": "Activar HDR", "Use Native Resolution": "Usar la resolución nativa", "Screen Brightness": "Brillo de pantalla",
+             "Game Volume": "Volumen de los juegos", "Mute On Minimize": "Silenciar al minimizar", "Enable Xbox Support": "Soporte para mandos Xbox",
+             "Enable Playstation Support": "Soporte para mandos PlayStation", "Haptics Enabled": "Vibración háptica",
+             "Enable Wifi Power Save": "Ahorro de energía del Wi-Fi", "Allow Downloads During Gameplay": "Descargar mientras se juega",
+             "Download Region": "Región de descarga", "Show Fps Counter": "Mostrar contador de FPS", "Enable Animations": "Animaciones",
+             "Enable Steam Play": "Activar Steam Play", "Enable Developer Mode": "Modo desarrollador",
+             "Show Toast Notifications": "Mostrar avisos emergentes"}
+
+
+def spanish(label, area):
+    """(label, area) in Spanish where known; the person sees Steam's own words otherwise."""
+    return LABELS_ES.get(label, label), " › ".join(AREAS_ES.get(a, a) for a in area.split(" › "))
+
+
 def catalog(tree):
     """[{id, path, get_path, set_path|None, label, area}] from a probe tree (functions are 'f<arity>')."""
     out = []
@@ -132,7 +150,8 @@ class SteamSettings:
                 continue
             if isinstance(v, bool):
                 self._bool.add(c["id"])
-            out.append({"id": c["id"], "label": c["label"], "area": c["area"], "value": v,
+            label, area = spanish(c["label"], c["area"])
+            out.append({"id": c["id"], "label": label, "label_en": c["label"], "area": area, "value": v,
                         "type": "bool" if isinstance(v, bool) else "number" if isinstance(v, (int, float)) else "text",
                         "writable": bool(c["set_path"]) and isinstance(v, bool)})
         return {"available": True, "settings": out, "count": len(cat), "error": None}
