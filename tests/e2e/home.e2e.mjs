@@ -52,7 +52,7 @@ try {
   // 3. Settings -> Rendimiento -> Performance Center -> PERFORMANCE, shown from the governor's answer
   await key('ArrowDown'); await focusTo(/^Ajustes$/); await key('Enter');
   await page.waitForSelector('#settings.on');
-  await key('ArrowDown', 7);   // Sistema … Almacenamiento, Emuladores, Rendimiento
+  await key('ArrowDown', 8);   // Sistema … Almacenamiento, Emuladores, Steam, Rendimiento
   await waitText('#settings .cats .cur', /^Rendimiento$/);
   await key('ArrowRight'); await key('Enter');
   await page.waitForSelector('#perf.on');

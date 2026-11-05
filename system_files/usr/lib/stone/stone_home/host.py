@@ -20,6 +20,7 @@ from . import emulators
 from . import library
 from . import shortcuts
 from . import steamcef
+from . import steamsettings
 from . import system
 
 
@@ -38,6 +39,7 @@ class Host:
         cef = _SteamUIProxy(self)
         # STONE DISPLAY: display model and the game resolution environment (stone_display/).
         self.display = stone_display.Display(game_policy=self.game_policy, cef=cef,
+                                             goal=lambda: system.load_prefs().get("display_goal", "fluid"),
                                              on_change=lambda why: GLib.idle_add(self._display_changed, why))
         self.game_env = stone_display.GameEnvironment(cef=cef)
         # STONE OPTIMIZED: game profiles, graphics paths, measured optimization (stone_games/).
@@ -135,8 +137,9 @@ class Host:
 
     def _env_state(self):
         snap = self.display.status(fresh=True)
+        # The size to give games: the display's native one, or the best the link carries when it cannot do native.
         return ({"game_default": snap.get("steam_game_default")} if snap.get("steam_available") else None,
-                (snap.get("primary") or {}).get("native_resolution"))
+                snap.get("game_environment") or (snap.get("primary") or {}).get("native_resolution"))
 
     def _apply_env(self, ids):
         try:
@@ -280,6 +283,94 @@ class Host:
             self.optimized.apply(appid, mode)
         return self.m_launch([appid], done)
 
+    def m_game_image(self, args, done):
+        """imageOptions(appid): the enhancement choices of one game and which one is active."""
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: self.optimized.image_options(appid))
+
+    def m_game_setImage(self, args, done):
+        """setImage(appid, key, preset?): the person's own choice; unavailable ones are refused."""
+        if len(args) not in (2, 3) or not isinstance(args[1], str) or (len(args) == 3 and args[2] is not None and not isinstance(args[2], str)):
+            return done(None, "InvalidValue", "arguments")
+        appid, _ = self._game_args(args[:1], 1, 1)
+        preset = args[2] if len(args) == 3 else None
+        self._opt_call(done, lambda: self.optimized.set_image(appid, args[1], preset))
+
+    def m_components(self, args, done):
+        """components(kind?): without kind, what is downloaded; with kind, download the newest official release."""
+        if not args:
+            return self._opt_call(done, self.optimized.components)
+        if len(args) != 1 or args[0] not in ("helixsr", "optiscaler"):
+            return done(None, "InvalidValue", "component")
+        self._opt_call(done, lambda: self.optimized.fetch_component(args[0]))
+
+    def m_game_installPlan(self, args, done):
+        """installPlan(appid, kind): what installing would do (nothing is changed)."""
+        if len(args) != 2 or args[1] not in ("helixsr", "optiscaler"):
+            return done(None, "InvalidValue", "arguments")
+        appid, _ = self._game_args(args[:1], 1, 1)
+        self._opt_call(done, lambda: self.optimized.install_plan(appid, args[1]))
+
+    def m_game_install(self, args, done):
+        """install(appid): OptiScaler into the game (only after installPlan said ok)."""
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: self.optimized.install_image(appid, "optiscaler"))
+
+    def m_game_uninstallImage(self, args, done):
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: self.optimized.uninstall_image(appid))
+
+    # ---- Steam's settings, inside STONE (stone_home/steamsettings.py) -----------------------
+    def _steamset(self):
+        if getattr(self, "_ss", None) is None:
+            host = self
+
+            class Cef:                                    # always the host's current Steam interface (a fake in tests)
+                def ui_value(self, e):
+                    return host.steam_ui.ui_value(e)
+
+                def probe(self):
+                    return host.steam_ui.probe()
+            self._ss = steamsettings.SteamSettings(Cef())
+        return self._ss
+
+    def m_steam_settings(self, args, done):
+        """steam.settings(refresh?): every setting this Steam offers that STONE may show, with its value."""
+        refresh = bool(args and args[0] is True)
+        self._opt_call(done, lambda: self._steamset().read(refresh))
+
+    def m_steam_setSetting(self, args, done):
+        """steam.setSetting(id, true|false): change one true/false setting that is in the catalog."""
+        if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], bool) or len(args[0]) > 120:
+            return done(None, "InvalidValue", "arguments")
+
+        def work():
+            try:
+                return self._steamset().set_bool(args[0], args[1])
+            except ValueError as e:
+                raise games_schema.ProfileError(str(e))
+        self._opt_call(done, work)
+
+    def m_game_optimizeStatus(self, args, done):
+        appid, _ = self._game_args(args, 1, 1)
+        self._opt_call(done, lambda: self.optimized.optimize_status(appid))
+
+    def m_game_optimizeStart(self, args, done):
+        """Launch the next measurement of the matrix (the person plays or runs the game's benchmark, then quits)."""
+        appid, _ = self._game_args(args, 1, 1)
+        if appid not in self.games:
+            return done(None, "InvalidValue", "unknown game")
+        if self.optimized.status().get("active"):
+            return done(None, "InvalidValue", "a game is already being optimized")
+
+        def launch():
+            if self.game_policy() == "native":
+                self._apply_env([appid])
+            r = self.optimized.launch(appid, measure={"config": "next", "delay": 90, "duration": 120})
+            return {k: r.get(k) for k in ("ok", "error", "settings", "config")} if not r.get("ok") else \
+                {"ok": True, "settings": r.get("settings"), "summary": games_opt.summary(r["config"])}
+        self._opt_call(done, launch)
+
     def m_game_status(self, args, done):
         """getOptimizationStatus()"""
         self._opt_call(done, self.optimized.status)
@@ -320,6 +411,22 @@ class Host:
                 r = self.game_env.apply(list(self.games) + list(shortcuts.shortcut_appids(self.root())))
             GLib.idle_add(lambda: (done({"ok": r.get("error") is None, "changed": len(r.get("changed", [])),
                                           "error": r.get("error")}), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
+    def m_display_goal(self, args, done):
+        """0: fluid (the highest resolution at 60 Hz or more the link carries), 1: the highest resolution at any refresh."""
+        if len(args) != 1 or args[0] not in (0, 1):
+            return done(None, "InvalidValue", "goal")
+        prefs = system.load_prefs()
+        prefs["display_goal"] = "max_res" if args[0] else "fluid"
+        system.save_prefs(prefs)
+        self.display.invalidate()
+
+        def work():
+            r = {"error": None}
+            if prefs.get("game_res", 0) == 0:
+                self.game_env.ensure_default(self._env_state)
+            GLib.idle_add(lambda: (done({"ok": True, "goal": prefs["display_goal"], "error": r["error"]}), False)[1])
         threading.Thread(target=work, daemon=True).start()
 
     def m_openSteam(self, args, done):
@@ -383,6 +490,12 @@ class _SteamUIProxy:
         fn = getattr(self.host.steam_ui, "ui_value", None)
         return fn(expression) if fn else None
 
+    def __getattr__(self, name):
+        # ui_values (per-page answers and errors) only where the Steam interface offers it
+        if name == "ui_values" and hasattr(self.host.steam_ui, "ui_values"):
+            return self.host.steam_ui.ui_values
+        raise AttributeError(name)
+
     def run_game(self, game_id):
         return self.host.steam_ui.run_game(game_id)
 
@@ -400,7 +513,8 @@ def frontend_display(snap):
         "hdr": {"supported": p.get("hdr_supported"), "active": p.get("hdr_active")},
         "game_env": snap.get("game_environment"), "steam_default": snap.get("steam_game_default"),
         "policy": snap.get("game_policy"), "safe": snap.get("safe_display_mode"),
-        "steam": snap.get("steam_available"), "findings": snap.get("findings", []),
+        "steam": snap.get("steam_available"), "steam_error": snap.get("steam_error"), "findings": snap.get("findings", []),
+        "link": snap.get("link"), "goal": snap.get("goal"),
     }
 
 

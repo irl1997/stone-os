@@ -2,6 +2,13 @@
 
   stonectl display                 what is connected, native and output modes, game environment
   stonectl display --json          the same model as JSON
+  stonectl display probe           asks every page of Steam's interface what it offers (names only) and
+                                   whether it answers the display state; saves ~/.local/state/stone/steam-api.json
+  stonectl display set-output WxH  EXPERIMENTAL, only a mode this connection can carry: asks Game Mode for that
+                                   output size at the next start (~/.config/environment.d/90-stone-display.conf)
+  stonectl display reset           removes that file: Game Mode chooses again
+  stonectl display goal fluid|max  fluid (default): the highest resolution at 60 Hz or more; max: the highest
+                                   resolution at any refresh (4K30 on a link that cannot do 4K60)
   stonectl display diagnostics     everything above plus the Gamescope command line, Gamescope's
                                    saved modes, session overrides and ScopeBuddy files, saved
                                    to ~/.local/state/stone/display-diagnostics.txt for support
@@ -17,7 +24,9 @@ import re
 import sys
 import time
 
-from . import _r, collect, state_dir
+from . import _r, collect, link, state_dir
+
+ENV_FILE = "~/.config/environment.d/90-stone-display.conf"
 
 INTERESTING_ENV = re.compile(r"^\s*(export\s+)?(SCREEN_WIDTH|SCREEN_HEIGHT|INTERNAL_WIDTH|INTERNAL_HEIGHT|OUTPUT_CONNECTOR|"
                              r"ADAPTIVE_SYNC|ENABLE_GAMESCOPE_HDR|CUSTOM_REFRESH_RATES|DRM_MODE|GAMESCOPECMD|MAX_SCALE)=", re.MULTILINE)
@@ -107,6 +116,17 @@ def status_text(snap):
               f"    Steam por defecto: {_r(snap.get('steam_game_default'))}",
               "D · Interna:         la elige cada juego (STONE GRAPHICS, fase siguiente)",
               f"E · Final:           {_r(snap.get('final_output'))}"]
+        lk = snap.get("link")
+        if lk:
+            L.append(f"    Enlace:          {lk['budget_source']}" + (f" (≈{lk['budget_mhz']} MHz)" if lk.get("budget_mhz") else ""))
+            L.append(f"    Mejor fluida:    {_r(lk.get('best_fluid'))}   Máxima resolución: {_r(lk.get('best_max_res'))}"
+                     f"   Meta: {'máxima resolución' if lk.get('goal') == 'max_res' else 'fluidez (≥60 Hz)'}")
+            L.append("    4K a 60 Hz:      " + ("sí" if lk.get("reaches_4k60") else
+                                               "NO con esta conexión" if lk.get("display_offers_4k60") else "la pantalla no lo ofrece"))
+            if lk.get("unreachable"):
+                L.append("    No caben:        " + ", ".join(_r(m) + f" ({m['need_mhz']} MHz)" for m in lk["unreachable"][:4]))
+        if snap.get("steam_error"):
+            L.append(f"    Steam:           NO entregó el estado ({str(snap['steam_error'])[:200]}). Prueba: stonectl display probe")
         xw = snap.get("xwayland") or {}
         if xw:
             L.append("    Xwayland:        " + "  ".join(f"{k} {_r(v)}" for k, v in sorted(xw.items())))
@@ -121,10 +141,98 @@ def status_text(snap):
     return "\n".join(L) + "\n"
 
 
+def _count(tree):
+    return sum(1 if isinstance(v, str) else _count(v) for v in tree.values())
+
+
+def _find(tree, *path):
+    for k in path:
+        tree = tree.get(k) if isinstance(tree, dict) else None
+    return tree
+
+
+def probe(out):
+    """What each Steam interface page offers; the answer decides how STONE talks to Steam."""
+    from stone_home import steamcef
+    from . import steam
+    rows = steamcef.probe()
+    api = {"time": int(time.time()), "pages": []}
+    out.write("STONE ↔ STEAM (interfaz de Steam)\n\n")
+    if not rows:
+        out.write("Steam no respondió en 127.0.0.1:8080. ¿Estás en Game Mode con Steam abierto?\n")
+    for r in rows:
+        if r.get("error"):
+            out.write(f"  página {r['title']!r}: ERROR {r['error']}\n")
+            continue
+        tree = r.get("tree") or {}
+        dm = _find(tree, "System", "DisplayManager")
+        n = _count(tree) if tree else 0
+        out.write(f"  página {r['title']!r}: SteamClient {'SÍ' if r.get('has_steamclient') else 'no'}, {n} funciones"
+                  + (f", DisplayManager: {', '.join(sorted(dm))}" if isinstance(dm, dict) else ", sin DisplayManager") + "\n")
+        api["pages"].append({"title": r["title"], "has_steamclient": r.get("has_steamclient"), "tree": tree})
+    st, err = steam.display_state()
+    out.write("\nEstado de pantalla de Steam: " + (f"LEÍDO ({len(st['displays'])} pantalla(s), juegos por defecto {_r(st.get('game_default'))})"
+                                                     if st else f"NO leído: {err}") + "\n")
+    path = os.path.join(state_dir(), "steam-api.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(api, f)
+    out.write(f"\nLista de funciones (solo nombres) guardada en {path.replace(_home(), '~')}\n")
+    return 0
+
+
+def set_output(arg, snap, out):
+    import re as _re
+    m = _re.fullmatch(r"(\d{3,4})x(\d{3,4})", arg or "")
+    if not m:
+        out.write("uso: stonectl display set-output 2560x1440\n")
+        return 2
+    w, h = int(m.group(1)), int(m.group(2))
+    lk = snap.get("link")
+    p = snap.get("primary")
+    if not p or not lk or not lk.get("best_max_res"):
+        out.write("No hay datos de la conexión: STONE no fuerza una resolución sin saber qué admite. No se cambió nada.\n")
+        return 1
+    offered = {(x["w"], x["h"]) for x in p.get("available_modes") or []}
+    if (w, h) not in offered or not link.reachable(lk, w, h):
+        out.write(f"{w}x{h} no es un modo que la pantalla ofrezca y esta conexión pueda llevar. "
+                  f"Lo máximo es {_r(lk['best_max_res'])}. No se cambió nada.\n")
+        return 1
+    path = os.path.expanduser(ENV_FILE)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(f"# STONE DISPLAY: tamaño de salida de Game Mode. Se quita con: stonectl display reset\n"
+                f"SCREEN_WIDTH={w}\nSCREEN_HEIGHT={h}\n")
+    out.write(f"Escrito {ENV_FILE}: Game Mode pedirá {w}x{h} al próximo inicio (reinicia la consola).\n"
+              "EXPERIMENTAL, sin verificar en hardware. Si la pantalla queda negra: Ctrl+Alt+F3, entra y escribe «stonectl display reset» y reinicia.\n")
+    return 0
+
+
 def main(argv, out=sys.stdout):
     from stone_home import system as S
-    pol = "native" if (S.load_prefs().get("game_res", 0) == 0) else "steam"
-    snap = collect(pol)
+    prefs = S.load_prefs()
+    pol = "native" if (prefs.get("game_res", 0) == 0) else "steam"
+    if argv == ["probe"]:
+        return probe(out)
+    if argv == ["reset"]:
+        path = os.path.expanduser(ENV_FILE)
+        if os.path.exists(path):
+            os.remove(path)
+            out.write("Quitado. Game Mode elegirá la salida solo al próximo inicio (reinicia la consola).\n")
+        else:
+            out.write("No había ningún cambio de STONE.\n")
+        return 0
+    if len(argv) == 2 and argv[0] == "goal":
+        if argv[1] not in ("fluid", "max"):
+            out.write("uso: stonectl display goal fluid|max\n")
+            return 2
+        prefs["display_goal"] = "max_res" if argv[1] == "max" else "fluid"
+        S.save_prefs(prefs)
+        out.write("Meta guardada: " + ("máxima resolución (aunque sean menos Hz)" if argv[1] == "max" else "fluidez (≥60 Hz)") + "\n")
+        return 0
+    snap = collect(pol, goal=prefs.get("display_goal", "fluid"))
+    if len(argv) == 2 and argv[0] == "set-output":
+        return set_output(argv[1], snap, out)
     if argv == ["--json"]:
         out.write(json.dumps(snap, indent=1, default=str) + "\n")
         return 0
@@ -147,5 +255,5 @@ def main(argv, out=sys.stdout):
             fh.write(f"# STONE display diagnostics {time.strftime('%Y-%m-%d %H:%M:%S')}\n" + text + "\n")
         out.write(status_text(snap) + f"\nGuardado completo en {path.replace(_home(), '~')}\n")
         return 0
-    out.write("uso: stonectl display [--json | diagnostics]\n")
+    out.write("uso: stonectl display [--json | probe | diagnostics | set-output WxH | reset | goal fluid|max]\n")
     return 2

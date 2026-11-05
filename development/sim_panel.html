@@ -1,0 +1,30 @@
+<style>
+#simbar{position:fixed;left:max(10px,env(safe-area-inset-left,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:99999;font:12px/1.4 Inter,system-ui,sans-serif;color:#ede9e3}
+#simbar button{font:inherit;color:inherit;background:#1c1d1f;border:1px solid #5e6064;border-radius:6px;padding:6px 10px;cursor:pointer}
+#simbar button:hover{border-color:#c88a3a}
+#simbox{display:none;margin-bottom:6px;background:#141517ee;border:1px solid #2b2c2f;border-radius:8px;padding:12px;width:min(320px,calc(100vw - 32px));gap:8px;flex-direction:column}
+#simbox.on{display:flex}
+#simbox h4{margin:0;font:500 12px Inter,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#c88a3a}
+#simbox p{margin:0;color:#8e9095}
+#simbox .row{display:flex;gap:6px;flex-wrap:wrap}
+#simbox .sel{border-color:#c88a3a}
+</style>
+<div id="simbar"><div id="simbox">
+  <h4>Simulación — nada de esto es medido</h4>
+  <p>Biblioteca, pantalla, ajustes de Steam y descargas son inventados para mostrar la interfaz. No hay FPS ni telemetría reales.</p>
+  <p>Conexión al televisor:</p>
+  <div class="row"><button id="simAp">Adaptador pasivo (≈300 MHz)</button><button id="simAa">Adaptador activo DP 1.4 → HDMI 2.0</button></div>
+  <p>Teclado: flechas, Enter = A, Esc = B.</p>
+  <div class="row"><button id="simEnd" hidden>Terminar el juego en curso</button></div>
+</div><button id="simBtn">Simulación</button></div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const sync = () => { $('simAp').classList.toggle('sel', SimPanel.adapter === 'passive'); $('simAa').classList.toggle('sel', SimPanel.adapter === 'active'); $('simEnd').hidden = !SimPanel.running; };
+  SimPanel.refresh = sync; sync();
+  $('simBtn').onclick = () => { $('simbox').classList.toggle('on'); sync(); };
+  const set = a => () => { SimPanel.adapter = a; sync(); window.__stoneEvent('display', {}); };
+  $('simAp').onclick = set('passive'); $('simAa').onclick = set('active');
+  $('simEnd').onclick = () => { const a = SimPanel.running; SimPanel.running = null; if (a) SimStoned.sim.steamExit(a); sync(); };
+})();
+</script>

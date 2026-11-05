@@ -369,6 +369,106 @@ class Engine:
         _save_mode_prefs(prefs)
         return {"ok": True, "mode": mode}
 
+    # -- components: only on the person's request, never for anti-cheat / online games --
+    def components(self):
+        from . import install
+        return {"components": install.status()}
+
+    def fetch_component(self, kind):
+        from . import install
+        try:
+            return {"ok": True, **install.fetch(kind, log=self.log)}
+        except install.InstallError as e:
+            raise schema.ProfileError(str(e))
+        except OSError as e:
+            raise schema.ProfileError(f"no se pudo descargar ({e.__class__.__name__}): ¿hay internet?")
+
+    def install_plan(self, appid, kind="optiscaler"):
+        from . import install
+        p = self.profile(appid)
+        if kind == "helixsr":
+            r = install.helixsr_command()
+            return r
+        r = install.install_plan(appid, p["facts"], p["game"])
+        return {k: v for k, v in r.items() if not k.startswith("_")} | {"by_stone": bool(install.installed_by_stone(appid))}
+
+    def install_image(self, appid, kind="optiscaler"):
+        from . import install
+        if kind != "optiscaler":
+            raise schema.ProfileError("HelixSR: usa el instalador oficial (stone-game components)")
+        p = self.profile(appid)
+        r = install.install_optiscaler(appid, p["facts"], p["game"])
+        if r.get("ok"):
+            self.log(f"[stone] optimized: OptiScaler installed in {appid} ({r['folder']})")
+        return r
+
+    def uninstall_image(self, appid):
+        from . import install
+        return install.uninstall(appid)
+
+    # -- guided optimization: the measurement matrix, one launch at a time --
+    def optimize_status(self, appid):
+        """How far the measurement of this game is, and what the next launch would be."""
+        p = self.profile(appid)
+        rows = matrix(p, p["availability"]) + stage2(p, p["availability"], p["environment"])
+        done_keys = {schema.config_key(dict(m["config"], frame_target={"fps": None, "vrr": False}))
+                     for m in (p["measurements"] if not p["stale"] else [])}
+        done = sum(1 for c in rows if schema.config_key(c) in done_keys)
+        nxt = p["next_measurement"]
+        rec = self.recommended(appid, "recommended", p)
+        return {"done": done, "total": len(rows), "next": summary(nxt) if nxt else None,
+                "benchmark": (p["game"] or {}).get("benchmark"), "stale": p["stale"],
+                "recommended": summary(rec["config"]), "status": p["status"], "measured": len(p["measurements"])}
+
+    # -- image enhancement: the person's own, explicit choice (never HelixSR unless chosen) --
+    IMAGE_LABELS = {"native": "Sin mejora (nativo)", "game_upscaler": "FSR del juego", "gamescope": "FSR de pantalla (Gamescope)",
+                    "helixsr": "HelixSR", "optiscaler": "OptiScaler"}
+    IMAGE_PRESETS = ("quality", "balanced", "performance", "ultra_performance")
+
+    def image_options(self, appid):
+        """What the person can pick for the image of this game, and what is picked now."""
+        p = self.profile(appid)
+        mode = self.chosen_mode(appid)
+        cur = self.recommended(appid, mode, p)["config"]["graphics"]
+        out = [{"key": "auto", "label": "STONE decide", "available": True, "reason": None,
+                "selected": mode != "custom"}]
+        for key in ("native", "game_upscaler", "gamescope", "helixsr", "optiscaler"):
+            a = p["availability"].get(key, {"available": False, "reason": "unknown"})
+            if key in ("helixsr", "optiscaler") and not a.get("available") and \
+                    ("not installed" in (a.get("reason") or "") or "installed instead" in (a.get("reason") or "")):
+                continue                                          # not installed: no point listing it
+            out.append({"key": key, "label": self.IMAGE_LABELS[key], "available": bool(a.get("available")),
+                        "reason": a.get("reason"), "guidance_only": bool(a.get("guidance_only")),
+                        "selected": mode == "custom" and cur["path"] == key})
+        from . import install
+        return {"mode": mode, "path": cur["path"], "preset": cur["upscaler_preset"], "choices": out,
+                "by_stone": bool(install.installed_by_stone(appid)),
+                "presets": list(self.IMAGE_PRESETS)}
+
+    def set_image(self, appid, key, preset=None):
+        """Apply the person's choice. "auto" goes back to STONE RECOMMENDED. Anything unavailable is refused."""
+        if key == "auto":
+            return self.apply(appid, "recommended")
+        if key not in self.IMAGE_LABELS or (preset is not None and preset not in self.IMAGE_PRESETS):
+            raise schema.ProfileError("image choice")
+        p = self.profile(appid)
+        a = p["availability"].get(key, {})
+        if not a.get("available"):
+            raise schema.ProfileError(f"{key}: {a.get('reason') or 'not available'}")
+        c = schema.copy_profile(self.recommended(appid, self.chosen_mode(appid), p)["config"])
+        g = c["graphics"]
+        g["path"] = key
+        if key == "native":
+            g["upscaler_preset"], g["internal"] = None, {"strategy": "native", "scale": 1.0}
+        else:
+            preset = preset or g["upscaler_preset"] or "quality"
+            if preset == "native_aa":
+                preset = "quality"
+            g["upscaler_preset"] = preset
+            g["internal"] = {"strategy": "upscaled", "scale": round(schema.PRESET_SCALE[preset], 3)}
+            c["gamescope"]["scaling_filter"] = "fsr" if key == "gamescope" else c["gamescope"]["scaling_filter"]
+        return self.apply(appid, "custom", c)
+
     def restore_recommended(self, appid):
         """restoreRecommended: the person's own choices go; measurements stay."""
         removed = store.delete_layer("user", appid)

@@ -81,13 +81,20 @@ def recover(store, cmdline_path=None, now=None):
 
     # A calibration step was applied when the machine went down: that step failed. The result
     # keeps only what had passed before it (calibration.py), and the boot uses no higher ceiling.
-    if cal is not None:
+    if cal is not None and clean:
+        # A clean shutdown during a step (e.g. the idle power-off): nothing failed.
+        from . import calibration as C
+        rec = C.interrupted(st.get("calibration"), cal.get("machine"), cal.get("config") or {}, cal.get("level", "quick"),
+                            cal.get("steps") or [], cal.get("workload"), st.get("calibration_crash"))
+        if rec:
+            st["calibration"] = rec
+        report["actions"].append(f"calibration interrupted at {cal.get('step')} MHz by a clean shutdown (not a failure)")
+    elif cal is not None:
         from . import calibration as C
         st["calibration"] = C.record(cal.get("machine"), cal.get("config") or {}, cal.get("level", "quick"),
-                                     cal.get("steps") or [], cal.get("step"), "crash" if not clean else "interrupted",
-                                     0, cal.get("workload"))
+                                     cal.get("steps") or [], cal.get("step"), "crash", 0, cal.get("workload"))
         report["actions"].append(f"calibration step {cal.get('step')} MHz failed (machine went down)")
-        if not clean and isinstance(cal.get("step"), int):
+        if isinstance(cal.get("step"), int):
             st["calibration_crash"] = {"mhz": cal["step"], "machine": cal.get("machine"),
                                        "config": cal.get("config") or {}, "time": int(now)}
 

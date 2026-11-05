@@ -20,7 +20,7 @@ import sys
 import threading
 import time
 
-from . import drm, model, steam, xwayland
+from . import drm, link, model, steam, xwayland
 
 CHUNK = 150
 LOG_PREFIX = "[stone] display:"
@@ -34,22 +34,23 @@ def state_dir():
     return os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state"), "stone")
 
 
-def collect(game_policy="native", use_steam=True, cef=None):
+def collect(game_policy="native", use_steam=True, cef=None, goal="fluid"):
     """Gather every source now (no cache) and build the model."""
     kernel = drm.connectors()
     st, err = (steam.display_state(cef) if cef else steam.display_state()) if use_steam else (None, "not asked")
-    snap = model.snapshot(kernel, st, xwayland.screens(), game_policy)
+    snap = model.snapshot(kernel, st, xwayland.screens(), game_policy, goal)
     snap["steam_error"] = err
     snap["time"] = int(time.time())
     return snap
 
 
 class Display:
-    def __init__(self, game_policy=lambda: "native", cef=None, on_change=None):
+    def __init__(self, game_policy=lambda: "native", cef=None, on_change=None, goal=lambda: "fluid"):
         self._lock = threading.Lock()
         self._snap = None
         self._sig = None
         self.game_policy = game_policy
+        self.goal = goal
         self.cef = cef
         self.on_change = on_change
         self._udev = None
@@ -82,7 +83,7 @@ class Display:
         with self._lock:
             if self._snap is not None and not fresh:
                 return self._snap
-        snap = collect(self.game_policy(), cef=self.cef)
+        snap = collect(self.game_policy(), cef=self.cef, goal=self.goal())
         sig = model.signature(snap)
         with self._lock:
             self._snap = snap

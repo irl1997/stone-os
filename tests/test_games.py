@@ -674,6 +674,176 @@ def G18_host_api_game_to_recommended_to_play():
                 os.environ["XDG_CONFIG_HOME"] = old
 
 
+@test
+def G19_image_choice_is_explicit_available_only_and_reversible():
+    with World(injected="helixsr") as w:
+        o = w.e.image_options(CP)
+        keys = {c["key"]: c for c in o["choices"]}
+        assert o["mode"] == "recommended" and keys["auto"]["selected"] and keys["helixsr"]["available"], o
+        assert "optiscaler" not in keys                         # not installed: not listed
+        r = w.e.set_image(CP, "helixsr", "balanced")
+        assert r["mode"] == "custom"
+        g = w.e.recommended(CP, "custom")["config"]["graphics"]
+        assert g["path"] == "helixsr" and g["upscaler_preset"] == "balanced" and g["internal"]["strategy"] == "upscaled", g
+        assert {c["key"]: c for c in w.e.image_options(CP)["choices"]}["helixsr"]["selected"]
+        w.e.set_image(CP, "native")
+        g = w.e.recommended(CP, "custom")["config"]["graphics"]
+        assert g["path"] == "native" and g["upscaler_preset"] is None and g["internal"]["scale"] == 1.0, g
+        w.e.set_image(CP, "gamescope", "performance")
+        assert w.e.recommended(CP, "custom")["config"]["gamescope"]["scaling_filter"] == "fsr"
+        for bad in (("banana", None), ("game_upscaler", "turbo")):
+            try:
+                w.e.set_image(CP, *bad)
+                raise AssertionError(bad)
+            except schema.ProfileError:
+                pass
+        assert w.e.set_image(CP, "auto")["mode"] == "recommended" and w.e.chosen_mode(CP) == "recommended"
+    with World(injected=None) as w:                              # HelixSR not installed: refused, not faked
+        keys = {c["key"] for c in w.e.image_options(CP)["choices"]}
+        assert "helixsr" not in keys, keys
+        try:
+            w.e.set_image(CP, "helixsr")
+            raise AssertionError("helixsr without install")
+        except schema.ProfileError as e:
+            assert "not installed" in str(e), e
+
+
+def _release_zip(files):
+    import io
+    import zipfile
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        for n, data in files.items():
+            z.writestr(n, data)
+    return b.getvalue()
+
+
+def _fake_net(kind, files, tag="v9.9.9", name=None, digest=True, bad_digest=False):
+    import hashlib
+    blob = _release_zip(files)
+    name = name or ("HelixSR-9.9.9.zip" if kind == "helixsr" else "OptiScaler_9.9.9.zip")
+    sha = hashlib.sha256(blob).hexdigest()
+
+    def get_json(url):
+        assert url.startswith("https://api.github.com/repos/"), url
+        a = {"name": name, "browser_download_url": f"https://github.com/x/y/releases/download/{tag}/{name}", "size": len(blob)}
+        if digest:
+            a["digest"] = "sha256:" + ("0" * 64 if bad_digest else sha)
+        return {"tag_name": tag, "prerelease": False, "assets": [{"name": "notes.txt"}, a]}
+
+    def download(url, dest):
+        with open(dest, "wb") as f:
+            f.write(blob)
+        return sha, len(blob)
+    return get_json, download
+
+
+@test
+def G20_components_download_verify_install_uninstall():
+    from stone_games import install
+    opti = {"OptiScaler/OptiScaler.dll": b"MZ" + bytes(50), "OptiScaler/OptiScaler.ini": "[Upscalers]\n",
+            "OptiScaler/D3D12_Optiscaler/D3D12Core.dll": b"MZ"}
+    with World() as w:
+        gdir = os.path.join(w.game_dir, "bin", "x64")
+        with open(os.path.join(gdir, "Cyberpunk2077.exe"), "wb") as f:
+            f.write(bytes(5000))
+        with open(os.path.join(w.game_dir, "REDlauncher.exe"), "wb") as f:
+            f.write(bytes(9000))                                    # a launcher is not the game
+        # nothing downloaded yet: the plan says so and changes nothing
+        r = w.e.install_plan(CP, "optiscaler")
+        assert not r["ok"] and r["needs_download"], r
+        # a wrong checksum is refused and nothing is kept
+        gj, dl = _fake_net("optiscaler", opti, bad_digest=True)
+        try:
+            install.fetch("optiscaler", gj, dl)
+            raise AssertionError("bad digest accepted")
+        except install.InstallError as e:
+            assert "SHA-256" in str(e)
+        assert install.have("optiscaler") is None
+        # only GitHub / its CDN hosts are ever contacted
+        try:
+            install._check_url("https://evil.example/x.zip")
+            raise AssertionError("host allowed")
+        except install.InstallError:
+            pass
+        gj, dl = _fake_net("optiscaler", opti)
+        rec = install.fetch("optiscaler", gj, dl)
+        assert rec["tag"] == "v9.9.9" and rec["verified_by_github"] and install.have("optiscaler")["tag"] == "v9.9.9"
+        assert install.fetch("optiscaler", gj, dl).get("already")       # a second press downloads nothing
+        # the plan names the real executable folder; nothing is written yet
+        plan = w.e.install_plan(CP, "optiscaler")
+        assert plan["ok"] and plan["exe"] == "Cyberpunk2077.exe" and plan["folder"].replace(os.sep, "/") == "bin/x64" and plan["files"] == 3, plan
+        assert not os.path.exists(os.path.join(gdir, "winmm.dll"))
+        r = w.e.install_image(CP)
+        assert r["ok"], r
+        assert os.path.isfile(os.path.join(gdir, "winmm.dll")) and os.path.isfile(os.path.join(gdir, "OptiScaler.ini"))
+        assert os.path.isfile(os.path.join(gdir, "D3D12_Optiscaler", "D3D12Core.dll"))
+        assert not os.path.exists(os.path.join(gdir, "OptiScaler.dll"))           # renamed to the proxy
+        # STONE sees it like any installed OptiScaler and can switch it per launch
+        keys = {c["key"]: c for c in w.e.image_options(CP)["choices"]}
+        assert keys["optiscaler"]["available"], keys["optiscaler"]
+        assert not w.e.install_plan(CP, "optiscaler")["ok"]                         # already installed
+        u = w.e.uninstall_image(CP)
+        assert u["ok"] and u["removed"] == 3
+        assert not os.path.exists(os.path.join(gdir, "winmm.dll")) and not os.path.exists(os.path.join(gdir, "D3D12_Optiscaler"))
+        assert os.path.isfile(os.path.join(gdir, "Cyberpunk2077.exe"))              # the game's own files untouched
+        assert not w.e.uninstall_image(CP)["ok"]
+        # never over existing files
+        os.makedirs(os.path.join(gdir, "D3D12_Optiscaler"))
+        with open(os.path.join(gdir, "D3D12_Optiscaler", "D3D12Core.dll"), "w") as f:
+            f.write("mine")
+        assert "already exist" in w.e.install_plan(CP, "optiscaler")["error"]
+    with World(anti_cheat=True) as w:                                               # anti-cheat: refused
+        gj, dl = _fake_net("optiscaler", opti)
+        install.fetch("optiscaler", gj, dl)
+        with open(os.path.join(w.game_dir, "bin", "x64", "g.exe"), "wb") as f:
+            f.write(bytes(100))
+        r = w.e.install_plan(CP, "optiscaler")
+        assert not r["ok"] and "anti-cheat" in r["error"], r
+        assert not w.e.install_image(CP)["ok"]
+
+
+@test
+def G21_helixsr_is_downloaded_and_the_person_runs_the_authors_installer():
+    from stone_games import install
+    with World() as w:
+        assert not w.e.install_plan(CP, "helixsr")["ok"]
+        gj, dl = _fake_net("helixsr", {"HelixSR-9.9.9/helixsr-setup.sh": "#!/bin/sh\n", "HelixSR-9.9.9/README.md": "x"})
+        install.fetch("helixsr", gj, dl)
+        r = w.e.install_plan(CP, "helixsr")
+        assert r["ok"] and "./helixsr-setup.sh" in r["command"] and "--yes" in r["warning"], r
+        assert "--yes" not in r["command"]
+        sh = os.path.join(r["dir"], "helixsr-setup.sh")
+        assert os.access(sh, os.X_OK)
+        try:
+            w.e.install_image(CP, "helixsr")                         # STONE never runs it for the person
+            raise AssertionError("helixsr installed by STONE")
+        except schema.ProfileError:
+            pass
+        # an archive that tries to write outside its folder is refused
+        gj, dl = _fake_net("helixsr", {"../evil.sh": "x"}, tag="v9.9.10")
+        try:
+            install.fetch("helixsr", gj, dl)
+            raise AssertionError("path traversal accepted")
+        except (install.InstallError, ValueError, OSError):
+            pass
+
+
+@test
+def G22_guided_optimization_counts_the_matrix_and_grows_with_installed_paths():
+    with World() as w:
+        o = w.e.optimize_status(CP)
+        assert o["done"] == 0 and o["total"] >= 4 and o["next"] and o["status"] == "UNKNOWN", o
+        r = w.e.launch(CP, measure={"config": "next", "delay": 30, "duration": 90})
+        assert r["ok"]
+        w.play(CP, 200, log=(50, 0.02, 90, 1500, 70))
+        o2 = w.e.optimize_status(CP)
+        assert o2["done"] == 1 and o2["measured"] == 1 and o2["total"] >= o["total"], o2
+        assert o2["next"] != o["next"], (o, o2)
+    with World(injected="helixsr") as w2:                       # HelixSR installed -> more rows to measure
+        assert w2.e.optimize_status(CP)["total"] > o["total"]
+
+
 def main():
     only = sys.argv[1:]
     failed = 0

@@ -20,6 +20,24 @@ function loadDisplay(fresh) {
   });
 }
 Bridge.on('display', () => { S.disp = null; if (S.screen === 'settings' && CATS[cat] === 'Pantalla') loadDisplay(true); });
+/* The link: the best picture the connection (adapter, cable) can carry, from stone_display/link.py. */
+function linkRows(D) {
+  const L = D.link;
+  if (!L || !L.best_fluid) return [];
+  const f = m => m ? `${m.w} × ${m.h} · ${m.hz} Hz${m.hz_assumed ? ' (supuesto)' : ''}` : 'ninguna';
+  const goalMax = D.goal === 'max_res';
+  return [
+    { l: 'Conexión', s: L.reaches_4k60 ? 'Lleva 4K a 60 Hz o más' : (L.display_offers_4k60 ? '4K a 60 Hz no cabe en esta conexión' : 'Lo máximo que lleva la conexión'),
+      v: f(L.target), act: 'info', where: L.advice || `Fluida: ${f(L.best_fluid)}. Máxima resolución: ${f(L.best_max_res)}. Detalle: stonectl display` },
+    { l: 'Meta de imagen', s: goalMax ? 'La resolución más alta, aunque sean menos Hz' : 'La más alta a 60 Hz o más (recomendado para jugar)',
+      v: goalMax ? 'Máxima resolución' : 'Fluidez', key: 'dispgoal' }];
+}
+function setDisplayGoal() {
+  const next = S.disp && S.disp.goal === 'max_res' ? 0 : 1;
+  play('select');
+  toast(next === 1 ? 'STONE buscará la resolución más alta, aunque baje los Hz' : 'STONE buscará la resolución más alta a 60 Hz o más', false);
+  Sys.displayGoal(next).catch(() => {}).then(() => { S.disp = null; loadDisplay(true); });
+}
 function displayRows() {
   const D = S.disp;
   if (!D) { if (!S.dispLoading) loadDisplay(); return [{ l: 'Televisor', s: 'Leyendo la pantalla…', v: '', ro: true }]; }
@@ -35,8 +53,36 @@ function displayRows() {
     { l: 'Salida', s: D.output ? (D.native && D.output.w < D.native.w ? 'Por debajo de la nativa del televisor' : 'La que envía la consola al televisor') : 'Steam no respondió todavía',
       v: resTxt(D.output), act: 'info', where: D.native && D.output && D.output.w < D.native.w
         ? 'Botón STEAM → Ajustes → Pantalla → Resolución: elige la nativa del televisor' : 'La resolución de salida la fija Steam (Ajustes → Pantalla)' },
+    ...linkRows(D),
     { l: 'Juegos ven', s: D.policy === 'native' ? 'La resolución del televisor; cada juego decide cómo dibujar' : 'Lo que Steam da por defecto',
       v: D.policy === 'native' ? `Televisor · ${games}` : `Steam · ${games}`, key: 'gameres' }];
+}
+/* Steam's own settings, inside STONE. The list is whatever this Steam offers (stone_home/steamsettings.py):
+   true/false ones can be changed with A, the rest are shown. Names are Steam's, split into words. */
+function loadSteamSet(refresh) {
+  S.ssLoading = true;
+  Bridge.call('steam.settings', refresh === true).then(r => { S.ss = r; }, () => { S.ss = { available: false, settings: [], error: 'No se pudo leer Steam' }; }).then(() => {
+    S.ssLoading = false;
+    if (S.screen === 'settings' && CATS[cat] === 'Steam') enterSettings({ pane: !!NAV.pane, ri: NAV.pane ? NAV.c : 0 });
+  });
+}
+function steamSetRows() {
+  const ss = S.ss;
+  if (!ss) { if (!S.ssLoading) loadSteamSet(); return [{ l: 'Leyendo…', s: 'Preguntando a Steam qué ajustes ofrece', v: '', ro: true }]; }
+  const head = { l: 'Actualizar la lista', s: ss.available ? `${ss.settings.length} ajustes leídos de este Steam` : (ss.error || 'Steam no respondió'), v: 'Actualizar', act: 'sset', refresh: true };
+  const rows = (ss.settings || []).slice().sort((a, b) => a.area.localeCompare(b.area) || a.label.localeCompare(b.label)).map(x => ({
+    l: x.label, s: x.area, v: x.type === 'bool' ? (x.value ? 'Sí' : 'No') : String(x.value),
+    act: x.writable ? 'sset' : 'info', sset: x, where: `${x.area}: ${x.label} = ${x.value}${x.writable ? '' : ' (solo lectura)'}` }));
+  return [head, ...rows];
+}
+function ssetA(r) {
+  play('select');
+  if (r.refresh) { S.ss = null; return loadSteamSet(true); }
+  const x = r.sset;
+  Bridge.call('steam.setSetting', x.id, !x.value).then(res => {
+    toast(res && res.ok ? `${x.label}: ${!x.value ? 'Sí' : 'No'}` : 'Steam no aceptó el cambio', false);
+    S.ss = null; loadSteamSet(true);
+  }, () => toast('No se pudo cambiar', false));
 }
 /* Emulators: fixed catalog in the host (stone_home/emulators.py), installed from Flathub. */
 const EMU_STATE = {};
@@ -121,6 +167,7 @@ function catRows() {
       { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
       { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },
       steam('Salida de audio', 'Altavoces, auriculares, HDMI o DisplayPort', 'Botón ··· → Audio, o botón STEAM → Ajustes → Audio')] };
+    case 'Steam': return { d: 'Los ajustes de Steam, con el aspecto de STONE. La lista sale de lo que ofrece este Steam; los de sí/no se cambian con A.', rows: steamSetRows() };
     case 'Emuladores': {
       if (!S.emu) { if (!S.emuLoading) loadEmulators(); return { d: 'Emuladores de otras consolas, desde Flathub.', rows: [{ l: 'Leyendo…', s: 'Buscando qué emuladores están instalados', v: '', ro: true }] }; }
       return { d: 'Se instalan desde Flathub y aparecen en tu biblioteca como accesos directos. Los juegos y BIOS los pones tú. RetroDECK reúne la mayoría de consolas en una sola app.',

@@ -48,13 +48,19 @@ async function shutdown(reboot) {
     play('error'); toast(`No se pudo ${reboot ? 'reiniciar' : 'apagar'} (${ERR_TEXT[e.code] || e.message}). Usa el botón STEAM → Energía`, false);
   }
 }
-/* Apagar tras inactividad: only on STONE's own screens, never with a game open or a test running. */
+/* Apagar tras inactividad: only on STONE's own screens, never with a game open or a test running.
+   A test or calibration started from a terminal (stonectl calibrate) counts too: stoned reports it
+   in its state (board, rc16: the console powered off 30 min into `stonectl calibrate standard`). */
 let idleOffT = 0;
+function stonedBusy() {
+  const st = S.st;
+  return !!(st && (st.testing || (st.calibration && st.calibration.running)));
+}
 function armIdleOff() {
   clearTimeout(idleOffT);
   const min = IDLE_MIN[S.idle]; if (!min) return;
   idleOffT = setTimeout(() => {
-    if (S.running !== null || S.game || testUI || ['game', 'quick', 'transition', 'dlg'].includes(S.screen)) return armIdleOff();
+    if (S.running !== null || S.game || testUI || stonedBusy() || ['game', 'quick', 'transition', 'dlg'].includes(S.screen)) return armIdleOff();
     shutdown(false);
   }, min * 60000);
 }

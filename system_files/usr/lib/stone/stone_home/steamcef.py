@@ -43,15 +43,23 @@ def targets(port=PORT, timeout=2.0):
     return data if isinstance(data, list) else []
 
 
+def candidates(pages):
+    """Every page that may carry SteamClient, most suitable first (Steam names its pages by
+    version, so a title alone cannot be relied on)."""
+    usable = [p for p in pages if isinstance(p, dict) and p.get("webSocketDebuggerUrl")]
+    out = []
+    for title in PREFERRED_TITLES:
+        out += [p for p in usable if p.get("title") == title and p not in out]
+    out += [p for p in usable if "steamloopback.host" in str(p.get("url", "")) and p not in out]
+    out += [p for p in usable if p not in out]
+    return out
+
+
 def pick(pages):
     """The page to run SteamClient calls in, or None."""
-    usable = [p for p in pages if isinstance(p, dict) and p.get("webSocketDebuggerUrl")]
-    for title in PREFERRED_TITLES:
-        for p in usable:
-            if p.get("title") == title:
-                return p
+    usable = candidates(pages)
     for p in usable:
-        if "steamloopback.host" in str(p.get("url", "")):
+        if p.get("title") in PREFERRED_TITLES or "steamloopback.host" in str(p.get("url", "")):
             return p
     return None
 
@@ -149,7 +157,8 @@ def run_game_expression(game_id):
 def ui_eval(expression, port=PORT):
     """Run one fixed expression in Steam's interface. Returns a short status, never raises."""
     try:
-        page = pick(targets(port))
+        pages = targets(port)
+        page = pick(pages) or (candidates(pages) or [None])[0]
     except (OSError, ValueError) as e:
         return f"cef unavailable ({e.__class__.__name__})"
     if not page:
@@ -206,14 +215,65 @@ def open_page(page, port=PORT):
 
 
 def ui_value(expression, port=PORT):
-    """Like ui_eval, but returns the value itself; None if Steam's interface is not reachable."""
+    """Like ui_eval, but returns the value itself; None if no Steam page answers. Pages are
+    tried in order of suitability, because the page that carries SteamClient is not always the
+    one Steam lists first."""
+    for _title, value, err in ui_values(expression, port):
+        if err is None and value is not None:
+            return value
+    return None
+
+
+def ui_values(expression, port=PORT, limit=8):
+    """[(page title, value or None, error or None)] running the expression in each candidate page,
+    stopping at the first page that returns a value. Never raises."""
     try:
-        page = pick(targets(port))
-        if not page:
-            return None
-        return evaluate(page["webSocketDebuggerUrl"], expression, timeout=10.0)
-    except (OSError, ValueError, RuntimeError):
-        return None
+        pages = candidates(targets(port))[:limit]
+    except (OSError, ValueError) as e:
+        return [("-", None, f"cef unavailable ({e.__class__.__name__})")]
+    if not pages:
+        return [("-", None, "no Steam page yet")]
+    out = []
+    for page in pages:
+        try:
+            v = evaluate(page["webSocketDebuggerUrl"], expression, timeout=10.0)
+            out.append((page.get("title", "?"), v, None))
+            if v is not None:
+                break
+        except (OSError, ValueError, RuntimeError) as e:
+            out.append((page.get("title", "?"), None, f"{e.__class__.__name__}: {e}"))
+    return out
+
+
+# Names (never values) of what this Steam build offers, for STONE's Steam settings layer.
+API_PROBE = (
+    "(()=>{const o={has:!!window.SteamClient,tree:{}};if(!o.has)return JSON.stringify(o);let n=0;"
+    "const names=x=>{const s=new Set();try{for(const k of Object.keys(x))s.add(k);let p=Object.getPrototypeOf(x);"
+    "while(p&&p!==Object.prototype){for(const k of Object.getOwnPropertyNames(p))if(k!=='constructor')s.add(k);p=Object.getPrototypeOf(p);}}catch(e){}"
+    "return [...s].sort();};"
+    "const walk=(x,d)=>{const r={};for(const k of names(x)){if(n++>4000)break;let v;try{v=x[k];}catch(e){continue;}"
+    "if(typeof v==='function')r[k]='f'+v.length;else if(v&&typeof v==='object'&&d>0)r[k]=walk(v,d-1);}return r;};"
+    "o.tree=walk(window.SteamClient,3);return JSON.stringify(o);})()")
+
+
+def probe(port=PORT):
+    """Run API_PROBE in every candidate page: [{title, url, has_steamclient, tree, error}]."""
+    try:
+        pages = candidates(targets(port))[:12]
+    except (OSError, ValueError) as e:
+        return [{"title": "-", "error": f"cef unavailable ({e.__class__.__name__})"}]
+    out = []
+    for page in pages:
+        row = {"title": page.get("title", "?"), "url": str(page.get("url", ""))[:120]}
+        try:
+            raw = evaluate(page["webSocketDebuggerUrl"], API_PROBE, timeout=10.0)
+            d = json.loads(raw) if isinstance(raw, str) else {}
+            row["has_steamclient"] = bool(d.get("has"))
+            row["tree"] = d.get("tree") or {}
+        except (OSError, ValueError, RuntimeError) as e:
+            row["error"] = f"{e.__class__.__name__}: {e}"
+        out.append(row)
+    return out
 
 
 # Every game in the Steam account, installed or not (the library on disk only has installed

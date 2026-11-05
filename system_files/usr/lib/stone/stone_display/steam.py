@@ -201,7 +201,21 @@ def parse_answer(raw):
 
 
 def display_state(cef=steamcef):
-    return parse_answer(cef.ui_value(STATE_EXPRESSION))
+    """(state, error). Steam has several interface pages and only some answer GetState, so each
+    candidate page is tried until one gives a readable state; the error names what each said."""
+    each = getattr(cef, "ui_values", None)
+    if each is None:
+        return parse_answer(cef.ui_value(STATE_EXPRESSION))
+    notes = []
+    for title, value, err in each(STATE_EXPRESSION):
+        if err:
+            notes.append(f"{title}: {err}")
+            continue
+        state, perr = parse_answer(value)
+        if state is not None:
+            return state, None
+        notes.append(f"{title}: {perr}")
+    return None, "; ".join(notes) or "Steam's interface did not answer"
 
 
 def _appid(appid):

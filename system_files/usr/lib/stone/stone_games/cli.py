@@ -10,6 +10,12 @@
   stone-game verify  <appid>              HARDWARE VERIFIED (type VERIFICADO): you played it and it is right
   stone-game restore <appid>              STONE RECOMMENDED again (your own choices are removed)
   stone-game export  <appid>              the profile measured here, as JSON (to share)
+  stone-game components [helixsr|optiscaler]
+                                          what is downloaded; with a name, download the newest official
+                                          release from its author (verified, nothing installed in a game)
+  stone-game install <appid> optiscaler|helixsr
+                                          OptiScaler (FSR 3.1) into the game, or HelixSR's installer command
+  stone-game uninstall <appid>            remove what STONE installed in that game
   stone-game recover                      put back any launch options STONE left behind
 
 Runs as the console user, with Steam open (Game Mode): it talks to Steam's interface and to stoned.
@@ -87,7 +93,8 @@ def _print_status(p, rec):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="stone-game", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("status", "plan", "measure", "play", "rate", "verify", "restore", "export", "recover"))
+    ap.add_argument("cmd", choices=("status", "plan", "measure", "play", "rate", "verify", "restore", "export", "recover",
+                                 "components", "install", "uninstall"))
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--config", type=int)
@@ -97,6 +104,14 @@ def main(argv=None):
     e = engine()
     if a.cmd == "recover":
         print(json.dumps(e.recover(), indent=1, ensure_ascii=False))
+        return 0
+    if a.cmd == "components":
+        try:
+            r = e.fetch_component(a.rest[0]) if a.rest else e.components()
+        except schema.ProfileError as err:
+            print("error:", err)
+            return 1
+        print(json.dumps(r, indent=1, ensure_ascii=False))
         return 0
     if not a.rest:
         ap.error("falta el appid")
@@ -175,6 +190,41 @@ def main(argv=None):
             return 1
         print(json.dumps(e.verify(appid), ensure_ascii=False))
         return 0
+    if a.cmd in ("install", "uninstall"):
+        kind = a.rest[1] if len(a.rest) > 1 else "optiscaler"
+        if kind not in ("optiscaler", "helixsr"):
+            raise SystemExit("optiscaler | helixsr")
+        try:
+            if a.cmd == "uninstall":
+                r = e.uninstall_image(appid)
+            elif kind == "helixsr":
+                r = e.install_plan(appid, "helixsr")
+                if r.get("needs_download"):
+                    print("Descargando HelixSR del autor...")
+                    e.fetch_component("helixsr")
+                    r = e.install_plan(appid, "helixsr")
+                if r.get("ok"):
+                    print(r["warning"], "\nEjecuta:", r["command"])
+                    return 0
+            else:
+                plan = e.install_plan(appid, "optiscaler")
+                if plan.get("needs_download"):
+                    print("Descargando OptiScaler del autor...")
+                    e.fetch_component("optiscaler")
+                    plan = e.install_plan(appid, "optiscaler")
+                if not plan.get("ok"):
+                    r = plan
+                else:
+                    print(f"Instalaré OptiScaler {plan['component']['tag']} en {plan['folder']} ({plan['exe']}, {plan['files']} archivos). Escribe INSTALAR:")
+                    if sys.stdin.readline().strip() != "INSTALAR":
+                        print("cancelado")
+                        return 1
+                    r = e.install_image(appid, "optiscaler")
+        except schema.ProfileError as err:
+            print("error:", err)
+            return 1
+        print(json.dumps(r, indent=1, ensure_ascii=False))
+        return 0 if r.get("ok") else 1
     if a.cmd == "restore":
         print(json.dumps(e.restore_recommended(appid)))
         return 0

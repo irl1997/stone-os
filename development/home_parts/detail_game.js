@@ -6,6 +6,7 @@ function enterDetail(i, opts = {}) {
   const canPlay = g.inst || g.src === 'shortcut';
   const prim = running ? 'REANUDAR' : canPlay ? 'JUGAR' : 'INSTALAR';
   const sec = [[g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf'], ['Propiedades', 'opt']];
+  if (g.src === 'steam' && g.inst) sec.splice(2, 0, [imgLabel(g), 'img'], [preLabel(g), 'pre'], [optLabel(g), 'ins'], ['Instalar HelixSR', 'hlx'], [optzLabel(g), 'opz']);
   $('#detail').innerHTML = `
     <div class="col"><div class="origin">${esc(g.o)}</div><h1${g.n.length > 22 ? ' class="long"' : ''}>${esc(g.n.toUpperCase())}</h1>
       <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div>
@@ -23,7 +24,86 @@ function enterDetail(i, opts = {}) {
   NAV.id = 'detail';
   requestAnimationFrame(() => applyFocus());
   hints([['A', prim.charAt(0) + prim.slice(1).toLowerCase()], ['B', 'Volver']]);
-  if (g.src === 'steam' && g.inst) experience(g, i);
+  if (g.src === 'steam' && g.inst) { experience(g, i); imgLoad(g, i); }
+}
+/* Image enhancement: the person's own explicit choice (Nativo / FSR del juego / FSR de pantalla / HelixSR),
+   from the host (stone_games). Only what is available is offered; STONE decides again with "STONE decide". */
+const PRESET_TXT = { quality: 'Calidad', balanced: 'Equilibrado', performance: 'Rendimiento', ultra_performance: 'Ultra rendimiento' };
+const imgSel = g => g.img && g.img.choices.find(c => c.selected);
+const imgLabel = g => 'Imagen: ' + (g.img ? (imgSel(g) ? imgSel(g).label : 'STONE decide') : '…');
+const optzLabel = g => 'Optimizar' + (g.opz ? ` (${g.opz.done}/${g.opz.total})` : '');
+const optLabel = g => g.img && g.img.by_stone ? 'Quitar FSR (OptiScaler)' : 'Instalar FSR (OptiScaler)';
+const preLabel = g => 'Calidad: ' + (g.img && g.img.preset ? PRESET_TXT[g.img.preset] || g.img.preset : 'según el juego');
+function imgRefresh(g) {
+  const d = $('#detail'); if (!d) return;
+  const a = d.querySelector('[data-act="img"]'), b = d.querySelector('[data-act="pre"]');
+  if (a) a.textContent = imgLabel(g);
+  if (b) b.textContent = preLabel(g);
+  const z = d.querySelector('[data-act="opz"]');
+  if (z) z.textContent = optzLabel(g);
+  const c = d.querySelector('[data-act="ins"]');
+  if (c) c.textContent = optLabel(g);
+}
+async function imgLoad(g, i) {
+  try { g.img = await Sys.gameImage(g.appid); } catch (e) { return; }
+  try { g.opz = await Sys.gameOptStatus(g.appid); } catch (e) { g.opz = null; }
+  if (curG === i && S.screen === 'detail') imgRefresh(g);
+}
+async function imgSet(g, key, preset) {
+  try { await Sys.gameSetImage(g.appid, key, preset); } catch (e) { play('error'); return toast('No se pudo cambiar: ' + ((e && e.message) || 'sin respuesta'), false); }
+  await imgLoad(g, curG); experience(g, curG);
+  const c = g.img && imgSel(g);
+  toast(c ? `${g.n}: ${c.label}${g.img.preset && c.key !== 'native' ? ' · ' + (PRESET_TXT[g.img.preset] || g.img.preset) : ''}` : `${g.n}: STONE decide`, false);
+}
+/* OPTIMIZAR: STONE launches the next combination of the measurement matrix; the person runs the game's
+   own benchmark (or plays ~3 min) and quits; MangoHud's numbers become the measurement. Two presses. */
+async function optimizar(g, i) {
+  if (!g.opz) await imgLoad(g, i);
+  const o = g.opz;
+  if (!o) { play('error'); return toast('No se pudo leer el estado de la optimización', false); }
+  if (!o.next) return toast(`${g.n}: ya está medido (${o.done} de ${o.total}). Mejor para esta consola: ${o.recommended}`, false);
+  if (!insConfirmed('z' + g.appid)) return toast(`Prueba ${o.done + 1} de ${o.total}: ${o.next}. ` + (o.benchmark ? `Dentro del juego: ${o.benchmark}, déjalo ~2 min y sal. ` : 'Juega ~3 min y sal. ') + 'Pulsa otra vez para empezar', false);
+  let r = null;
+  try { r = await Sys.gameOptStart(g.appid); } catch (e) { play('error'); return toast('No se pudo empezar: ' + ((e && e.message) || 'sin respuesta'), false); }
+  if (!r || !r.ok) { play('error'); return toast((r && r.error) || 'No se pudo empezar', false); }
+  toast(`Midiendo: ${r.summary}`, false);
+  return launch(g, () => Promise.resolve(true));
+}
+/* Install FSR (OptiScaler) / HelixSR: only on the person's request. First press says what will happen,
+   the second one (within 10 s) does it. Nothing for games with anti-cheat or online-only (the host refuses). */
+let insAsk = null;
+const insConfirmed = key => { const ok = insAsk && insAsk.key === key && Date.now() - insAsk.t < 10000; insAsk = ok ? null : { key, t: Date.now() }; return ok; };
+async function insOpti(g, i) {
+  const key = 'o' + g.appid;
+  try {
+    if (g.img && g.img.by_stone) {
+      if (!insConfirmed(key)) return toast('Pulsa otra vez para quitar OptiScaler de este juego', false);
+      const r = await Sys.gameUninstall(g.appid); await imgLoad(g, i); experience(g, i);
+      return toast(r && r.ok ? 'OptiScaler quitado de este juego' : ((r && r.error) || 'No se pudo quitar'), false);
+    }
+    let plan = await Sys.gamePlan(g.appid, 'optiscaler');
+    if (plan && plan.needs_download) {
+      toast('Descargando OptiScaler del autor (GitHub)… puede tardar', false);
+      await Sys.components('optiscaler');
+      plan = await Sys.gamePlan(g.appid, 'optiscaler');
+    }
+    if (!plan || !plan.ok) { play('error'); return toast(((plan && plan.error) || 'No se pudo preparar') + '', false); }
+    if (!insConfirmed(key)) return toast(`OptiScaler ${plan.component.tag} → ${plan.folder} (${plan.files} archivos). Pulsa otra vez para instalar`, false);
+    const r = await Sys.gameInstall(g.appid); await imgLoad(g, i); experience(g, i);
+    toast(r && r.ok ? 'FSR (OptiScaler) instalado. Elige «Imagen: OptiScaler» para usarlo' : ((r && r.error) || 'No se pudo instalar'), false);
+  } catch (e) { play('error'); toast('No se pudo: ' + ((e && e.message) || 'sin respuesta') + '. Si fue la descarga, revisa internet y vuelve a pulsar', false); }
+}
+async function insHelix(g, i) {
+  try {
+    let r = await Sys.gamePlan(g.appid, 'helixsr');
+    if (r && r.needs_download) {
+      toast('Descargando HelixSR del autor (GitHub)… puede tardar', false);
+      await Sys.components('helixsr');
+      r = await Sys.gamePlan(g.appid, 'helixsr');
+    }
+    if (!r || !r.ok) { play('error'); return toast(((r && r.error) || 'No se pudo preparar') + '', false); }
+    toast(`HelixSR ${r.tag} descargado. Para instalarlo en tus juegos sin anti-cheat, en la terminal (Ctrl+Alt+F3): stone-game install ${g.appid} helixsr`, false);
+  } catch (e) { play('error'); toast('No se pudo: ' + ((e && e.message) || 'sin respuesta') + '. Revisa internet y vuelve a pulsar', false); }
 }
 /* STONE OPTIMIZED: GAME -> STONE RECOMMENDED -> PLAY. The host says what JUGAR will use and why;
    nothing is shown that was not measured or is not in the profile database. */
@@ -49,6 +129,22 @@ function detailA(el) {
     play('select'); g.fav = !g.fav; if (g.fav) favs.add(g.appid); else favs.delete(g.appid); savePrefs();
     enterDetail(curG, { r: 1, c: 0 }); return toast(g.fav ? 'Añadido a favoritos' : 'Quitado de favoritos', false);
   }
+  if (a === 'opz') { play('select'); return optimizar(g, curG); }
+  if (a === 'ins') { play('select'); return insOpti(g, curG); }
+  if (a === 'hlx') { play('select'); return insHelix(g, curG); }
+  if (a === 'img' || a === 'pre') {
+    if (!g.img) { play('error'); return toast('Leyendo las opciones de imagen…', false); }
+    play('nav');
+    if (a === 'img') {
+      const ok = g.img.choices.filter(c => c.available), k = ok.findIndex(c => c.selected);
+      const next = ok[(k + 1) % ok.length];
+      return imgSet(g, next.key, g.img.preset && next.key !== 'native' ? g.img.preset : undefined);
+    }
+    const c = imgSel(g);
+    if (!c || c.key === 'native') return toast('Elige primero una mejora de imagen (FSR o HelixSR)', false);
+    const k = g.img.presets.indexOf(g.img.preset);
+    return imgSet(g, c.key, g.img.presets[(k + 1) % g.img.presets.length]);
+  }
   if (a === 'perf') {
     play('nav'); const list = [null, ...usable()], k = list.indexOf(g.perf || null), next = list[(k + 1) % list.length];
     return api('setGameProfile', g.appid, next || 'global').then(st => {
@@ -63,9 +159,9 @@ function detailA(el) {
    Steam's reaper process and reports it in its state, which is what this screen follows: when the
    game ends, Home comes back. */
 let tagT = 0, launchT = 0;
-async function launch(g) {
+async function launch(g, starter) {
   if (S.launching !== null) return;
-  const ok = await sys('launch', g.appid);
+  const ok = await (starter ? starter() : sys('launch', g.appid));
   if (!ok) return;
   if (g.exp && g.exp.settings && g.exp.status !== 'UNKNOWN') toast(g.exp.settings, false);
   S.launching = g.i; S.running = g.i; S.screen = 'transition';

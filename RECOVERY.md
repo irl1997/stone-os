@@ -115,3 +115,7 @@ Ver qué versiones hay: `rpm-ostree status` (o Ajustes → Actualizaciones en ST
 ## Reinstalar
 
 Si nada de lo anterior sirve, reinstala desde la ISO (INSTALL.md). Borra el disco de sistema.
+
+## Si la pantalla queda negra después de `stonectl display set-output` (rc18)
+
+Ctrl+Alt+F3, entra con tu usuario y escribe `stonectl display reset`; luego `systemctl reboot`. Eso borra `~/.config/environment.d/90-stone-display.conf` y Game Mode vuelve a elegir la salida solo.

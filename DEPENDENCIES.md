@@ -1,4 +1,4 @@
-# Dependencias de STONE OS 0.1.0-rc16
+# Dependencias de STONE OS 0.1.0-rc22
 
 Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/stone-release` y en `build-metadata.json` (artefacto del build y archivo de cada release). Esta tabla dice de dónde sale cada pieza y cómo se actualiza.
 
@@ -22,7 +22,7 @@ Las versiones exactas de cada imagen construida quedan escritas en `/usr/lib/sto
 | Jost 5.3.0, Inter 5.3.0, IBM Plex Mono 5.3.0 (latin) | Fijas, en el repositorio | Paquetes npm `@fontsource/*` (SIL OFL 1.1) | Tipografía de STONE Home sin red | A mano: copiar los `.woff2` nuevos y sus licencias |
 | Steam | El de la base | Bazzite | Lanzador, Game Mode, ajustes de sistema; STONE OPTIMIZED usa sus opciones de lanzamiento por juego | Se actualiza solo (Steam) |
 | MangoHud | El de la base | Bazzite | Mediciones de STONE OPTIMIZED (CSV por cuadro, sin overlay) | Con la base; si falta, el build avisa y no hay mediciones |
-| HelixSR / OptiScaler | **No incluidos** | Los instala la persona en cada juego (HelixSR no es redistribuible) | Rutas gráficas opcionales de STONE OPTIMIZED | Por la persona |
+| HelixSR / OptiScaler | **No incluidos** | La persona los pide con un botón (rc20): se descargan del repositorio oficial del autor en GitHub, con comprobación de SHA-256, a `~/.local/share/stone/components/` | Rutas gráficas opcionales de STONE OPTIMIZED | Por la persona, bajo su licencia |
 
 STONE no añade repositorios a la imagen final: el COPR se activa sólo durante el build y se desactiva después.
 

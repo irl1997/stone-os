@@ -1430,6 +1430,60 @@ def P17_a_hang_is_never_tested_again_and_the_maximum_stays_100_mhz_below_it(env)
     assert rec["last"]["validated_max"] == 2000
 
 
+@test
+def P18_a_clean_shutdown_during_calibration_is_not_a_failure():
+    """Board, rc16: the idle power-off ended `stonectl calibrate standard` after 30 min. An orderly
+    shutdown proves nothing about the step that was running: no margin, no failure, and the
+    result already stored (1900 MHz) is not lowered by the few steps that passed."""
+    env = Env(cu40=3)
+    try:
+        store = env.store()
+        st = store.load()
+        good = {"machine": "m1", "config": {"cu": 40}, "level": "quick", "time": 1, "version": 1, "workload": "w",
+                "steps": [{"mhz": m, "passed": True} for m in range(1500, 2000, 50)], "failed_at": 2000,
+                "stopped": "crash", "validated_max": 1900, "result": "partial", "max_temp_c": 71}
+        st["calibration"] = good
+        st["calibration_crash"] = {"mhz": 2000, "machine": "m1", "config": {"cu": 40}, "time": 1}
+        store.save(st)
+        steps = [{"mhz": m, "passed": True} for m in (1500, 1550, 1600, 1650, 1700, 1750)]
+        store.set_flag(S.FLAG_CALIBRATION, {"step": 1800, "steps": steps, "level": "standard",
+                                            "config": {"cu": 40}, "machine": "m1", "workload": "stone-cu-verify"})
+        store.set_flag(S.FLAG_CLEAN, {"time": 2})
+        rep = env.recover()
+        st = store.load()
+        assert st["calibration"]["validated_max"] == 1900 and st["calibration"]["stopped"] == "crash", st["calibration"]
+        assert rep["fail_count"] == 0 and store.get_flag(S.FLAG_CALIBRATION) is None, rep
+        # a clean stop that got further than what was stored does raise it, without margin
+        st["calibration"] = dict(good, validated_max=1600, steps=good["steps"][:3])
+        store.save(st)
+        store.set_flag(S.FLAG_CALIBRATION, {"step": 1800, "steps": steps, "level": "standard",
+                                            "config": {"cu": 40}, "machine": "m1", "workload": "stone-cu-verify"})
+        store.set_flag(S.FLAG_CLEAN, {"time": 3})
+        env.recover()
+        cal = store.load()["calibration"]
+        assert cal["validated_max"] == 1750 and cal["stopped"] == "interrupted" and cal["failed_at"] is None, cal
+    finally:
+        env.close()
+
+
+@integration(cu40=3, test_seconds=1, sclk_limit=9999)
+def P19_rc16_interrupted_record_is_repaired_at_start(env):
+    """rc16 stored a clean interruption as a failure of the running step (1800 -> 1700 MHz)."""
+    env.call("StartCalibration", "(s)", "quick")
+    rec = wait_cal_done(env)["last"]
+    store = env.store()
+    st = store.load()
+    cal = st["calibration"]
+    cal.update(failed_at=1800, stopped="interrupted", validated_max=1700, result="partial",
+               steps=[s for s in cal["steps"] if s["mhz"] < 1800])
+    store.save(st)
+    env.kill_stoned()
+    env.start_stoned()
+    c = env.call("GetCalibration")
+    assert c["range"]["validated_max"] == 1750 and c["last"].get("failed_at") is None, (c["range"], c["last"])
+    assert rec["validated_max"] == 2000
+
+
 def main():
     only = sys.argv[1:]
     passed = failed = 0

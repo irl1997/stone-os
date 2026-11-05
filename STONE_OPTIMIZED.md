@@ -88,7 +88,7 @@ Las variables de STONE van delante de las opciones de la persona. Si la persona 
 **HelixSR 3.1.0:**
 
 - Está hecho sobre OptiScaler (GPL-3) y se desarrolló en una BC-250.
-- Su licencia no permite redistribuirlo, y los archivos de NVIDIA y AMD se generan en el equipo de la persona. Por eso STONE no lo instala ni lo descarga: usa lo que la persona instaló.
+- STONE no lo incluye. Desde rc20, a petición de la persona, lo descarga del repositorio oficial de su autor (`lonewolf0622/HelixSR`); el instalador oficial (`helixsr-setup.sh`) se ejecuta a mano porque instala en todos los juegos que encuentra con `--yes`.
 - Es el **candidato preferido** solamente cuando, medido en esta consola, iguala a la mejor experiencia (§4). Nunca se fuerza.
 
 **Anti-cheat y juegos online:** HelixSR y OptiScaler no se ofrecen a un juego si se cumple cualquiera de estas condiciones:
@@ -311,3 +311,20 @@ Está en `HARDWARE_VALIDATION.md` §29 y en la guía rc12.
 - Rendimiento por juego desde STONE OPTIMIZED vía `stoned` (polkit en Game Mode y por SSH, grupo wheel).
 - Cyberpunk: la matriz completa con números reales, la recomendación resultante, 30 min jugando y HARDWARE_VERIFIED.
 - Potencia de la BC-250 en MangoHud: ¿es fiable?
+
+## Selector de imagen (rc19)
+
+`Engine.image_options(appid)` y `Engine.set_image(appid, key, preset)` (host: `game.image`, `game.setImage`) dan a la persona una elección explícita entre nativo, FSR del juego, FSR de pantalla, HelixSR y OptiScaler. Solo se ofrece lo que `graphics.availability` declara disponible con datos reales; lo demás se rechaza con su motivo. La elección se guarda como configuración CUSTOM. «STONE decide» vuelve al modo recomendado. HelixSR no se elige nunca por la persona sin que lo pida.
+
+## Instalar FSR (OptiScaler) y HelixSR desde STONE (rc20)
+
+- **Descarga:** `install.py` pide la última versión al repositorio oficial (`optiscaler/OptiScaler`, `lonewolf0622/HelixSR`) por HTTPS, solo a los servidores de GitHub, comprueba tamaño y SHA-256 declarados, desempaqueta sin enlaces ni rutas fuera de la carpeta y guarda en `~/.local/share/stone/components/<nombre>/<versión>/`.
+- **OptiScaler en un juego:** copia sus archivos a la carpeta del ejecutable (el .exe más grande que no sea lanzador) con `OptiScaler.dll` como `winmm.dll`, **sin sobrescribir nada**; guarda la lista y «Quitar» borra exactamente esos archivos. Después se usa como cualquier OptiScaler: `WINEDLLOVERRIDES=winmm=n,b` solo en ese lanzamiento.
+- **HelixSR:** se descarga y STONE muestra el comando del instalador oficial; no lo ejecuta.
+- **Nunca** en juegos con anti-cheat o solo online. El botón pide una segunda pulsación para confirmar.
+- Terminal: `stone-game components [nombre]`, `stone-game install <appid> optiscaler|helixsr`, `stone-game uninstall <appid>`.
+- **Sin verificar en hardware.** La disposición de archivos de cada versión puede cambiar; si no hay `OptiScaler.dll` en la descarga, STONE no instala y lo dice.
+
+## Optimización guiada (rc21)
+
+`Engine.optimize_status(appid)` (host: `game.optimizeStatus`) cuenta cuántas filas de la matriz (etapa 1 y etapa 2) tienen medición vigente; `game.optimizeStart` lanza la siguiente con MangoHud registrando desde el segundo 90 durante 120 s. La interfaz lo muestra como «Optimizar (n/total)» con confirmación en dos pulsaciones. El total puede crecer cuando termina la etapa 1.

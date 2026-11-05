@@ -10,8 +10,8 @@
                  files (size + mtime) so an update of HelixSR/OptiScaler invalidates measurements
   proton         the compatibility tool Steam uses for this game (config.vdf), or None (default)
 
-STONE never installs HelixSR or OptiScaler: HelixSR's license does not allow bundling it and it
-builds NVIDIA/AMD files on the person's computer. STONE uses what the person installed.
+STONE bundles neither. On the person's request only (install.py) it downloads them from their authors
+and installs OptiScaler in a game; this module just reads what is there, whoever installed it.
 """
 
 import glob

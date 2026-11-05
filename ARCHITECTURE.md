@@ -1,4 +1,4 @@
-# Arquitectura de STONE OS 0.1.0-rc16
+# Arquitectura de STONE OS 0.1.0-rc22
 
 ```
 STONE OS UI (STONE Home)          Chromium con GPU (respaldo: GTK 4 + WebKitGTK 6 sin GPU), usuario de la consola, en Steam Game Mode
@@ -130,3 +130,7 @@ Capa de pantalla del sistema STONE (`stone_display/`): detecta la pantalla (kern
 - **Base de perfiles:** `/usr/share/stone/game-profiles/` (imagen) + `~/.local/share/stone/game-profiles/{auto,user}/`.
 - **Terminal:** `stone-game`.
 - **Detalle:** `STONE_OPTIMIZED.md`.
+
+## Ajustes de Steam en STONE (rc22)
+
+`stone_home/steamsettings.py` arma el catálogo desde la lista de funciones que entrega la interfaz de Steam (`steamcef.probe`, `~/.local/state/stone/steam-api.json`): cada par `GetX()`/`SetX(valor)` es un ajuste. Se lee en un solo lote con tiempo máximo por función, se muestra en Ajustes → Steam y solo los sí/no se cambian. Lista negra de nombres (cuentas, compras, instalar, borrar, reiniciar…). Host: `steam.settings`, `steam.setSetting`.

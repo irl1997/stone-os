@@ -1,4 +1,4 @@
-# Seguridad de STONE OS 0.1.0-rc16
+# Seguridad de STONE OS 0.1.0-rc22
 
 El sistema de overclock necesita privilegios, así que se trata como un componente de seguridad crítica. Resumen de la revisión de esta versión: **0 problemas críticos abiertos**. Los riesgos aceptados están al final.
 
@@ -103,7 +103,7 @@ STONE Home sólo instala los identificadores de Flathub de su catálogo fijo (`s
   - lo hace Steam, a través de su propia interfaz;
   - antes se guardan las originales (`~/.local/state/stone/game-graphics.json`), después se comprueban y al salir se devuelven;
   - si algo se interrumpe, se devuelven al volver a abrir STONE Home.
-- **Lo que no toca:** archivos del juego ni de su configuración. Tampoco DLL de nadie: STONE no instala, no descarga, no mueve y no borra HelixSR ni OptiScaler.
+- **Lo que no toca:** archivos del juego ni de su configuración. Tampoco DLL de nadie, salvo lo que la persona pide con un botón (desde 0.1.0-rc22): STONE descarga HelixSR u OptiScaler **del repositorio oficial de su autor** (solo GitHub, comprobando tamaño y SHA-256 que GitHub declara), copia OptiScaler en la carpeta del ejecutable del juego sin sobrescribir nada, guarda la lista de archivos y los quita exactamente con «Quitar». Nunca en juegos con anti-cheat ni solo online. STONE no ejecuta el instalador de HelixSR: el instalador oficial se corre a mano, porque instala en todos los juegos que encuentra.
 - **Inyección:** nunca en juegos con archivos anti-cheat, ni en los marcados con anti-cheat u online en la base de perfiles. Esto se aplica también a CUSTOM.
 - **Rendimiento:**
   - solo los perfiles de `stoned`, con sus comprobaciones (máximo validado, Safe Mode, polkit);

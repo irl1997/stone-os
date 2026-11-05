@@ -66,6 +66,7 @@ PREFS = {
     # Game resolution environment (STONE DISPLAY): 0 games see the display's own resolution
     # (Steam "Native" on games left at "Default"), 1 Steam's default size.
     "game_res": (_intr(0, 1), 0),
+    "display_goal": (lambda v: v if v in ("fluid", "max_res") else None, "fluid"),   # STONE DISPLAY link goal
     "optimized": (_intr(0, 1), 1),        # STONE OPTIMIZED: JUGAR launches with the game profile
 }
 

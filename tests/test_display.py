@@ -470,6 +470,186 @@ def D16_kernel_connectors_names_not_assumed():
         box.close()
 
 
+# ---------------------------------------------------------------- rc18: link budget, Steam pages, set-output
+def _mode(w, h, hz):
+    return {"w": w, "h": h, "hz": hz}
+
+
+def _cap(modes, tmds=None, frl=None, source="kernel+edid"):
+    return {"available_modes": modes, "hdmi_max_tmds_mhz": tmds, "hdmi_frl_gbps": frl, "modes_source": source}
+
+
+ALL = [_mode(3840, 2160, 60), _mode(3840, 2160, 30), _mode(2560, 1440, 60), _mode(1920, 1080, 120),
+       _mode(1920, 1080, 60), _mode(3840, 2160, 120)]
+
+
+@test
+def D17_link_300mhz_cannot_carry_4k60_and_says_what_to_buy():
+    from stone_display import link
+    p = link.plan(_cap(ALL, tmds=300))
+    assert not p["reaches_4k60"] and p["display_offers_4k60"] and p["limited_by_link"], p
+    assert (p["best_fluid"]["w"], p["best_fluid"]["hz"]) == (2560, 60), p["best_fluid"]       # 1440p60, not 4K30
+    assert (p["best_max_res"]["w"], p["best_max_res"]["hz"]) == (3840, 30), p["best_max_res"]  # 4K30 carries 297 MHz
+    assert "DisplayPort 1.4" in p["advice"] and "4K 60" in p["advice"], p["advice"]
+    assert link.plan(_cap(ALL, tmds=300), "max_res")["target"]["hz"] == 30
+    assert link.plan(_cap(ALL, tmds=300))["target"]["h"] == 1440
+
+
+@test
+def D18_link_600mhz_and_frl_reach_4k60_and_4k120():
+    from stone_display import link
+    assert link.plan(_cap(ALL, tmds=600))["reaches_4k60"]
+    p = link.plan(_cap(ALL, tmds=600))
+    assert (p["best_fluid"]["w"], p["best_fluid"]["hz"]) == (3840, 60) and p["advice"] is None, p
+    q = link.plan(_cap(ALL, frl=40))
+    assert (q["best_fluid"]["w"], q["best_fluid"]["hz"]) == (3840, 120), q["best_fluid"]
+    assert link.plan(_cap(ALL, frl=18))["best_fluid"]["hz"] == 60
+
+
+@test
+def D19_link_without_figures_trusts_the_modes_and_steam_is_not_filtered():
+    from stone_display import link
+    assert link.plan(_cap(ALL))["budget_mhz"] is None and link.plan(_cap(ALL))["best_fluid"]["hz"] == 120
+    st = link.plan(_cap([_mode(3840, 2160, 60), _mode(2560, 1440, 60)], tmds=300, source="steam"))
+    assert st["reaches_4k60"] and st["budget_mhz"] is None, st          # Steam validated them on this link
+    assert link.plan(_cap([])) is None
+    assert link.plan(_cap([_mode(1920, 1080, None)], source="steam")) is None
+    k = link.plan(_cap([_mode(2560, 1440, None)]))                  # kernel accepts it, EDID names no rate
+    assert k["best_fluid"]["hz"] == 60 and k["best_fluid"]["hz_assumed"], k
+
+
+@test
+def D20_games_see_the_best_the_link_carries_not_an_unreachable_native():
+    box = Box()
+    try:
+        box.connector("HDMI-A-1", modes=[(3840, 2160), (2560, 1440), (1920, 1080)],
+                      edid_bytes=make_edid(native=(3840, 2160, 60), vics=(95, 97, 16), tmds=300))
+        s = snap(box)
+    finally:
+        box.close()
+    assert s["primary"]["native_resolution"]["w"] == 3840, s["primary"]["native_resolution"]
+    assert s["link"] and not s["link"]["reaches_4k60"], s["link"]
+    env = s["game_environment"]
+    assert (env["w"], env["h"]) == (2560, 1440) and "link" in env["source"], env
+    assert any(f["code"] == "LINK_LIMITS_MODES" for f in s["findings"]), s["findings"]
+
+
+@test
+def D21_steam_pages_all_tried_and_the_error_names_each():
+    from stone_home import steamcef
+    pages = [{"title": "Screensaver_uid2", "url": "https://steamloopback.host/x", "webSocketDebuggerUrl": "ws://127.0.0.1:8080/a"},
+             {"title": "SharedJSContext", "url": "https://steamloopback.host/y", "webSocketDebuggerUrl": "ws://127.0.0.1:8080/b"},
+             {"title": "other", "url": "about:blank", "webSocketDebuggerUrl": "ws://127.0.0.1:8080/c"},
+             {"title": "nows", "url": "about:blank"}]
+    c = steamcef.candidates(pages)
+    assert [p["title"] for p in c] == ["SharedJSContext", "Screensaver_uid2", "other"], c
+    assert steamcef.pick([pages[0]])["title"] == "Screensaver_uid2"          # steamloopback page, as before
+    assert steamcef.pick([pages[2]]) is None
+
+    class Cef:
+        def ui_values(self, expr):
+            return [("SharedJSContext", None, "RuntimeError: boom"),
+                    ("Screensaver_uid2", json.dumps({"error": "no DisplayManager"}), None)]
+    st, err = steam.display_state(Cef())
+    assert st is None and "SharedJSContext: RuntimeError: boom" in err and "Screensaver_uid2: no DisplayManager" in err, err
+
+    class Cef2:
+        def ui_values(self, expr):
+            return [("a", json.dumps({"error": "no DisplayManager"}), None),
+                    ("b", json.dumps({"b64": base64.b64encode(steam_state_bytes([(2560, 1440, 60)], 0)).decode()}), None)]
+    st, err = steam.display_state(Cef2())
+    assert err is None and st["displays"] and st["displays"][0]["modes"], (st, err)
+
+
+@test
+def D22_set_output_only_reachable_modes_and_reset_removes_it():
+    import io
+    home = tempfile.mkdtemp()
+    old = os.environ.get("HOME")
+    os.environ["HOME"] = home
+    try:
+        box = Box()
+        try:
+            box.connector("HDMI-A-1", modes=[(3840, 2160), (2560, 1440), (1920, 1080)],
+                          edid_bytes=make_edid(native=(3840, 2160, 60), vics=(95, 97, 16), tmds=300))
+            s = snap(box)
+        finally:
+            box.close()
+        out = io.StringIO()
+        out = io.StringIO()
+        assert cli.set_output("5120x2880", s, out) == 1 and "No se cambió nada" in out.getvalue()
+        assert cli.set_output("banana", s, io.StringIO()) == 2
+        out = io.StringIO()
+        assert cli.set_output("2560x1440", s, out) == 0
+        path = os.path.expanduser(cli.ENV_FILE)
+        txt = open(path).read()
+        assert "SCREEN_WIDTH=2560" in txt and "SCREEN_HEIGHT=1440" in txt and "stonectl display reset" in out.getvalue()
+        out = io.StringIO()
+        assert cli.main(["reset"], out) == 0 and not os.path.exists(path)
+        assert cli.set_output("2560x1440", {"primary": None, "link": None}, io.StringIO()) == 1     # no data: nothing forced
+    finally:
+        if old is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = old
+        shutil.rmtree(home, ignore_errors=True)
+
+
+@test
+def D23_steam_settings_are_built_from_what_steam_offers_and_stay_safe():
+    from stone_home import steamsettings as SS
+    tree = {"System": {"Display": {"GetBrightness": "f0", "SetBrightness": "f1", "GetHdrEnabled": "f0", "SetHdrEnabled": "f1"},
+                       "Audio": {"GetMute": "f0", "SetMute": "f1"}, "Account": {"GetEmail": "f0", "SetEmail": "f1"},
+                       "GetShutdownDelay": "f0", "GetNoArgsOnly": "f2"},
+            "Apps": {"GetAppOverview": "f1", "GetLanguage": "f0"}}
+    ids = {c["id"]: c for c in SS.catalog(tree)}
+    assert set(ids) == {"System.Display.Brightness", "System.Display.HdrEnabled", "System.Audio.Mute", "Apps.Language"}, set(ids)
+    assert ids["System.Audio.Mute"]["set_path"] == ["System", "Audio", "SetMute"] and ids["Apps.Language"]["set_path"] is None
+    assert ids["System.Display.HdrEnabled"]["label"] == "Hdr Enabled" and ids["System.Display.HdrEnabled"]["area"] == "Display"
+    assert SS.catalog({"A": {"Get$x": "f0"}}) == [] and SS.catalog({"System": {"GetOk;x": "f0"}}) == []
+
+    class Cef:
+        def __init__(self):
+            self.written = []
+
+        def probe(self):
+            return [{"title": "x", "has_steamclient": False, "tree": {}}, {"title": "SharedJSContext", "has_steamclient": True, "tree": tree}]
+
+        def ui_value(self, expr):
+            if "setTimeout" in expr:                                   # the batched read
+                return json.dumps({"System.Display.Brightness": 70, "System.Display.HdrEnabled": True,
+                                   "System.Audio.Mute": False, "Apps.Language": "spanish"})
+            self.written.append(expr)
+            return "ok"
+    home = tempfile.mkdtemp()
+    old = os.environ.get("XDG_STATE_HOME")
+    os.environ["XDG_STATE_HOME"] = home
+    try:
+        cef = Cef()
+        ss = SS.SteamSettings(cef)
+        r = ss.read()
+        by = {x["id"]: x for x in r["settings"]}
+        assert r["available"] and by["System.Audio.Mute"]["writable"] and by["System.Audio.Mute"]["type"] == "bool"
+        assert not by["System.Display.Brightness"]["writable"]            # numbers are shown, not changed
+        assert not by["Apps.Language"]["writable"] and by["Apps.Language"]["type"] == "text"
+        assert os.path.isfile(SS.state_path())                             # the list of functions is kept
+        assert ss.set_bool("System.Audio.Mute", True)["ok"] and "SetMute" in cef.written[-1] and "true" in cef.written[-1]
+        for bad in (("System.Display.Brightness", True), ("Account.Email", True), ("../x", True), ("System.Audio.Mute", 1)):
+            try:
+                ss.set_bool(*bad)
+                raise AssertionError(bad)
+            except ValueError:
+                pass
+        os.remove(SS.state_path())
+        assert SS.SteamSettings(type("E", (), {"probe": lambda self: [], "ui_value": lambda self, e: None})()).read()["available"] is False
+    finally:
+        if old is None:
+            os.environ.pop("XDG_STATE_HOME", None)
+        else:
+            os.environ["XDG_STATE_HOME"] = old
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def main():
     only = sys.argv[1:]
     failed = 0

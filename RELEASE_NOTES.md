@@ -1,4 +1,133 @@
-# STONE OS 0.1.0-rc16
+# STONE OS 0.1.0-rc22
+
+Release Candidate 22 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc21
+
+- **Ajustes → Steam: los ajustes de Steam dentro de STONE.** STONE pregunta a la interfaz de tu Steam qué funciones ofrece (solo los nombres) y arma la lista con los pares `GetX` / `SetX` que encuentra:
+  - los de **sí/no** se cambian con A; los números y textos se **muestran** (solo lectura);
+  - no se inventa ningún ajuste: lo que tu Steam no ofrezca, no aparece;
+  - quedan fuera, sin leerse ni escribirse, las cuentas, compras, inicio de sesión, instalaciones, borrados, reinicios, apagado, actualizaciones y similares;
+  - solo se cambia un ajuste que está en la lista y cuyo último valor leído era sí/no.
+- Los nombres son los de Steam, separados en palabras. Los ajustes importantes con nombre y traducción propios (volumen, brillo, red, Bluetooth…) se hacen cuando se vea qué ofrece tu Steam.
+- `stonectl display probe` ahora también guarda cuántos argumentos recibe cada función de Steam.
+- **Pruebas:** D23.
+
+## Lo que no hace
+
+- Aún no reemplaza todo el panel de Steam: abrir secciones de Steam sigue existiendo como respaldo (se ve la interfaz de Steam).
+- Los números (brillo, volumen…) y los textos todavía no se pueden cambiar desde STONE.
+
+## 0.1.0-rc21
+
+Release Candidate 21 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc20
+
+- **Botón «Optimizar (n/total)»** en la ficha de cada juego de Steam. Es la optimización guiada que hoy se hacía a mano con `stone-game measure`:
+  - Primera pulsación: dice qué combinación probará (mejora de imagen, perfil de GPU) y qué hacer dentro del juego (su prueba de rendimiento integrada, o jugar unos 3 minutos). Segunda pulsación: lanza el juego con esa combinación.
+  - Al salir, STONE guarda los FPS, el 1 % bajo, la temperatura y la frecuencia **reales** (MangoHud). Con cada medición se acerca a «STONE decide»; cuando termina, dice cuál es la mejor para esta consola.
+  - La cantidad de pruebas puede crecer: tras la primera etapa aparecen las pruebas de rendimiento de la mejor combinación. Si instalas FSR (OptiScaler) o HelixSR, aparecen más filas.
+  - Nunca activa generación de fotogramas ni sube la frecuencia más allá del máximo validado por tu calibración.
+- **Pruebas:** G22.
+
+## Lo que no hace
+
+- No mide solo: alguien tiene que correr el benchmark del juego o jugar unos minutos en cada prueba.
+- No sabe todavía si Cyberpunk llega a 4K60 en esta placa: no hay mediciones.
+
+## 0.1.0-rc20
+
+Release Candidate 20 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc19
+
+- **Botones «Instalar FSR (OptiScaler)» e «Instalar HelixSR»** en la ficha de cada juego de Steam.
+  - STONE descarga la última versión **del repositorio oficial de su autor** (GitHub), comprueba tamaño y SHA-256 y la guarda en `~/.local/share/stone/components/`.
+  - **OptiScaler (FSR 3.1):** primera pulsación dice dónde y cuántos archivos; la segunda instala (como `winmm.dll`, sin sobrescribir nada). «Quitar FSR (OptiScaler)» borra exactamente lo que se copió.
+  - **HelixSR:** descarga el instalador oficial y te da el comando para correrlo en la terminal. STONE no lo ejecuta, porque `--yes` lo instalaría en todos los juegos, también en los de anti-cheat.
+  - **Nunca** en juegos con anti-cheat ni solo online.
+- **Terminal:** `stone-game components`, `stone-game install <appid> optiscaler|helixsr`, `stone-game uninstall <appid>`.
+- **Pruebas:** G20 (descarga, SHA-256, instalación, desinstalación, anti-cheat) y G21 (HelixSR, archivo con ruta maliciosa).
+- **Cambia una regla de seguridad documentada:** hasta rc19 STONE no descargaba ni instalaba estos archivos. Ahora lo hace solo con un botón, ver SECURITY.md.
+
+## Lo que no hace
+
+- No verifica en la placa que OptiScaler cargue ni que mejore la imagen: sigue sin verificar.
+- Las versiones en formato .7z necesitan `bsdtar` o `7z` en la consola.
+
+## 0.1.0-rc19
+
+Release Candidate 19 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc18
+
+- **Selector de imagen en la ficha de cada juego de Steam instalado.** Dos botones:
+  - **Imagen:** cambia entre *STONE decide*, *Sin mejora (nativo)*, *FSR del juego*, *FSR de pantalla (Gamescope)* y *HelixSR*. Solo aparece lo que está disponible de verdad en ese juego; HelixSR solo si está instalado en la carpeta del juego.
+  - **Calidad:** Calidad / Equilibrado / Rendimiento / Ultra rendimiento.
+- **HelixSR nunca se fuerza:** solo se usa si la persona lo elige, y se rechaza si no está instalado. «STONE decide» vuelve a STONE RECOMMENDED.
+- **La elección se guarda como CUSTOM** (estado USER_MODIFIED) y se puede deshacer con «STONE decide».
+- **«FSR de pantalla (Gamescope)»** guarda el filtro FSR en el perfil; sigue siendo orientación: el filtro lo aplica Game Mode, STONE no lo inyecta.
+- **Pruebas:** G19.
+- **Sin cambios en pantalla ni en Steam** respecto a rc18; la capa de ajustes de Steam espera el resultado de `stonectl display probe`.
+
+## 0.1.0-rc18
+
+Release Candidate 18 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Lo que muestra la placa y lo que esta versión hace con eso
+
+- Tu conexión es DisplayPort → HDMI con un adaptador que lleva hasta 300 MHz. **4K a 60 Hz necesita unos 600 MHz: con ese adaptador no cabe, ni con STONE ni con nada.** Lo que sí cabe es 2560×1440 a 60 Hz, o 4K a 30 Hz.
+- «Salida actual» y «Steam por defecto» salían UNKNOWN: STONE preguntaba por el estado de pantalla a una sola página de la interfaz de Steam, y no siempre es la que responde.
+
+## Cambios desde 0.1.0-rc17
+
+- **STONE calcula lo máximo que lleva tu conexión** (`stone_display/link.py`) a partir de lo que ofrece la pantalla y lo que cabe en el enlace:
+  - **Fluida:** la resolución más alta a 60 Hz o más (lo recomendado para jugar). **Máxima resolución:** la más alta a cualquier frecuencia (por ejemplo 4K30).
+  - Dice con claridad si **4K60 cabe o no**, y si no cabe, qué comprar: adaptador activo DisplayPort 1.4 → HDMI 2.0 que diga «4K 60 Hz».
+  - Las frecuencias de pantalla que la EDID no nombra se marcan «supuesto». Los relojes de píxel son estimaciones (tabla CEA y fórmula de blanking reducido).
+  - Si Steam ya validó los modos en esta conexión, se usan tal cual, sin filtrar.
+- **Los juegos ven lo mejor que lleva la conexión,** no una «nativa» que la conexión no puede llevar. Con la meta «Fluidez», si la nativa es 4K y solo cabe 4K30, los juegos ven 2560×1440 a 60 Hz.
+- **Ajustes → Pantalla** muestra la fila **Conexión** y la fila **Meta de imagen** (Fluidez / Máxima resolución).
+- **STONE prueba todas las páginas de la interfaz de Steam** hasta que una responde, y si ninguna responde, el error nombra lo que dijo cada una (`stonectl display` lo muestra).
+- **Nuevo: `stonectl display probe`** lista, solo por nombre, lo que ofrece esta versión de Steam (sin valores) y guarda `~/.local/state/stone/steam-api.json`. Con eso se construye la capa de ajustes de Steam dentro de STONE sobre funciones que existen de verdad.
+- **Nuevo, EXPERIMENTAL: `stonectl display set-output 2560x1440`** pide a Game Mode ese tamaño de salida al próximo inicio, solo si la pantalla lo ofrece y la conexión lo lleva. `stonectl display reset` lo quita. **Nunca se aplica solo.**
+- **Nuevo: `stonectl display goal fluid|max`.**
+- **Pruebas:** D17–D22.
+
+## Lo que esta versión NO hace (todavía)
+
+- **No fuerza ni inventa 4K60.** Si la conexión no lo lleva, no se muestra como si lo llevara.
+- **No sube la frecuencia de la GPU por su cuenta.** El máximo sigue siendo el que valida tu calibración.
+- La capa completa de ajustes de Steam dentro de STONE (volumen, brillo, red, Bluetooth…) **se construye sobre lo que devuelva `probe`**; hasta tener esa lista en la placa no se inventan llamadas.
+
+## 0.1.0-rc17
+
+Release Candidate 17 de STONE OS para STONE MACHINE (AMD BC-250).
+
+**Nada está verificado en hardware todavía.**
+
+## Cambios desde 0.1.0-rc16
+
+- **«Apagar tras inactividad» ya no apaga la consola mientras corre una calibración o una prueba de estabilidad,** tampoco si se inició desde la terminal (`stonectl calibrate`). STONE Home lo sabe por el estado de `stoned`.
+  - En la placa (rc16), la consola se apagó a los 30 minutos de `stonectl calibrate standard`, porque STONE Home no veía la calibración y creía que la consola estaba sin uso.
+- **Una calibración cortada por un apagado ordenado ya no cuenta como falla.** Eso incluye el apagado por inactividad, un reinicio o el reinicio del servicio.
+  - **El paso que corría no se marca como fallido** ni le resta margen.
+  - **Los pasos que pasaron se guardan solo si validan más** que el resultado anterior. Si validan menos, el resultado anterior se conserva.
+  - **Un resultado de rc16 que contó el corte como falla se repara solo al arrancar,** sin descontar el margen.
+- **Pruebas:** P18 (apagado ordenado durante la calibración) y P19 (reparación del resultado de rc16).
+
+## 0.1.0-rc16
 
 Release Candidate 16 de STONE OS para STONE MACHINE (AMD BC-250). Aplica lo que mostró la primera calibración completa en la placa.
 

@@ -214,3 +214,19 @@ En `HARDWARE_VALIDATION.md` §27 y en la guía de rc10. En resumen:
 - La salida (B) no se cambia automáticamente en esta fase (ver §5).
 - HDR y VRR sólo se detectan; activarlos será otra fase con validación.
 - Si Steam no responde, B y el tamaño por defecto quedan DESCONOCIDOS; A sale del kernel igualmente.
+
+## Presupuesto de la conexión (rc18)
+
+`stone_display/link.py` compara lo que la pantalla ofrece con lo que la conexión puede llevar:
+
+| Fuente del presupuesto | Cuándo |
+|---|---|
+| Lista de modos de Steam | Steam ya los validó en este enlace: no se filtra |
+| HDMI TMDS / FRL de la EDID | Pantalla HDMI (a veces detrás de un adaptador DisplayPort → HDMI) |
+| Ninguna | DisplayPort nativo sin dato: manda la lista del kernel |
+
+Resultados: `best_fluid` (≥60 Hz), `best_max_res`, `reaches_4k60`, `limited_by_link`, `advice`. La **meta** (`stonectl display goal fluid|max`, o Ajustes → Pantalla → Meta de imagen) decide cuál usan los juegos. Los relojes de píxel son estimaciones; las frecuencias que la EDID no nombra se marcan «supuesto».
+
+`stonectl display probe` pregunta a cada página de la interfaz de Steam qué ofrece y si entrega el estado de pantalla; guarda solo nombres de funciones en `~/.local/state/stone/steam-api.json`.
+
+`stonectl display set-output WxH` (EXPERIMENTAL, sin verificar en hardware) escribe `~/.config/environment.d/90-stone-display.conf` con `SCREEN_WIDTH`/`SCREEN_HEIGHT`, solo para un modo que la pantalla ofrece y la conexión lleva. Se quita con `stonectl display reset` desde Ctrl+Alt+F3 si la pantalla queda negra.

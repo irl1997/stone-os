@@ -188,3 +188,25 @@ def record(mid, config, level, steps_done, failed_at, stopped, hardware_hi, work
             "workload": workload_name, "steps": steps_done[-24:], "failed_at": failed_at, "stopped": stopped,
             "validated_max": v, "result": result,
             "max_temp_c": max([s.get("max_temp_c") or 0 for s in steps_done] or [0]) or None}
+
+
+def interrupted(prev, mid, config, level, steps_done, workload_name, crash=None):
+    """A calibration that stopped without failing (clean shutdown, service restart): nothing
+    failed, so the step that was running is not a failure and gets no margin. The steps that
+    passed are kept only if they validate more than the result already stored (board, rc16: the
+    idle power-off 30 min into a standard calibration must not lower 1900 MHz to its first steps).
+    Returns the record to store, or None to keep the previous one."""
+    passed = [s["mhz"] for s in steps_done if s.get("passed")]
+    if not passed:
+        return None
+    v = max(passed)
+    cap = crash_cap(crash, config, mid)
+    if cap is not None:
+        v = max(min(passed), min(v, cap - CRASH_MARGIN_MHZ))
+    prev_ok = prev and status(prev, config, mid)["state"] in ("complete", "partial", "thermal")
+    if prev_ok and (prev.get("validated_max") or 0) >= v:
+        return None
+    return {"machine": mid, "config": config, "level": level, "time": int(time.time()), "version": CAL_VERSION,
+            "workload": workload_name, "steps": steps_done[-24:], "failed_at": None, "stopped": "interrupted",
+            "validated_max": v, "result": "partial",
+            "max_temp_c": max([s.get("max_temp_c") or 0 for s in steps_done] or [0]) or None}

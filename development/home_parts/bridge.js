@@ -37,11 +37,15 @@ const Sys = {
   prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p),
   openSteamSettings: s => Bridge.call('openSteamSettings', s), restart: () => Bridge.call('restart'),
   install: appid => Bridge.call('install', appid), emulators: () => Bridge.call('emulators'), emuInstall: k => Bridge.call('emuInstall', k),
-  display: fresh => Bridge.call('display.status', fresh), displayPolicy: p => Bridge.call('display.gamePolicy', p),
+  display: fresh => Bridge.call('display.status', fresh), displayPolicy: p => Bridge.call('display.gamePolicy', p), displayGoal: g => Bridge.call('display.goal', g),
   /* STONE OPTIMIZED (stone_games/): the game profile behind JUGAR */
   gameRecommended: (appid, mode) => Bridge.call('game.recommended', ...(mode ? [appid, mode] : [appid])),
   gameProfile: appid => Bridge.call('game.profile', appid), gameModes: appid => Bridge.call('game.modes', appid),
   gameApply: (appid, mode, cfg) => Bridge.call('game.apply', ...(cfg ? [appid, mode, cfg] : [appid, mode])),
+  gameImage: appid => Bridge.call('game.image', appid), gameSetImage: (appid, key, preset) => Bridge.call('game.setImage', ...(preset ? [appid, key, preset] : [appid, key])),
+  components: kind => Bridge.call('components', ...(kind ? [kind] : [])), gamePlan: (appid, kind) => Bridge.call('game.installPlan', appid, kind),
+  gameInstall: appid => Bridge.call('game.install', appid), gameUninstall: appid => Bridge.call('game.uninstallImage', appid),
+  gameOptStatus: appid => Bridge.call('game.optimizeStatus', appid), gameOptStart: appid => Bridge.call('game.optimizeStart', appid),
   gameStatus: () => Bridge.call('game.status'), gameRestore: appid => Bridge.call('game.restoreRecommended', appid)
 };
 async function sys(method, ...a) {

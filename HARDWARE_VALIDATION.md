@@ -362,7 +362,8 @@ Riesgo: medio. Sólo con la consola bien ventilada. No es parte de la validació
 6. Carga larga: 2 h de juego exigente; temperatura GPU < 85 °C sostenida, CPU < 95 °C.
 7. Reinicio: `stonectl calibration` mantiene el resultado. Tras `bootc upgrade` con kernel nuevo: «stale» y vuelta a 1500 hasta recalibrar.
 8. Un cuelgue total durante la calibración (visto en la placa a 2000 MHz con 40 CU: pantalla negra, ventiladores girando): al arrancar, `stonectl calibration` muestra «Apagado en: … MHz», el máximo validado queda al menos 100 MHz bajo ese paso (y 50 bajo el último aprobado) y ninguna calibración vuelve a probar ese paso.
-9. Recuperación: cortar la luz durante un paso de `stonectl calibrate quick` → al arrancar, `stonectl calibration` muestra el paso como fallo y `stonectl status` un fallo más; la consola arranca a la línea base.
+9. Con «Apagar tras inactividad» activo, `stonectl calibrate standard` (≈50 min) termina sin que la consola se apague; si se apaga en orden en medio, `stonectl calibration` no cuenta ese paso como fallido.
+10. Recuperación: cortar la luz durante un paso de `stonectl calibrate quick` → al arrancar, `stonectl calibration` muestra el paso como fallo y `stonectl status` un fallo más; la consola arranca a la línea base.
 
 
 ## 29. STONE OPTIMIZED — Cyberpunk 2077 (primer perfil real)

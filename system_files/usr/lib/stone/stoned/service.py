@@ -194,6 +194,17 @@ class Service:
         """A power cut recorded by rc15 (before the wider crash margin and the cap existed): the same
         rules now apply to it (40 CU board, hang at 2000 MHz, 1950 passed: 1900 MHz)."""
         rec = self.st.get("calibration") or {}
+        if rec.get("stopped") == "interrupted" and rec.get("failed_at") is not None:
+            # rc16 counted the step running at a clean shutdown as failed: it was not
+            fixed = C.interrupted(None, rec.get("machine"), rec.get("config") or {}, rec.get("level", "quick"),
+                                  rec.get("steps") or [], rec.get("workload"), self.st.get("calibration_crash"))
+            if fixed:
+                log(f"stoned: calibration interrupted at {rec['failed_at']} MHz was not a failure: "
+                    f"validated maximum {rec.get('validated_max')} -> {fixed['validated_max']} MHz")
+                fixed["time"] = rec.get("time", fixed["time"])
+                self.st["calibration"] = fixed
+                self._save()
+            return
         if rec.get("stopped") != "crash" or not isinstance(rec.get("failed_at"), int):
             return
         passed = [s["mhz"] for s in rec.get("steps") or [] if s.get("passed")]
@@ -218,10 +229,12 @@ class Service:
         flag = self.store.get_flag(S.FLAG_CALIBRATION)
         if flag is None:
             return
-        log("stoned: calibration interrupted by a service restart")
-        self._store_calibration(C.record(flag.get("machine", self.machine), flag.get("config", self.config),
-                                         flag.get("level", "quick"), flag.get("steps", []), flag.get("step"),
-                                         "interrupted", (self.range["hardware"] or [0, 0])[1], flag.get("workload")))
+        log("stoned: calibration interrupted by a service restart (not a failure)")
+        rec = C.interrupted(self.st.get("calibration"), flag.get("machine", self.machine), flag.get("config", self.config),
+                            flag.get("level", "quick"), flag.get("steps", []), flag.get("workload"),
+                            self.st.get("calibration_crash"))
+        if rec:
+            self._store_calibration(rec)
         self.store.clear_flag(S.FLAG_CALIBRATION)
         try:
             self._apply_profile(self.st["last_known_good"])

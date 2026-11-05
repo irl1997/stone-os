@@ -19,6 +19,8 @@ Anything no source states is None (shown as UNKNOWN). Nothing is invented.
 
 import hashlib
 
+from . import link
+
 POLICY_MAX_HZ = 144          # above this a console gains nothing and links get fragile
 
 
@@ -194,7 +196,7 @@ def evaluate(p, pref, game_default, game_native, xw, game_policy):
     return out
 
 
-def snapshot(kernel, steam_state=None, xw=None, game_policy="native"):
+def snapshot(kernel, steam_state=None, xw=None, game_policy="native", goal="fluid"):
     """The whole STONE DISPLAY view from already gathered sources (pure: tests feed it mocks)."""
     sds = (steam_state or {}).get("displays") or []
     names = [c["connector"] for c in kernel]
@@ -204,10 +206,20 @@ def snapshot(kernel, steam_state=None, xw=None, game_policy="native"):
     gd = (steam_state or {}).get("game_default")
     gn = (steam_state or {}).get("game_native")
     findings = evaluate(p, pref, gd, gn, xw, game_policy)
+    lk = link.plan(p, goal) if p else None
+    if lk and lk.get("advice"):
+        findings.append({"code": "LINK_LIMITS_MODES", "level": "warn", "text": lk["advice"]})
     safe = p is None or not p.get("edid_ok")
     nat = (p or {}).get("native_resolution")
-    if game_policy == "native" and nat:
-        game_env = {"w": nat["w"], "h": nat["h"], "source": "policy: native"}
+    # The size games see: the display's native one, unless the link cannot carry it; then the best the link can.
+    tgt = nat
+    if lk and lk.get("target"):
+        t = lk["target"]
+        if lk.get("goal") == "max_res" or (nat and (not link.reachable(lk, nat["w"], nat["h"]) or
+                                                     (lk.get("best_fluid") and _area(nat) > _area(lk["best_fluid"])))):
+            tgt = t
+    if game_policy == "native" and tgt:
+        game_env = {"w": tgt["w"], "h": tgt["h"], "source": "policy: native" if tgt is nat else "policy: best the link carries"}
     elif gd:
         game_env = {"w": gd["w"], "h": gd["h"], "source": "steam default"}
     else:
@@ -216,7 +228,7 @@ def snapshot(kernel, steam_state=None, xw=None, game_policy="native"):
         "displays": caps, "primary": p, "preferred_mode": pref,
         "output": (p or {}).get("current_resolution"), "final_output": (p or {}).get("current_resolution"),
         "game_environment": game_env, "steam_game_default": gd, "steam_game_native": gn,
-        "xwayland": xw or {}, "game_policy": game_policy, "safe_display_mode": safe,
+        "xwayland": xw or {}, "game_policy": game_policy, "link": lk, "goal": goal, "safe_display_mode": safe,
         "steam_available": steam_state is not None, "findings": findings,
     }
 

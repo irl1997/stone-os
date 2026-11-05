@@ -405,11 +405,15 @@ const Sys = {
   prefsGet: () => Bridge.call('prefs.get'), prefsSet: p => Bridge.call('prefs.set', p),
   openSteamSettings: s => Bridge.call('openSteamSettings', s), restart: () => Bridge.call('restart'),
   install: appid => Bridge.call('install', appid), emulators: () => Bridge.call('emulators'), emuInstall: k => Bridge.call('emuInstall', k),
-  display: fresh => Bridge.call('display.status', fresh), displayPolicy: p => Bridge.call('display.gamePolicy', p),
+  display: fresh => Bridge.call('display.status', fresh), displayPolicy: p => Bridge.call('display.gamePolicy', p), displayGoal: g => Bridge.call('display.goal', g),
   /* STONE OPTIMIZED (stone_games/): the game profile behind JUGAR */
   gameRecommended: (appid, mode) => Bridge.call('game.recommended', ...(mode ? [appid, mode] : [appid])),
   gameProfile: appid => Bridge.call('game.profile', appid), gameModes: appid => Bridge.call('game.modes', appid),
   gameApply: (appid, mode, cfg) => Bridge.call('game.apply', ...(cfg ? [appid, mode, cfg] : [appid, mode])),
+  gameImage: appid => Bridge.call('game.image', appid), gameSetImage: (appid, key, preset) => Bridge.call('game.setImage', ...(preset ? [appid, key, preset] : [appid, key])),
+  components: kind => Bridge.call('components', ...(kind ? [kind] : [])), gamePlan: (appid, kind) => Bridge.call('game.installPlan', appid, kind),
+  gameInstall: appid => Bridge.call('game.install', appid), gameUninstall: appid => Bridge.call('game.uninstallImage', appid),
+  gameOptStatus: appid => Bridge.call('game.optimizeStatus', appid), gameOptStart: appid => Bridge.call('game.optimizeStart', appid),
   gameStatus: () => Bridge.call('game.status'), gameRestore: appid => Bridge.call('game.restoreRecommended', appid)
 };
 async function sys(method, ...a) {
@@ -899,6 +903,7 @@ function enterDetail(i, opts = {}) {
   const canPlay = g.inst || g.src === 'shortcut';
   const prim = running ? 'REANUDAR' : canPlay ? 'JUGAR' : 'INSTALAR';
   const sec = [[g.fav ? 'Quitar de favoritos' : 'Favorito', 'fav'], [`Rendimiento: ${g.perf ? profOf(g.perf).n : 'Global'}`, 'perf'], ['Propiedades', 'opt']];
+  if (g.src === 'steam' && g.inst) sec.splice(2, 0, [imgLabel(g), 'img'], [preLabel(g), 'pre'], [optLabel(g), 'ins'], ['Instalar HelixSR', 'hlx'], [optzLabel(g), 'opz']);
   $('#detail').innerHTML = `
     <div class="col"><div class="origin">${esc(g.o)}</div><h1${g.n.length > 22 ? ' class="long"' : ''}>${esc(g.n.toUpperCase())}</h1>
       <div class="stats">${playText(g)} · Última sesión: ${running ? 'ahora' : g.last}</div>
@@ -916,7 +921,86 @@ function enterDetail(i, opts = {}) {
   NAV.id = 'detail';
   requestAnimationFrame(() => applyFocus());
   hints([['A', prim.charAt(0) + prim.slice(1).toLowerCase()], ['B', 'Volver']]);
-  if (g.src === 'steam' && g.inst) experience(g, i);
+  if (g.src === 'steam' && g.inst) { experience(g, i); imgLoad(g, i); }
+}
+/* Image enhancement: the person's own explicit choice (Nativo / FSR del juego / FSR de pantalla / HelixSR),
+   from the host (stone_games). Only what is available is offered; STONE decides again with "STONE decide". */
+const PRESET_TXT = { quality: 'Calidad', balanced: 'Equilibrado', performance: 'Rendimiento', ultra_performance: 'Ultra rendimiento' };
+const imgSel = g => g.img && g.img.choices.find(c => c.selected);
+const imgLabel = g => 'Imagen: ' + (g.img ? (imgSel(g) ? imgSel(g).label : 'STONE decide') : '…');
+const optzLabel = g => 'Optimizar' + (g.opz ? ` (${g.opz.done}/${g.opz.total})` : '');
+const optLabel = g => g.img && g.img.by_stone ? 'Quitar FSR (OptiScaler)' : 'Instalar FSR (OptiScaler)';
+const preLabel = g => 'Calidad: ' + (g.img && g.img.preset ? PRESET_TXT[g.img.preset] || g.img.preset : 'según el juego');
+function imgRefresh(g) {
+  const d = $('#detail'); if (!d) return;
+  const a = d.querySelector('[data-act="img"]'), b = d.querySelector('[data-act="pre"]');
+  if (a) a.textContent = imgLabel(g);
+  if (b) b.textContent = preLabel(g);
+  const z = d.querySelector('[data-act="opz"]');
+  if (z) z.textContent = optzLabel(g);
+  const c = d.querySelector('[data-act="ins"]');
+  if (c) c.textContent = optLabel(g);
+}
+async function imgLoad(g, i) {
+  try { g.img = await Sys.gameImage(g.appid); } catch (e) { return; }
+  try { g.opz = await Sys.gameOptStatus(g.appid); } catch (e) { g.opz = null; }
+  if (curG === i && S.screen === 'detail') imgRefresh(g);
+}
+async function imgSet(g, key, preset) {
+  try { await Sys.gameSetImage(g.appid, key, preset); } catch (e) { play('error'); return toast('No se pudo cambiar: ' + ((e && e.message) || 'sin respuesta'), false); }
+  await imgLoad(g, curG); experience(g, curG);
+  const c = g.img && imgSel(g);
+  toast(c ? `${g.n}: ${c.label}${g.img.preset && c.key !== 'native' ? ' · ' + (PRESET_TXT[g.img.preset] || g.img.preset) : ''}` : `${g.n}: STONE decide`, false);
+}
+/* OPTIMIZAR: STONE launches the next combination of the measurement matrix; the person runs the game's
+   own benchmark (or plays ~3 min) and quits; MangoHud's numbers become the measurement. Two presses. */
+async function optimizar(g, i) {
+  if (!g.opz) await imgLoad(g, i);
+  const o = g.opz;
+  if (!o) { play('error'); return toast('No se pudo leer el estado de la optimización', false); }
+  if (!o.next) return toast(`${g.n}: ya está medido (${o.done} de ${o.total}). Mejor para esta consola: ${o.recommended}`, false);
+  if (!insConfirmed('z' + g.appid)) return toast(`Prueba ${o.done + 1} de ${o.total}: ${o.next}. ` + (o.benchmark ? `Dentro del juego: ${o.benchmark}, déjalo ~2 min y sal. ` : 'Juega ~3 min y sal. ') + 'Pulsa otra vez para empezar', false);
+  let r = null;
+  try { r = await Sys.gameOptStart(g.appid); } catch (e) { play('error'); return toast('No se pudo empezar: ' + ((e && e.message) || 'sin respuesta'), false); }
+  if (!r || !r.ok) { play('error'); return toast((r && r.error) || 'No se pudo empezar', false); }
+  toast(`Midiendo: ${r.summary}`, false);
+  return launch(g, () => Promise.resolve(true));
+}
+/* Install FSR (OptiScaler) / HelixSR: only on the person's request. First press says what will happen,
+   the second one (within 10 s) does it. Nothing for games with anti-cheat or online-only (the host refuses). */
+let insAsk = null;
+const insConfirmed = key => { const ok = insAsk && insAsk.key === key && Date.now() - insAsk.t < 10000; insAsk = ok ? null : { key, t: Date.now() }; return ok; };
+async function insOpti(g, i) {
+  const key = 'o' + g.appid;
+  try {
+    if (g.img && g.img.by_stone) {
+      if (!insConfirmed(key)) return toast('Pulsa otra vez para quitar OptiScaler de este juego', false);
+      const r = await Sys.gameUninstall(g.appid); await imgLoad(g, i); experience(g, i);
+      return toast(r && r.ok ? 'OptiScaler quitado de este juego' : ((r && r.error) || 'No se pudo quitar'), false);
+    }
+    let plan = await Sys.gamePlan(g.appid, 'optiscaler');
+    if (plan && plan.needs_download) {
+      toast('Descargando OptiScaler del autor (GitHub)… puede tardar', false);
+      await Sys.components('optiscaler');
+      plan = await Sys.gamePlan(g.appid, 'optiscaler');
+    }
+    if (!plan || !plan.ok) { play('error'); return toast(((plan && plan.error) || 'No se pudo preparar') + '', false); }
+    if (!insConfirmed(key)) return toast(`OptiScaler ${plan.component.tag} → ${plan.folder} (${plan.files} archivos). Pulsa otra vez para instalar`, false);
+    const r = await Sys.gameInstall(g.appid); await imgLoad(g, i); experience(g, i);
+    toast(r && r.ok ? 'FSR (OptiScaler) instalado. Elige «Imagen: OptiScaler» para usarlo' : ((r && r.error) || 'No se pudo instalar'), false);
+  } catch (e) { play('error'); toast('No se pudo: ' + ((e && e.message) || 'sin respuesta') + '. Si fue la descarga, revisa internet y vuelve a pulsar', false); }
+}
+async function insHelix(g, i) {
+  try {
+    let r = await Sys.gamePlan(g.appid, 'helixsr');
+    if (r && r.needs_download) {
+      toast('Descargando HelixSR del autor (GitHub)… puede tardar', false);
+      await Sys.components('helixsr');
+      r = await Sys.gamePlan(g.appid, 'helixsr');
+    }
+    if (!r || !r.ok) { play('error'); return toast(((r && r.error) || 'No se pudo preparar') + '', false); }
+    toast(`HelixSR ${r.tag} descargado. Para instalarlo en tus juegos sin anti-cheat, en la terminal (Ctrl+Alt+F3): stone-game install ${g.appid} helixsr`, false);
+  } catch (e) { play('error'); toast('No se pudo: ' + ((e && e.message) || 'sin respuesta') + '. Revisa internet y vuelve a pulsar', false); }
 }
 /* STONE OPTIMIZED: GAME -> STONE RECOMMENDED -> PLAY. The host says what JUGAR will use and why;
    nothing is shown that was not measured or is not in the profile database. */
@@ -942,6 +1026,22 @@ function detailA(el) {
     play('select'); g.fav = !g.fav; if (g.fav) favs.add(g.appid); else favs.delete(g.appid); savePrefs();
     enterDetail(curG, { r: 1, c: 0 }); return toast(g.fav ? 'Añadido a favoritos' : 'Quitado de favoritos', false);
   }
+  if (a === 'opz') { play('select'); return optimizar(g, curG); }
+  if (a === 'ins') { play('select'); return insOpti(g, curG); }
+  if (a === 'hlx') { play('select'); return insHelix(g, curG); }
+  if (a === 'img' || a === 'pre') {
+    if (!g.img) { play('error'); return toast('Leyendo las opciones de imagen…', false); }
+    play('nav');
+    if (a === 'img') {
+      const ok = g.img.choices.filter(c => c.available), k = ok.findIndex(c => c.selected);
+      const next = ok[(k + 1) % ok.length];
+      return imgSet(g, next.key, g.img.preset && next.key !== 'native' ? g.img.preset : undefined);
+    }
+    const c = imgSel(g);
+    if (!c || c.key === 'native') return toast('Elige primero una mejora de imagen (FSR o HelixSR)', false);
+    const k = g.img.presets.indexOf(g.img.preset);
+    return imgSet(g, c.key, g.img.presets[(k + 1) % g.img.presets.length]);
+  }
   if (a === 'perf') {
     play('nav'); const list = [null, ...usable()], k = list.indexOf(g.perf || null), next = list[(k + 1) % list.length];
     return api('setGameProfile', g.appid, next || 'global').then(st => {
@@ -956,9 +1056,9 @@ function detailA(el) {
    Steam's reaper process and reports it in its state, which is what this screen follows: when the
    game ends, Home comes back. */
 let tagT = 0, launchT = 0;
-async function launch(g) {
+async function launch(g, starter) {
   if (S.launching !== null) return;
-  const ok = await sys('launch', g.appid);
+  const ok = await (starter ? starter() : sys('launch', g.appid));
   if (!ok) return;
   if (g.exp && g.exp.settings && g.exp.status !== 'UNKNOWN') toast(g.exp.settings, false);
   S.launching = g.i; S.running = g.i; S.screen = 'transition';
@@ -1104,7 +1204,7 @@ function quickLR(dir) {
 }
 
 /* ---------- SETTINGS ---------- */
-const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Emuladores', 'Rendimiento', 'Energía', 'Actualizaciones', 'Accesibilidad', 'Acerca de'];
+const CATS = ['Sistema', 'Pantalla', 'Audio', 'Mandos', 'Red', 'Bluetooth', 'Almacenamiento', 'Emuladores', 'Steam', 'Rendimiento', 'Energía', 'Actualizaciones', 'Accesibilidad', 'Acerca de'];
 let cat = 1;
 /* Steam's own settings section for each STONE category (opened in Steam's interface). */
 const STEAM_SEC = { 'Sistema': 'System', 'Pantalla': 'Display', 'Audio': 'Audio', 'Mandos': 'Controller', 'Red': 'Internet',
@@ -1128,6 +1228,24 @@ function loadDisplay(fresh) {
   });
 }
 Bridge.on('display', () => { S.disp = null; if (S.screen === 'settings' && CATS[cat] === 'Pantalla') loadDisplay(true); });
+/* The link: the best picture the connection (adapter, cable) can carry, from stone_display/link.py. */
+function linkRows(D) {
+  const L = D.link;
+  if (!L || !L.best_fluid) return [];
+  const f = m => m ? `${m.w} × ${m.h} · ${m.hz} Hz${m.hz_assumed ? ' (supuesto)' : ''}` : 'ninguna';
+  const goalMax = D.goal === 'max_res';
+  return [
+    { l: 'Conexión', s: L.reaches_4k60 ? 'Lleva 4K a 60 Hz o más' : (L.display_offers_4k60 ? '4K a 60 Hz no cabe en esta conexión' : 'Lo máximo que lleva la conexión'),
+      v: f(L.target), act: 'info', where: L.advice || `Fluida: ${f(L.best_fluid)}. Máxima resolución: ${f(L.best_max_res)}. Detalle: stonectl display` },
+    { l: 'Meta de imagen', s: goalMax ? 'La resolución más alta, aunque sean menos Hz' : 'La más alta a 60 Hz o más (recomendado para jugar)',
+      v: goalMax ? 'Máxima resolución' : 'Fluidez', key: 'dispgoal' }];
+}
+function setDisplayGoal() {
+  const next = S.disp && S.disp.goal === 'max_res' ? 0 : 1;
+  play('select');
+  toast(next === 1 ? 'STONE buscará la resolución más alta, aunque baje los Hz' : 'STONE buscará la resolución más alta a 60 Hz o más', false);
+  Sys.displayGoal(next).catch(() => {}).then(() => { S.disp = null; loadDisplay(true); });
+}
 function displayRows() {
   const D = S.disp;
   if (!D) { if (!S.dispLoading) loadDisplay(); return [{ l: 'Televisor', s: 'Leyendo la pantalla…', v: '', ro: true }]; }
@@ -1143,8 +1261,36 @@ function displayRows() {
     { l: 'Salida', s: D.output ? (D.native && D.output.w < D.native.w ? 'Por debajo de la nativa del televisor' : 'La que envía la consola al televisor') : 'Steam no respondió todavía',
       v: resTxt(D.output), act: 'info', where: D.native && D.output && D.output.w < D.native.w
         ? 'Botón STEAM → Ajustes → Pantalla → Resolución: elige la nativa del televisor' : 'La resolución de salida la fija Steam (Ajustes → Pantalla)' },
+    ...linkRows(D),
     { l: 'Juegos ven', s: D.policy === 'native' ? 'La resolución del televisor; cada juego decide cómo dibujar' : 'Lo que Steam da por defecto',
       v: D.policy === 'native' ? `Televisor · ${games}` : `Steam · ${games}`, key: 'gameres' }];
+}
+/* Steam's own settings, inside STONE. The list is whatever this Steam offers (stone_home/steamsettings.py):
+   true/false ones can be changed with A, the rest are shown. Names are Steam's, split into words. */
+function loadSteamSet(refresh) {
+  S.ssLoading = true;
+  Bridge.call('steam.settings', refresh === true).then(r => { S.ss = r; }, () => { S.ss = { available: false, settings: [], error: 'No se pudo leer Steam' }; }).then(() => {
+    S.ssLoading = false;
+    if (S.screen === 'settings' && CATS[cat] === 'Steam') enterSettings({ pane: !!NAV.pane, ri: NAV.pane ? NAV.c : 0 });
+  });
+}
+function steamSetRows() {
+  const ss = S.ss;
+  if (!ss) { if (!S.ssLoading) loadSteamSet(); return [{ l: 'Leyendo…', s: 'Preguntando a Steam qué ajustes ofrece', v: '', ro: true }]; }
+  const head = { l: 'Actualizar la lista', s: ss.available ? `${ss.settings.length} ajustes leídos de este Steam` : (ss.error || 'Steam no respondió'), v: 'Actualizar', act: 'sset', refresh: true };
+  const rows = (ss.settings || []).slice().sort((a, b) => a.area.localeCompare(b.area) || a.label.localeCompare(b.label)).map(x => ({
+    l: x.label, s: x.area, v: x.type === 'bool' ? (x.value ? 'Sí' : 'No') : String(x.value),
+    act: x.writable ? 'sset' : 'info', sset: x, where: `${x.area}: ${x.label} = ${x.value}${x.writable ? '' : ' (solo lectura)'}` }));
+  return [head, ...rows];
+}
+function ssetA(r) {
+  play('select');
+  if (r.refresh) { S.ss = null; return loadSteamSet(true); }
+  const x = r.sset;
+  Bridge.call('steam.setSetting', x.id, !x.value).then(res => {
+    toast(res && res.ok ? `${x.label}: ${!x.value ? 'Sí' : 'No'}` : 'Steam no aceptó el cambio', false);
+    S.ss = null; loadSteamSet(true);
+  }, () => toast('No se pudo cambiar', false));
 }
 /* Emulators: fixed catalog in the host (stone_home/emulators.py), installed from Flathub. */
 const EMU_STATE = {};
@@ -1229,6 +1375,7 @@ function catRows() {
       { l: 'Sonidos del sistema', s: 'Botones, encendido y apagado', v: S.sound ? 'Activados' : 'Desactivados', key: 'sound' },
       { l: 'Volumen de la interfaz', s: 'Independiente del volumen de los juegos', v: Math.round(S.vol * 100) + ' %', key: 'vol' },
       steam('Salida de audio', 'Altavoces, auriculares, HDMI o DisplayPort', 'Botón ··· → Audio, o botón STEAM → Ajustes → Audio')] };
+    case 'Steam': return { d: 'Los ajustes de Steam, con el aspecto de STONE. La lista sale de lo que ofrece este Steam; los de sí/no se cambian con A.', rows: steamSetRows() };
     case 'Emuladores': {
       if (!S.emu) { if (!S.emuLoading) loadEmulators(); return { d: 'Emuladores de otras consolas, desde Flathub.', rows: [{ l: 'Leyendo…', s: 'Buscando qué emuladores están instalados', v: '', ro: true }] }; }
       return { d: 'Se instalan desde Flathub y aparecen en tu biblioteca como accesos directos. Los juegos y BIOS los pones tú. RetroDECK reúne la mayoría de consolas en una sola app.',
@@ -1350,6 +1497,7 @@ function adjust(key, d, ri) {
   else if (key === 'tech') { S.tech = !S.tech; }
   else if (key === 'render') { S.render = (S.render + d + RENDER.length) % RENDER.length; play('select'); return applyRender(); }
   else if (key === 'gameres') { return setGamePolicy(); }
+  else if (key === 'dispgoal') { return setDisplayGoal(); }
   applyPrefs(); savePrefs(); armIdleOff(); play('nav'); enterSettings({ pane: true, ri });
 }
 function settingsA(el) {
@@ -1360,6 +1508,7 @@ function settingsA(el) {
   if (r.act === 'info') { play('select'); return toast(r.where, false); }
   if (r.act === 'steam') { play('select'); return openSteamSettings(r); }
   if (r.act === 'emu') return emuA(r);
+  if (r.act === 'sset') return ssetA(r);
   if (r.act === 'measure') { play('select'); return measureSmoothness(); }
   if (r.act === 'perf') { play('select'); return enterPerf(); }
   if (r.act === 'safe') { play('select'); return S.safeMode ? leaveSafeMode(NAV.c) : askSafeMode(NAV.c); }
@@ -1715,13 +1864,19 @@ async function shutdown(reboot) {
     play('error'); toast(`No se pudo ${reboot ? 'reiniciar' : 'apagar'} (${ERR_TEXT[e.code] || e.message}). Usa el botón STEAM → Energía`, false);
   }
 }
-/* Apagar tras inactividad: only on STONE's own screens, never with a game open or a test running. */
+/* Apagar tras inactividad: only on STONE's own screens, never with a game open or a test running.
+   A test or calibration started from a terminal (stonectl calibrate) counts too: stoned reports it
+   in its state (board, rc16: the console powered off 30 min into `stonectl calibrate standard`). */
 let idleOffT = 0;
+function stonedBusy() {
+  const st = S.st;
+  return !!(st && (st.testing || (st.calibration && st.calibration.running)));
+}
 function armIdleOff() {
   clearTimeout(idleOffT);
   const min = IDLE_MIN[S.idle]; if (!min) return;
   idleOffT = setTimeout(() => {
-    if (S.running !== null || S.game || testUI || ['game', 'quick', 'transition', 'dlg'].includes(S.screen)) return armIdleOff();
+    if (S.running !== null || S.game || testUI || stonedBusy() || ['game', 'quick', 'transition', 'dlg'].includes(S.screen)) return armIdleOff();
     shutdown(false);
   }, min * 60000);
 }
